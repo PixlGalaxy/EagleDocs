@@ -2,9 +2,11 @@ name: Build and Push Docker Image for EagleDocs
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
   release:
     types: [created]
 
@@ -16,27 +18,33 @@ jobs:
       packages: write
 
     steps:
-      - name: Start
-        run: echo "Building unified EagleDocs image..."
+      - name: 🚀 Display Startup Message
+        run: echo "🚀 Hello from Galaxy! | Building unified EagleDocs container (Frontend + Backend) with Node 24..."
 
-      - name: Checkout repository
+      - name: 📂 Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Setup Docker Buildx
+      - name: 🔧 Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
 
-      - name: Login to GHCR
+      - name: 🔍 Prepare Repository Owner and Tags
+        id: vars
+        run: |
+          echo "REPOSITORY_OWNER=$(echo $GITHUB_REPOSITORY_OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "IMAGE_NAME=eagledocs" >> $GITHUB_ENV
+
+      - name: 🔑 Log in to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push
+      - name: 🏗 Build and Push Docker Image
         uses: docker/build-push-action@v4
         with:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/eagledocs:latest
-            ghcr.io/${{ github.repository_owner }}/eagledocs:${{ github.sha }}
+            ghcr.io/${{ env.REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}:latest
+            ghcr.io/${{ env.REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
