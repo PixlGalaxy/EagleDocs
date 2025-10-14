@@ -1,8 +1,0 @@
-version: '3.8'
-services:
-  EagleDocs:
-    image: pixlgalaxy/eagledocsfe:latest
-    container_name: EagleDocs
-    restart: always
-    ports:
-      - "3000:80"
