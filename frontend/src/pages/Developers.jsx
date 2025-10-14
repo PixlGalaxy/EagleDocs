@@ -1,10 +1,13 @@
 // Developers.jsx
 
+// WARNING - WARNING - WARNING - WARNING - WARNING - WARNING
 // DO NOT MODIFY THIS SECTION IF YOU ARE SUBMITTING A PULL REQUEST. CONTRIBUTORS WILL BE AUTOMATICALLY ADDED FROM GITHUB.
+// Modifying this file directly is discouraged as changes will be overwritten by codeowner aka: PixlGalaxy.
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Helmet } from 'react-helmet';
 import Navbar from '../components/Navbar';
+import Footer from "../components/Footer";
 
 function Developers() {
   const [userData, setUserData] = useState(null);
@@ -169,6 +172,8 @@ function Developers() {
           </div>
         </div>
       </div>
+      {/* Footer */}
+      <Footer />
     </div>
   );
 }
