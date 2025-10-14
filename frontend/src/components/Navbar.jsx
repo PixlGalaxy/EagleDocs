@@ -52,7 +52,7 @@ function Navbar() {
                   GitHub
                 </Link>
                 <a
-                  href="https://discord.gg/4RuUjT2jNv"
+                  href="https://discord.gg/CFS9DSe9RX"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-gray-600 hover:text-blue-500 transition-colors py-2 md:py-0"
