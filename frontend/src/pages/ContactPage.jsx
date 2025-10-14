@@ -130,7 +130,7 @@ function Contact() {
       <div className="max-w-3xl bg-white shadow-lg rounded-lg p-6 mt-8 mb-12">
         <h2 className="text-2xl font-bold text-gray-900 mb-4 text-center">Other Ways to Reach Us</h2>
         <p className="text-lg text-gray-700 text-center mb-4">
-          📧 Email: <a href="mailto:support@eagledocs.org" className="text-blue-600 hover:underline">support@eagledocs.org</a>
+          Email: <a href="mailto:support@eagledocs.org" className="text-blue-600 hover:underline">support@eagledocs.org</a>
         </p>
         <div className="flex justify-center space-x-6">
           <a href="https://github.com/PixlGalaxy/EagleDocsFE" target="_blank" rel="noopener noreferrer" className="text-gray-600 hover:text-blue-500 transition-colors">
