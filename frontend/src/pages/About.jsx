@@ -69,11 +69,11 @@ function About() {
       {/* Server Details */}
         <div className="max-w-3xl bg-white shadow-lg rounded-lg p-6 mt-8 mb-12">
         <h2 className="text-3xl font-extrabold text-gray-900 mb-6 text-center">
-            🚀 Server Specifications
+            Server Specifications
         </h2>
         
         <p className="text-lg text-gray-700 leading-relaxed text-center mb-6">
-            EagleDocs is powered by <span className="font-bold text-indigo-600">SkyWolf</span>, a high-performance server designed for AI workloads and efficiency.
+            EagleDocs is powered by <span className="font-bold text-indigo-600">Zaylar</span>, a high-performance server designed for AI workloads and efficiency.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -82,7 +82,7 @@ function About() {
             <i className="icon-cpu text-4xl text-black-700"></i>
             <div>
                 <h3 className="text-xl font-semibold text-gray-900">CPU</h3>
-                <p className="text-gray-700">Intel Xeon E5-2690 V4</p>
+                <p className="text-gray-700">Dual Intel Xeon E5-2696 V3</p>
             </div>
             </div>
 
@@ -91,7 +91,7 @@ function About() {
             <i className="icon-memory text-4xl text-black-700"></i>
             <div>
                 <h3 className="text-xl font-semibold text-gray-900">Memory</h3>
-                <p className="text-gray-700">112GB DDR4 ECC</p>
+                <p className="text-gray-700">512GB DDR4 ECC</p>
             </div>
             </div>
 
@@ -104,32 +104,24 @@ function About() {
             </div>
             </div>
 
-            {/* HDD - IronWolf 4TB */}
+            {/* HDD - Exos 14TB */}
             <div className="flex items-center space-x-4 bg-gray-100 p-4 rounded-lg shadow">
             <i className="icon-disk text-4xl text-black-700"></i>
             <div>
                 <h3 className="text-xl font-semibold text-gray-900">Storage (HDD)</h3>
-                <p className="text-gray-700">2× Seagate IronWolf 4TB (RAID 1)</p>
+                <p className="text-gray-700">2× Seagate Exos 14TB (RAID-1)</p>
             </div>
             </div>
 
-            {/* SSD - Kingston 120GB */}
+            {/* NVMe - Kingston 2TB */}
             <div className="flex items-center space-x-4 bg-gray-100 p-4 rounded-lg shadow">
-            <i className="icon-disk text-4xl text-black-700"></i>
-            <div>
-                <h3 className="text-xl font-semibold text-gray-900">Storage (SSD)</h3>
-                <p className="text-gray-700">2× Kingston 120GB (RAID 1)</p>
-            </div>
-            </div>
-
-            {/* NVMe - Kingston NV2 500GB */}
-            <div className="flex items-center space-x-4 bg-gray-100 p-4 rounded-lg shadow md:col-span-2">
             <i className="icon-nvme text-4xl text-black-700"></i>
             <div>
                 <h3 className="text-xl font-semibold text-gray-900">Storage (NVMe)</h3>
-                <p className="text-gray-700">Kingston NV2 500GB</p>
+                <p className="text-gray-700">2× Kingston 2TB (RAID-1)</p>
             </div>
             </div>
+
         </div>
       </div>
       {/* Footer */}
