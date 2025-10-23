@@ -73,7 +73,7 @@ function Navbar() {
             </div>
           </div>
 
-          {/* 🔹 Derecha: Server Status Badge */}
+          {/* Right: Server Status Badge */}
           <div className="hidden md:block">
             <a
               href="https://onlinestatus.eagledocs.org"
@@ -84,7 +84,7 @@ function Navbar() {
             >
               <iframe
                 src="https://onlinestatus.eagledocs.org/badge?theme=light"
-                width="200"
+                width="280"
                 height="30"
                 frameBorder="0"
                 scrolling="no"
