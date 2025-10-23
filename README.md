@@ -33,7 +33,7 @@ For more details on setting up and using Vite with React, refer to the official 
 ### Links
 
 - Website: [eagledocs.org](https://eagledocs.org)
-- Discord: [EagleDocs Discord](https://discord.gg/4RuUjT2jNv)
+- Discord: [EagleDocs Discord](https://discord.gg/CFS9DSe9RX)
 
 ### Developers 
 - [PixlGalaxy](https://github.com/PixlGalaxy)
