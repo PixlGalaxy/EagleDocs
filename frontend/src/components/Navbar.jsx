@@ -62,7 +62,7 @@ function Navbar() {
 
                 {/* Fallback link for mobile */}
                 <a
-                  href="https://status.eagledocs.org"
+                  href="https://onlinestatus.eagledocs.org"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="md:hidden text-gray-600 hover:text-blue-500 transition-colors py-2 md:py-0"
