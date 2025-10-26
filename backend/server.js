@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import * as LoginPage from "./LoginPage.js";
+import * as RegisterPage from "./RegisterPage.js";
 
 //initialize server instance
 const app = express();
@@ -14,15 +15,24 @@ app.use(express.json());
 
 //creates a post route for login
 app.post("/api/login", async (req, res) => {
-    console.log("POST /api/login received!"); // ✅ This will log to the terminal
-    console.log("Request body:", req.body);  // Shows what the frontend sent
-
-  const { username, password } = req.body;
+  const { username, password } = req.body; //extracts username and password from request body
   try {
-    const result = await LoginPage.cleanInput(username, password);
-    res.json({ message: result });
+    const result = await LoginPage.cleanInput(username, password); //calls cleanInput function to validate and process login
+    res.json({ message: result }); //sends back the result as a json response
   } catch (error) {
     console.error("Error during login:", error);
+    res.status(500).json({ message: "Internal server error" });
+  } 
+});
+
+//creates a post route for registration
+app.post("/api/register", async (req, res) => {
+  const { email, password, accountType } = req.body; //extracts username and password from request body
+  try {
+    const result = await RegisterPage.cleanInput(email, password, accountType); //calls cleanInput function to validate and process login
+    res.json({ message: result }); //sends back the result as a json response
+} catch (error) {
+    console.error("Error during registration:", error);
     res.status(500).json({ message: "Internal server error" });
   } 
 });

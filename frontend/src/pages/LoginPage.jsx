@@ -9,14 +9,8 @@ function LoginPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Simulated authentication (this will connect to the backend)
-    /*if (email === 'test@example.com' && password === 'password') {
-      localStorage.setItem('token', 'mockToken'); // Save the token
-      navigate('/chat'); // Redirect to chat
-    } else {
-      alert('Invalid credentials');
-    }*/
 
+    //localStorage.setItem('token', 'mockToken'); // Save the token
     // gets the server info and makes a post request
     fetch('http://localhost:5000/api/login', {
       method: 'POST', //type of request
@@ -28,6 +22,7 @@ function LoginPage() {
       {
          console.log(data);
         if (data.message === "Login successful") {
+          
           navigate('/Chat'); // Redirect to chat
         }
         else{
