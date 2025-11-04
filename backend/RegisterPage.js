@@ -25,6 +25,7 @@ export async function AddLoginInfo(email, password, accountType) {
     }
 } catch (error) {
     console.error("Error during account creation:", error);
-    return "Account creation failed due to server error";
+    return error.message;
+
 }
 }
