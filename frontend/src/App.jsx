@@ -1,4 +1,3 @@
-import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
@@ -11,6 +10,7 @@ import TermsOfService from './pages/TermsOfServicePage';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import Contact from './pages/ContactPage';
 import GitHubPage from './pages/GitHubPage';
+import InstructorPage from './pages/InstructorPage';
 
 function App() {
   const isAuthenticated = localStorage.getItem('token');
@@ -57,6 +57,9 @@ function App() {
 
         {/* GitHub Page */}
         <Route path="/github" element={<GitHubPage />} />
+
+        {/* Instructor Page */}
+        <Route path="/instructor" element={<InstructorPage />} />
 
       </Routes>
     </Router>
