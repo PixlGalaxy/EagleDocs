@@ -151,7 +151,7 @@ const ChatPage = () => {
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 flex flex-col ml-0 md:ml-64">
+      <div className="flex-1 flex flex-col ml-0 md:ml-90">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 md:hidden">
           <button onClick={() => setSidebarOpen(true)}>
             <Menu className="h-6 w-6 text-gray-700 dark:text-gray-200" />
