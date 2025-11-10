@@ -15,26 +15,32 @@ app.use(express.json());
 
 //creates a post route for login
 app.post("/api/login", async (req, res) => {
-  const { username, password } = req.body; //extracts username and password from request body
+  const { email, password } = req.body;
   try {
-    const result = await LoginPage.cleanInput(username, password); //calls cleanInput function to validate and process login
-    res.json({ message: result }); //sends back the result as a json response
+    const result = await LoginPage.cleanInput(email, password);
+    if (result.error) {
+      return res.status(400).json({ message: result.error });
+    }
+    res.json(result);
   } catch (error) {
     console.error("Error during login:", error);
     res.status(500).json({ message: "Internal server error" });
-  } 
+  }
 });
 
 //creates a post route for registration
 app.post("/api/register", async (req, res) => {
-  const { email, password, accountType } = req.body; //extracts username and password from request body
+  const { email, password, accountType } = req.body;
   try {
-    const result = await RegisterPage.cleanInput(email, password, accountType); //calls cleanInput function to validate and process login
-    res.json({ message: result }); //sends back the result as a json response
-} catch (error) {
+    const result = await RegisterPage.cleanInput(email, password, accountType);
+    if (result.error) {
+      return res.status(400).json({ message: result.error });
+    }
+    res.json(result);
+  } catch (error) {
     console.error("Error during registration:", error);
     res.status(500).json({ message: "Internal server error" });
-  } 
+  }
 });
 
 //defines route rq how to get data res how to send data
