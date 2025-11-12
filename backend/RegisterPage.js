@@ -3,6 +3,8 @@ import { getdatabase } from "./db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_change_in_production";
+
 export async function cleanInput(potemail, potPassword, potaccountType) {
     if (!potemail || !potPassword || !potaccountType) {
         return { error: "Email, password, and account type are required" };
@@ -10,8 +12,11 @@ export async function cleanInput(potemail, potPassword, potaccountType) {
     if (!potemail.includes("@")) {
         return { error: "Invalid email format" };
     }
-    if (potPassword.length <= 0) {
-        return { error: "Password cannot be empty" };
+    if (potPassword.length < 8) {
+        return { error: "Password must be at least 8 characters long" };
+    }
+    if (!["student", "instructor"].includes(potaccountType.toLowerCase())) {
+        return { error: "Account type must be 'student' or 'instructor'" };
     }
     return await AddLoginInfo(potemail, potPassword, potaccountType);
 }
@@ -39,7 +44,7 @@ export async function AddLoginInfo(email, password, accountType) {
         // Generate JWT token
         const token = jwt.sign(
             { id: user.id, email: user.email, accountType: user.account_type },
-            "your_jwt_secret", // Replace with env var in production
+            JWT_SECRET,
             { expiresIn: "2h" }
         );
         return {

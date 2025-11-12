@@ -2,6 +2,8 @@ import { getdatabase } from "./db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
+const JWT_SECRET = process.env.JWT_SECRET || "your_jwt_secret_change_in_production";
+
 //function to validate and process login input
 export async function cleanInput(potemail, potPassword) {
     if (!potemail || !potPassword) {
@@ -32,8 +34,8 @@ export async function GetLoginInfo(email, password) {
         }
         // Generate JWT token
         const token = jwt.sign(
-            { id: user.id, email: user.email, accountType: user.accountType },
-            "your_jwt_secret", // Replace with env var in production
+            { id: user.id, email: user.email, accountType: user.account_type },
+            JWT_SECRET,
             { expiresIn: "2h" }
         );
         // Return user data and token
@@ -42,7 +44,7 @@ export async function GetLoginInfo(email, password) {
             user: {
                 id: user.id,
                 email: user.email,
-                accountType: user.accountType
+                accountType: user.account_type
             },
             token
         };
