@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 import * as LoginPage from "./LoginPage.js";
 import * as RegisterPage from "./RegisterPage.js";
 
-// Your chat + AI routes
+// Harrison chat + AI routes
 import chatRoutes from "./routes/chatRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
 
