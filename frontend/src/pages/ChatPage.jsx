@@ -1,5 +1,3 @@
-//ChatPage.jsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Search, UserCircle, Menu, X, BookOpen, GraduationCap, Lightbulb } from 'lucide-react';
 
@@ -12,16 +10,47 @@ const ChatPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const selectedChatTitle = messages.length > 0 ? 'Chat' : 'Start a New Chat';
 
-  const handleSend = (e) => {
+  // ✅ Updated handleSend
+  const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
+
     const newMessage = {
       id: Date.now(),
       content: input,
       sender: 'user'
     };
+
     setMessages([newMessage, ...messages]);
     setInput('');
+
+    try {
+      const response = await fetch('http://localhost:5000/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: input })
+      });
+
+      const data = await response.json();
+
+      const aiMessage = {
+        id: Date.now() + 1,
+        content: data.reply || 'No reply received from AI.',
+        sender: 'ai'
+      };
+
+      setMessages((prev) => [aiMessage, ...prev]);
+    } catch (error) {
+      console.error('Error:', error);
+
+      const errorMessage = {
+        id: Date.now() + 2,
+        content: '⚠️ Error: Unable to reach AI backend.',
+        sender: 'ai'
+      };
+
+      setMessages((prev) => [errorMessage, ...prev]);
+    }
   };
 
   const scrollToBottom = () => {
