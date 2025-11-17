@@ -4,11 +4,10 @@ import mysql from "mysql2/promise"
 export async function getdatabase() {
     try{
     const connection = await mysql.createConnection({
-        host: "localhost",
-        user: "EagleDocsUser",
-        password: "BluePiano!42Sun",
-        database: "EagleDocsDB"
-        
+        host: process.env.DB_HOST || "localhost",
+        user: process.env.DB_USER || "eagledocs_user",
+        password: process.env.DB_PASSWORD || "change_me",
+        database: process.env.DB_NAME || "eagledocs_db"
     })
     console.log("Database connected successfully");
     return connection
