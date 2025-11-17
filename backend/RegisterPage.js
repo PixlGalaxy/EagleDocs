@@ -1,8 +1,10 @@
 import { getdatabase } from "./db.js"; 
+import bcrypt, { hash } from "bcrypt";
 
 export async function cleanInput(potemail, potPassword,potaccountType) {
     if( potemail.includes("@")  && potPassword.length > 0 ){ 
-        return await AddLoginInfo(potemail, potPassword,potaccountType);
+        const hashedPassword = await bcrypt.hash(potPassword, 10);
+        return await AddLoginInfo(potemail, hashedPassword, potaccountType);
     }
     else if( potPassword.length <= 0 ){
         return "Password cannot be empty";

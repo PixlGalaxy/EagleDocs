@@ -1,4 +1,3 @@
-//import { application } from 'express';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 
@@ -10,20 +9,19 @@ function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    //localStorage.setItem('token', 'mockToken'); // Save the token
     // gets the server info and makes a post request
     fetch('http://localhost:5000/api/login', {
       method: 'POST', //type of request
       headers: {'Content-Type': 'application/json',}, //type of data being sent
-      body: JSON.stringify({ username: email, password: password }), //converts js object to json string
+      body: JSON.stringify({email, password }), //converts js object to json string
     })
     .then(res => res.json()) //when response is received, it will read it and convert it back to js object
     .then(data => 
       {
          console.log(data);
         if (data.message === "Login successful") {
-          
-          navigate('/Chat'); // Redirect to chat
+            localStorage.setItem('token', data.token); // Save the token
+            navigate('/Chat'); // Redirect to chat
         }
         else{
           alert(data.message);
