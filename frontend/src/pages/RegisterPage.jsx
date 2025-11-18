@@ -1,116 +1,91 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [passwordError, setPasswordError] = useState(false);
-  const [emailError, setEmailError] = useState(false);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
+  const { register } = useAuth();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
 
-    // Validate email domain
-    const emailRegex = /^[a-zA-Z0-9._%+-]+@eagle\.fgcu\.edu$/;
-    if (!emailRegex.test(email)) {
-      setEmailError(true);
-      return;
-    }
-
-    // Validate passwords match
     if (password !== confirmPassword) {
-      setPasswordError(true);
+      setError('Passwords do not match.');
       return;
     }
 
-    // Simulated registration logic
-    localStorage.setItem('token', 'mockToken'); // Save a mock token
-    navigate('/chat'); // Redirect to chat page
+    setSubmitting(true);
+
+    try {
+      await register(email, password);
+      navigate('/chat');
+    } catch (err) {
+      setError(err.message || 'Unable to register');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   useEffect(() => {
-    document.title = 'EagleDocs'; // Page Title
+    document.title = 'EagleDocs';
     const favicon = document.querySelector("link[rel='icon']");
     if (favicon) {
-      favicon.href = '/favicon.ico'; // Page Icon
+      favicon.href = '/favicon.ico';
     }
   }, []);
 
   return (
     <div className="h-screen flex items-center justify-center bg-gray-50">
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md bg-white rounded-lg shadow-md p-6"
-      >
-        {/* Logo inside the form */}
+      <form onSubmit={handleSubmit} className="w-full max-w-md bg-white rounded-lg shadow-md p-6 space-y-4">
         <Link to="/">
-          <img
-            src="/EagleDocs Logo.png"
-            alt="EagleDocs Logo"
-            className="w-32 mx-auto mb-6 cursor-pointer"
-          />
+          <img src="/EagleDocs Logo.png" alt="EagleDocs Logo" className="w-32 mx-auto mb-4 cursor-pointer" />
         </Link>
-        <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Register</h2>
-        <div className="mb-4">
+        <h2 className="text-2xl font-bold text-gray-800 text-center">Register</h2>
+        {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
+        <div>
           <label className="block text-gray-600 mb-1">Email</label>
           <input
             type="email"
             value={email}
-            onChange={(e) => {
-              setEmail(e.target.value);
-              setEmailError(false); // Reset email error when typing
-            }}
-            className={`w-full px-4 py-2 border rounded-md focus:outline-none ${
-              emailError ? 'border-red-500' : 'focus:ring-2 focus:ring-blue-500'
-            }`}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
-          {emailError && (
-            <p className="text-red-500 text-sm mt-2">
-              Please use a valid FGCU email (e.g., Pixl@eagle.fgcu.edu).
-            </p>
-          )}
         </div>
-        <div className="mb-4">
+        <div>
           <label className="block text-gray-600 mb-1">Password</label>
           <input
             type="password"
             value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setPasswordError(false); // Reset password error when typing
-            }}
-            className={`w-full px-4 py-2 border rounded-md focus:outline-none ${
-              passwordError ? 'border-red-500' : 'focus:ring-2 focus:ring-blue-500'
-            }`}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
         </div>
-        <div className="mb-4">
+        <div>
           <label className="block text-gray-600 mb-1">Repeat Password</label>
           <input
             type="password"
             value={confirmPassword}
-            onChange={(e) => {
-              setConfirmPassword(e.target.value);
-              setPasswordError(false); // Reset password error when typing
-            }}
-            className={`w-full px-4 py-2 border rounded-md focus:outline-none ${
-              passwordError ? 'border-red-500' : 'focus:ring-2 focus:ring-blue-500'
-            }`}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
-          {passwordError && (
-            <p className="text-red-500 text-sm mt-2">Passwords do not match.</p>
-          )}
         </div>
         <button
           type="submit"
-          className="w-full bg-gray-500 text-white py-2 rounded-md hover:bg-gray-600"
+          disabled={submitting}
+          className={`w-full py-2 rounded-md text-white ${
+            submitting ? 'bg-gray-300 cursor-not-allowed' : 'bg-gray-500 hover:bg-gray-600'
+          }`}
         >
-          Register
+          {submitting ? 'Creating account...' : 'Register'}
         </button>
       </form>
     </div>
