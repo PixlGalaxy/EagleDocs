@@ -25,17 +25,21 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(
-  cors({
-    credentials: true,
-    origin(origin, callback) {
-      if (!origin || !allowedOrigins.length || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('Not allowed by CORS'));
-    },
-  })
-);
+if (NODE_ENV !== 'development') {
+  app.use(
+    cors({
+      credentials: true,
+      origin(origin, callback) {
+        if (!origin || !allowedOrigins.length || allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+        return callback(new Error('Not allowed by CORS'));
+      },
+    })
+  );
+} else {
+  console.log('CORS middleware is disabled in development mode.');
+}
 
 app.use(express.json({ limit: '1mb' }));
 
