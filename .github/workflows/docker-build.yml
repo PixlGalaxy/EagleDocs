@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - pixl
   pull_request:
     branches:
       - main
