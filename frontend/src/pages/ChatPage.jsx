@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Search, UserCircle, Menu, X, BookOpen, GraduationCap, Lightbulb, Paperclip } from 'lucide-react';
+import { data } from 'react-router-dom';
 
 const ChatPage = () => {
   const [messages, setMessages] = useState([]);
@@ -14,10 +15,24 @@ const ChatPage = () => {
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   const createdUrlsRef = useRef(new Set());
+  const [account, setAccount] = useState(null);
 
   const handleAttachClick = () => {
     fileInputRef.current?.click();
   };
+  
+async function fetchAccount() {
+  const token = localStorage.getItem("token");
+  const res = await fetch("http://localhost:5000/account", {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    }
+  });
+  return await res.json();
+}
+
 
   const handleFileChange = (e) => {
     const files = Array.from(e.target.files || []);
@@ -90,6 +105,10 @@ const ChatPage = () => {
     scrollToBottom();
   }, [messages]);
 
+useEffect(() => {
+  fetchAccount().then(data => setAccount(data));
+  }, []);
+
   const suggestions = [
     { icon: <BookOpen className="h-5 w-5" />, text: 'Help me study for a test' },
     { icon: <GraduationCap className="h-5 w-5" />, text: 'Explain this concept' },
@@ -138,7 +157,7 @@ const ChatPage = () => {
               className="flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-800 px-2 py-1 rounded"
             >
               <UserCircle className="h-6 w-6 text-gray-500" />
-              <span className="text-sm text-gray-800 dark:text-gray-200">Pixl</span>
+              <span className="text-sm text-gray-800 dark:text-gray-200">{account ? account.email : "Loading..."}</span>
             </button>
             {showMenu && (
               <div className="absolute bottom-10 left-0 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-md z-10">

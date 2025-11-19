@@ -31,7 +31,7 @@ export async function GetLoginInfo(email, password) {
         }
         else{
             const token = jwt.sign({
-            id: rows[0].id,
+            id: rows[0].account_id,
         },
         process.env.JWT_SECRET,{expiresIn: '2h'})
         return {

@@ -18,7 +18,7 @@ export async function AddLoginInfo(email, password, accountType) {
     try {
     const db = await getdatabase();
     const [rows] = await db.execute(`Insert INTO accounts (email, password, account_type) VALUES (?, ?, ?)`, [email, password, accountType]);
-
+    
     if (rows.affectedRows === 0) {
         return "Account creation failed";
     }
@@ -26,8 +26,17 @@ export async function AddLoginInfo(email, password, accountType) {
         return "Account created successfully";
     }
 } catch (error) {
+    if(error.code === "ER_DUP_ENTRY"){
+        return{
+            message:"Account already exists"
+        }
+    }
+
     console.error("Error during account creation:", error);
-    return error.message;
+
+    return{
+        message: "Internal server error"
+    }
 
 }
 }

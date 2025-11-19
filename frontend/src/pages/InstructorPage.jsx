@@ -28,6 +28,13 @@ const InstructorPage = () => {
     .toUpperCase();
   const profileRef = useRef(null);
 
+  // ---------- NEW: modal/create class state ----------
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [className, setClassName] = useState('');
+  const [classKey, setClassKey] = useState('');
+  const [modalMessage, setModalMessage] = useState(''); // success/error text
+  // --------------------------------------------------
+
   useEffect(() => {
     function handleClickOutside(e) {
       if (profileRef.current && !profileRef.current.contains(e.target)) {
@@ -37,7 +44,7 @@ const InstructorPage = () => {
     if (isProfileOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isProfileOpen]);
-  
+
   const navigationItems = [
     { id: 'home', label: 'Home', icon: <Home size={20} /> },
     { id: 'modules', label: 'Modules', icon: <BookOpen size={20} /> },
@@ -78,13 +85,57 @@ const InstructorPage = () => {
     }
   ];
 
+  // ---------- NEW: handler for create class ----------
+  async function handleCreateClass() {
+    setModalMessage('');
+    // basic validation
+    if (!className.trim() || !classKey.trim()) {
+      setModalMessage('Class name and key are required.');
+      return;
+    }
+
+    const token = localStorage.getItem('token');
+
+    try {
+      const res = await fetch('http://localhost:5000/teacher/createClass', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          class_name: className,
+          class_key: classKey
+        })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && (data.message?.toLowerCase().includes('created') || data.success)) {
+        setModalMessage(data.message || 'Class created successfully');
+        setClassName('');
+        setClassKey('');
+        setTimeout(() => {
+          setShowCreateModal(false);
+          setModalMessage('');
+        }, 900);
+      } else {
+        setModalMessage(data.message || 'Failed to create class');
+      }
+    } catch (err) {
+      console.error('Create class error:', err);
+      setModalMessage('Server error. Try again.');
+    }
+  }
+  // ----------------------------------------------------
+
   return (
       <div className="min-h-screen bg-gray-50 relative">
       <Helmet>
         <title>Course Dashboard - EagleDocs</title>
       </Helmet>
 
-      {/* Course Header */}
+      {/* Course Header */} 
         <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-30">
           <div className={`transition-all duration-300 ${isSidebarOpen ? 'pl-64' : 'pl-0'} w-full`}>
             <div className="px-6">
@@ -125,7 +176,11 @@ const InstructorPage = () => {
                 <button className="p-2 text-gray-400 hover:text-gray-500">
                   <Bell size={20} />
                 </button>
-                <button className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                {/* only change: open modal on click */}
+                <button
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
+                  onClick={() => setShowCreateModal(true)}
+                >
                   <Plus size={16} className="mr-2" />
                   Create
                 </button>
@@ -181,7 +236,6 @@ const InstructorPage = () => {
                   <button
                     className="w-full text-left px-3 py-2 hover:bg-gray-600"
                     onClick={() => {
-                      // open settings - replace with real navigation when available
                       console.log('Open settings');
                       setProfileOpen(false);
                     }}
@@ -191,7 +245,6 @@ const InstructorPage = () => {
                   <button
                     className="w-full text-left px-3 py-2 hover:bg-gray-600"
                     onClick={() => {
-                      // toggle authentication for demo purposes
                       setAuthenticated((s) => !s);
                       setProfileOpen(false);
                     }}
@@ -311,6 +364,57 @@ const InstructorPage = () => {
           </div>
         </div>
       </main>
+
+      {/* ---------- NEW: Create Class Modal ---------- */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black opacity-40" onClick={() => setShowCreateModal(false)} />
+          <div className="bg-white rounded-lg shadow-lg z-50 w-full max-w-md p-6 relative">
+            <h3 className="text-lg text-gray-700 font-bold mb-4">Create Class</h3>
+
+            <label className="block text-sm text-gray-700 mb-1">Class Name</label>
+            <input
+              type="text"
+              className="w-full border rounded px-3 py-2 mb-3"
+              value={className}
+              onChange={(e) => setClassName(e.target.value)}
+            />
+
+            <label className="block text-sm text-gray-700 mb-1">Class Key</label>
+            <input
+              type="text"
+              className="w-full border rounded px-3 py-2 mb-3"
+              value={classKey}
+              onChange={(e) => setClassKey(e.target.value)}
+            />
+
+            {modalMessage && (
+              <div className="text-sm text-center mb-3 text-red-600">
+                {modalMessage}
+              </div>
+            )}
+
+            <div className="flex justify-end space-x-2">
+              <button
+                className="px-4 py-2 rounded hover:bg-green-700"
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setModalMessage('');
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+                onClick={handleCreateClass}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ----------------------------------------- */}
     </div>
   );
 };

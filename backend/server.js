@@ -1,9 +1,10 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import * as LoginPage from "./LoginPage.js";
-import * as RegisterPage from "./RegisterPage.js";
-import dotenv from "dotenv"
+import * as Login from "./Login.js";
+import * as Register from "./Register.js";
+import * as joinClass from "./JoinClass.js";
+import * as CreateClass from "./CreateClass.js";
 dotenv.config()
 import jwt from "jsonwebtoken";
 import { getdatabase } from "./db.js";
@@ -18,12 +19,33 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
+function verifyToken(req,res,next){
+  const token = req.headers["authorization"]?.split(" ")[1];
+
+  if(!token){
+    return res.status(401).json({message: "No Token Provided"});
+  }
+
+  try{
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = decoded;
+    next();
+  }catch(error){
+    return res.status(403).json({message: "Invalid Token"})
+  }
+
+}
+
+
+
+
+
 
 //creates a post route for login
 app.post("/api/login", async (req, res) => {
   const { email, password } = req.body;
   try {
-    const result = await LoginPage.cleanInput(email, password);
+    const result = await Login.cleanInput(email, password);
     if (typeof result === "string") {
       // result is an error message
       return res.json({ message: result });
@@ -42,34 +64,55 @@ app.get("/account", verifyToken, async(req, res)=>{
   const db = await getdatabase();
 
   const [rows] = await db.execute(
-    "SELECT account_id, email, account_type, created_at FROM accounts WHERE id = ?", [req.user.id]
+    "SELECT account_id, email, account_type, created_at FROM accounts WHERE account_id = ?", [req.user.id]
   )
 
   res.json({
-    id: rows[0].id,
+    account_id: rows[0].account_id,
     email: rows[0].email,
     accountType: rows[0].account_type,
     created_at: rows[0].created_at
   });
 })
 
-app.get("/classMember", verifyToken, (req, res)=>{
+app.post("/student/addClassMember", verifyToken, async(req, res)=>{
+    const {class_key} = req.body;
+    const student_id = req.user.id;
+
+   try {
+    const result = await joinClass.addStudentToClass(student_id, class_key) 
+    res.json(result); 
+  } catch (error) {
+    console.error("Error during submission:", error);
+    res.status(500).json({ message: "Error during submission" });
+  } 
+})
+
+app.post("/teacher/createClass", verifyToken, async(req, res)=>{
+    const{class_name, class_key} = req.body;
+    const teacher_id = req.user.id;
+
+   try {
+    const result = await CreateClass.classCreation(class_name, teacher_id, class_key); 
+    res.json(result); 
+  } catch (error) {
+    console.error("Error during submission:", error);
+    res.status(500).json({ message: "Error during submission" });
+  } 
+
+})
+
+
+
+app.get("/conversation", verifyToken, async(req, res)=>{
   
 })
 
-app.get("/class", verifyToken, (req, res)=>{
+app.get("/chatlog", verifyToken, async(req, res)=>{
   
 })
 
-app.get("/conversation", verifyToken, (req, res)=>{
-  
-})
-
-app.get("/chatlog", verifyToken, (req, res)=>{
-  
-})
-
-app.get("/settings", verifyToken, (req, res) =>{
+app.get("/settings", verifyToken, async(req, res) =>{
 
 })
 
@@ -79,7 +122,7 @@ app.get("/settings", verifyToken, (req, res) =>{
 app.post("/api/register", async (req, res) => {
   const { email, password, accountType } = req.body;
   try {
-    const result = await RegisterPage.cleanInput(email, password, accountType); 
+    const result = await Register.cleanInput(email, password, accountType); 
     res.json({ message: result }); //sends back the result as a json response
 } catch (error) {
     console.error("Error during registration:", error);
