@@ -8,7 +8,7 @@ export const generateOllamaResponse = async (messages) => {
   }
 
   const baseUrl = `http://${process.env.OLLAMA_HOST}:${process.env.OLLAMA_PORT}`;
-  const model = process.env.OLLAMA_MODEL || 'llama3';
+  const model = process.env.OLLAMA_MODEL || 'gpt-oss:20b';
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
