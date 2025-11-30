@@ -20,10 +20,10 @@ export async function AddLoginInfo(email, password, accountType) {
     const [rows] = await db.execute(`Insert INTO accounts (email, password, account_type) VALUES (?, ?, ?)`, [email, password, accountType]);
     
     if (rows.affectedRows === 0) {
-        return "Account creation failed";
+        return {message:"Account creation failed"};
     }
     else {
-        return "Account created successfully";
+        return {message:"Account created successfully"};
     }
 } catch (error) {
     if(error.code === "ER_DUP_ENTRY"){

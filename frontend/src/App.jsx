@@ -11,45 +11,37 @@ import PrivacyPolicy from './pages/PrivacyPolicy';
 import Contact from './pages/ContactPage';
 import GitHubPage from './pages/GitHubPage';
 import InstructorPage from './pages/InstructorPage';
+import StudentChatView from './pages/StudentChatView';
 
 function App() {
-  const isAuthenticated = localStorage.getItem('token');
 
   return (
     <Router>
-      <Routes> 
+      <Routes>
 
         {/* Catch-all for unmatched routes */}
         <Route path="*" element={<NotFound />} />
 
-        {/* Anyone can view homepage */}
+        {/* Public homepage */}
         <Route path="/" element={<HomePage />} />
 
-        {/* If authenticated, go to /chat. Otherwise, show login. */}
-        <Route
-          path="/login"
-          element={isAuthenticated ? <Navigate to="/chat" /> : <LoginPage />}
-        />
+        {/* Login + Register always visible (NO REDIRECT BASED ON TOKEN) */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
 
-        {/* If authenticated, go to /chat. Otherwise, show register. */}
-        <Route
-          path="/register"
-          element={isAuthenticated ? <Navigate to="/chat" /> : <RegisterPage />}
-        />
-
-        {/* Anyone can visit /chat, whether logged in or not. */}
+        {/* Chat page */}
         <Route path="/chat" element={<ChatPage />} />
 
-        {/* Developers Page */}
+        {/* Developer Page */}
         <Route path="/developers" element={<Developers />} />
 
         {/* About Page */}
         <Route path="/about" element={<About />} />
 
-        {/* TermsOfService Page */}
+        {/* Terms of Service */}
         <Route path="/tos" element={<TermsOfService />} />
-        
-        {/* PrivacyPolicy Page */}
+
+        {/* Privacy Policy */}
         <Route path="/privacy" element={<PrivacyPolicy />} />
 
         {/* Contact Page */}
@@ -58,8 +50,11 @@ function App() {
         {/* GitHub Page */}
         <Route path="/github" element={<GitHubPage />} />
 
-        {/* Instructor Page */}
+        {/* Instructor Dashboard */}
         <Route path="/instructor" element={<InstructorPage />} />
+
+        <Route path="/StudentChatView" element={<StudentChatView />} />
+
 
       </Routes>
     </Router>

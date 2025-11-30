@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-localStorage.removeItem("token");
 
 function LoginPage() {
   const [email, setEmail] = useState('');
@@ -10,35 +9,59 @@ function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // gets the server info and makes a post request
     fetch('http://localhost:5000/api/login', {
-      method: 'POST', //type of request
-      headers: {'Content-Type': 'application/json',}, //type of data being sent
-      body: JSON.stringify({email, password }), //converts js object to json string
+      method: 'POST',
+      headers: {'Content-Type': 'application/json',},
+      body: JSON.stringify({email, password }),
     })
-    .then(res => res.json()) //when response is received, it will read it and convert it back to js object
+    .then(res => res.json()) 
     .then(data => 
       {
          console.log(data);
         if (data.message === "Login successful") {
-            localStorage.setItem('token', data.token); // Save the token
-            navigate('/Chat'); // Redirect to chat
+            localStorage.setItem('token', data.token);
+            fetchAccount().then(account =>{console.log(account);
+
+              if(account.accountType === "student"){
+                navigate("/chat", { replace: false });
+              }
+              else if(account.accountType === "teacher"){
+                navigate('/instructor', { replace: false });
+              }
+              else{
+                alert("Unknown account type");
+              }
+            });
         }
         else{
           alert(data.message);
         }
-      })//how to handle the data from the response
+      })
     .catch((error) => 
-      {console.error('Error:', error);//error handling
+      {console.error('Error:', error);
     });
   };
+
+  async function fetchAccount() {
+  const token = localStorage.getItem("token");
+  const res = await fetch("http://localhost:5000/account", {
+    method: "GET",
+    headers: {
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    }
+  });
+  return await res.json();}
+
+
   useEffect(() => {
-    document.title = 'EagleDocs'; // Page Title
+    document.title = 'EagleDocs';
     const favicon = document.querySelector("link[rel='icon']");
     if (favicon) {
-      favicon.href = '/favicon.ico'; // Page Icon
+      favicon.href = '/favicon.ico';
     }
   }, []);
+
 
   return (
     <div className="h-screen flex items-center justify-center bg-gray-50">
