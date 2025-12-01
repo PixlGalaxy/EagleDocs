@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   if (!isInstructor(req.user)) {
-    return res.status(403).json({ error: 'Solo los instructores pueden crear cursos' });
+    return res.status(403).json({ error: 'Only instructors can create courses' });
   }
 
   const code = normalizeCourseCode(req.body?.code || '');
@@ -51,11 +51,11 @@ router.post('/', async (req, res) => {
   const description = (req.body?.description || '').trim();
 
   if (!code || code.length < 3 || code.length > 32) {
-    return res.status(400).json({ error: 'Ingresa un código de curso válido' });
+    return res.status(400).json({ error: 'Enter a valid course code' });
   }
 
   if (!name) {
-    return res.status(400).json({ error: 'El curso necesita un nombre' });
+    return res.status(400).json({ error: 'The course needs a name' });
   }
 
   try {
@@ -67,7 +67,7 @@ router.post('/', async (req, res) => {
     return res.status(201).json({ course: rows[0] });
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(409).json({ error: 'Ya existe un curso con este código' });
+      return res.status(409).json({ error: 'A course with this code already exists' });
     }
     console.error('Create course error:', error);
     return res.status(500).json({ error: 'Unable to create course' });
@@ -78,18 +78,18 @@ router.get('/:courseId/documents', async (req, res) => {
   const courseId = Number(req.params.courseId);
 
   if (Number.isNaN(courseId)) {
-    return res.status(400).json({ error: 'ID de curso inválido' });
+    return res.status(400).json({ error: 'Invalid course ID' });
   }
 
   try {
     const courseResult = await pool.query('SELECT id, owner_id FROM courses WHERE id = $1', [courseId]);
 
     if (!courseResult.rows.length) {
-      return res.status(404).json({ error: 'Curso no encontrado' });
+      return res.status(404).json({ error: 'Course not found' });
     }
 
     if (!isInstructor(req.user) || courseResult.rows[0].owner_id !== req.user.id) {
-      return res.status(403).json({ error: 'Solo el instructor puede ver estos archivos' });
+      return res.status(403).json({ error: 'Only the instructor can view these files' });
     }
 
     const { rows } = await pool.query(
@@ -108,47 +108,47 @@ router.post('/:courseId/documents', async (req, res) => {
   const courseId = Number(req.params.courseId);
 
   if (Number.isNaN(courseId)) {
-    return res.status(400).json({ error: 'ID de curso inválido' });
+    return res.status(400).json({ error: 'Invalid course ID' });
   }
 
   if (!isInstructor(req.user)) {
-    return res.status(403).json({ error: 'Solo los instructores pueden subir documentos' });
+    return res.status(403).json({ error: 'Only instructors can upload documents' });
   }
 
   const { fileName, fileData } = req.body || {};
 
   if (!fileName || !fileData) {
-    return res.status(400).json({ error: 'Archivo PDF requerido' });
+    return res.status(400).json({ error: 'PDF file required' });
   }
 
   if (!fileName.toLowerCase().endsWith('.pdf')) {
-    return res.status(400).json({ error: 'Solo se permiten archivos PDF' });
+    return res.status(400).json({ error: 'Only PDF files are allowed' });
   }
 
   const courseResult = await pool.query('SELECT id, code, owner_id FROM courses WHERE id = $1', [courseId]);
 
   if (!courseResult.rows.length) {
-    return res.status(404).json({ error: 'Curso no encontrado' });
+    return res.status(404).json({ error: 'Course not found' });
   }
 
   if (courseResult.rows[0].owner_id !== req.user.id) {
-    return res.status(403).json({ error: 'Solo el instructor del curso puede subir archivos' });
+    return res.status(403).json({ error: 'Only the course instructor can upload files' });
   }
 
   let buffer;
   try {
     buffer = Buffer.from(fileData, 'base64');
   } catch (error) {
-    return res.status(400).json({ error: 'Archivo inválido' });
+    return res.status(400).json({ error: 'Invalid file' });
   }
 
   if (!buffer || !buffer.length) {
-    return res.status(400).json({ error: 'No se pudo leer el archivo' });
+    return res.status(400).json({ error: 'Unable to read the file' });
   }
 
   const maxSize = 20 * 1024 * 1024; // 20MB
   if (buffer.length > maxSize) {
-    return res.status(413).json({ error: 'El archivo supera el límite de 20MB' });
+    return res.status(413).json({ error: 'The file exceeds the 20MB limit' });
   }
 
   const safeName = `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9._-]/g, '')}`;
@@ -187,7 +187,7 @@ router.post('/:courseId/documents', async (req, res) => {
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Upload document error:', error);
-    return res.status(500).json({ error: 'No se pudo guardar el documento' });
+    return res.status(500).json({ error: 'Unable to save the document' });
   } finally {
     client.release();
   }
@@ -202,7 +202,7 @@ router.get('/context/:courseCode', async (req, res) => {
     return res.json({ context });
   } catch (error) {
     console.error('Preview context error:', error);
-    return res.status(500).json({ error: 'No se pudo generar el contexto' });
+    return res.status(500).json({ error: 'Unable to build context' });
   }
 });
 

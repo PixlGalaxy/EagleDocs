@@ -38,7 +38,7 @@ const readIndexFiles = async (indexPaths = []) => {
         const contents = await fs.readFile(indexPath, 'utf-8');
         return JSON.parse(contents);
       } catch (error) {
-        console.error(`No se pudo leer el índice ${indexPath}`, error.message);
+        console.error(`Unable to read index ${indexPath}`, error.message);
         return [];
       }
     })
@@ -86,5 +86,5 @@ export const buildCourseContext = async (courseCode, question) => {
   }
 
   const context = topChunks.join('\n\n');
-  return `Contexto del curso ${courseCode}:\n${context.slice(0, 8000)}`;
+  return `Course context ${courseCode}:\n${context.slice(0, 8000)}`;
 };

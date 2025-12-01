@@ -61,7 +61,7 @@ const InstructorPage = () => {
         const base64 = result.toString().split(',')[1];
         resolve(base64);
       };
-      reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+      reader.onerror = () => reject(new Error('Could not read the file'));
       reader.readAsDataURL(file);
     });
 
@@ -79,12 +79,12 @@ const InstructorPage = () => {
     if (!file) return;
 
     if (file.type !== 'application/pdf') {
-      setError('Solo puedes subir PDF');
+      setError('Only PDF files are allowed');
       return;
     }
 
     if (file.size > 20 * 1024 * 1024) {
-      setError('El archivo no puede superar los 20MB');
+      setError('Files must be under 20MB');
       return;
     }
 
@@ -118,8 +118,8 @@ const InstructorPage = () => {
           <div className="flex items-center gap-3">
             <img src="/EagleDocs Logo.png" alt="EagleDocs" className="w-10 h-10" />
             <div>
-              <h1 className="text-2xl font-semibold">Panel de Instructor</h1>
-              <p className="text-sm text-gray-500">Carga PDFs y define la RAG por código de curso</p>
+              <h1 className="text-2xl font-semibold">Instructor Dashboard</h1>
+              <p className="text-sm text-gray-500">Upload PDFs and define course-scoped RAG by code</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -131,7 +131,7 @@ const InstructorPage = () => {
               onClick={handleLogout}
               className="text-sm bg-gray-100 px-3 py-2 rounded hover:bg-gray-200"
             >
-              Salir
+              Sign Out
             </button>
           </div>
         </div>
@@ -141,36 +141,36 @@ const InstructorPage = () => {
         <section className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center gap-2 mb-4">
             <PlusCircle className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold">Crear curso</h2>
+            <h2 className="text-lg font-semibold">Create course</h2>
           </div>
           <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Código del curso</label>
+              <label className="block text-sm text-gray-600 mb-1">Course code</label>
               <input
                 value={newCourse.code}
                 onChange={(e) => setNewCourse((prev) => ({ ...prev, code: e.target.value }))}
                 className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Ejem: COP1234"
+                placeholder="E.g., COP1234"
                 required
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Nombre</label>
+              <label className="block text-sm text-gray-600 mb-1">Name</label>
               <input
                 value={newCourse.name}
                 onChange={(e) => setNewCourse((prev) => ({ ...prev, name: e.target.value }))}
                 className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Introducción a..."
+                placeholder="Intro to..."
                 required
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Descripción</label>
+              <label className="block text-sm text-gray-600 mb-1">Description</label>
               <input
                 value={newCourse.description}
                 onChange={(e) => setNewCourse((prev) => ({ ...prev, description: e.target.value }))}
                 className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Opcional"
+                placeholder="Optional"
               />
             </div>
             <div className="md:col-span-3 flex justify-end">
@@ -181,7 +181,7 @@ const InstructorPage = () => {
                   creating ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
                 }`}
               >
-                {creating ? 'Creando...' : 'Crear curso'}
+                {creating ? 'Creating...' : 'Create course'}
               </button>
             </div>
           </form>
@@ -194,19 +194,19 @@ const InstructorPage = () => {
         <section className="space-y-4">
           <div className="flex items-center gap-2">
             <BookOpenCheck className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold">Tus cursos</h2>
+            <h2 className="text-lg font-semibold">Your courses</h2>
             <button
               onClick={fetchCourses}
               className="ml-auto inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
             >
-              <RefreshCw className="h-4 w-4" /> Recargar
+              <RefreshCw className="h-4 w-4" /> Refresh
             </button>
           </div>
 
           {loading ? (
-            <p className="text-gray-500">Cargando cursos...</p>
+            <p className="text-gray-500">Loading courses...</p>
           ) : courses.length === 0 ? (
-            <p className="text-gray-500">Aún no has creado cursos.</p>
+            <p className="text-gray-500">You haven't created any courses yet.</p>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {courses.map((course) => (
@@ -227,7 +227,7 @@ const InstructorPage = () => {
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <Upload className="h-4 w-4" />
                     <label className="cursor-pointer text-blue-600 hover:text-blue-700">
-                      <span>{uploadingCourseId === course.id ? 'Subiendo...' : 'Subir PDF'}</span>
+                      <span>{uploadingCourseId === course.id ? 'Uploading...' : 'Upload PDF'}</span>
                       <input
                         type="file"
                         accept="application/pdf"
@@ -240,16 +240,16 @@ const InstructorPage = () => {
                       onClick={() => loadDocuments(course.id)}
                       className="ml-auto text-xs text-gray-500 underline"
                     >
-                      Ver archivos
+                      View files
                     </button>
                   </div>
 
                   <div className="bg-gray-50 rounded p-3 space-y-2 text-sm">
                     <p className="text-gray-700">
-                      Comparte el código <span className="font-semibold">{course.code}</span> con tus estudiantes.
+                      Share the code <span className="font-semibold">{course.code}</span> with your students.
                     </p>
                     <p className="text-gray-500">
-                      La RAG utilizará todos los PDFs subidos para este curso al chatear.
+                      The RAG will use every PDF uploaded for this course during chat.
                     </p>
                   </div>
 

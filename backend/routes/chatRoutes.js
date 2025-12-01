@@ -126,7 +126,7 @@ router.post('/:chatId/messages', async (req, res) => {
 
       if (!courseResult.rows.length) {
         await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Curso no encontrado para esta RAG' });
+        return res.status(404).json({ error: 'Course not found for this RAG selection' });
       }
 
       ragContext = await buildCourseContext(courseResult.rows[0].code, content);
@@ -144,7 +144,7 @@ router.post('/:chatId/messages', async (req, res) => {
             {
               role: 'system',
               content:
-                'Responde como asistente académico. Prioriza el contexto del curso si existe y mantén las tablas o bloques de código en formato claro.',
+                'Answer as an academic assistant. Prioritize the course context when available and preserve tables or code blocks in a clear format.',
             },
             { role: 'system', content: ragContext },
             ...conversation,

@@ -186,8 +186,8 @@ const ChatPage = () => {
   );
 
   const activeCourseLabel = selectedCourse
-    ? `Usando RAG del curso ${selectedCourse}`
-    : 'Chat por defecto (sin RAG)';
+    ? `Using course RAG: ${selectedCourse}`
+    : 'Default chat (no RAG)';
 
   const markdownComponents = {
     code({ inline, className, children, ...props }) {
@@ -331,7 +331,7 @@ const ChatPage = () => {
             <div className="flex items-center gap-2">
               <ListFilter className="h-5 w-5 text-blue-600" />
               <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Selecciona la RAG del curso</p>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Select a course RAG</p>
                 <p className="text-xs text-gray-600 dark:text-gray-400">{activeCourseLabel}</p>
               </div>
             </div>
@@ -342,7 +342,7 @@ const ChatPage = () => {
                 disabled={loadingCourses}
                 className="text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded px-3 py-2"
               >
-                <option value="">Chat por defecto</option>
+                <option value="">Default chat</option>
                 {courses.map((course) => (
                   <option key={course.id} value={course.code}>
                     {course.code} — {course.name}
@@ -351,11 +351,11 @@ const ChatPage = () => {
               </select>
               {selectedCourse ? (
                 <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                  RAG activa
+                  RAG active
                 </span>
               ) : (
                 <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
-                  Sin RAG
+                  No RAG
                 </span>
               )}
             </div>
