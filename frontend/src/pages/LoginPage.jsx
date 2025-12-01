@@ -10,14 +10,18 @@ function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
 
+  const detectedRole = email.trim().toLowerCase().endsWith('@fgcu.edu')
+    ? 'Instructor'
+    : 'Student';
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSubmitting(true);
 
     try {
-      await login(email, password);
-      navigate('/chat');
+      const loggedIn = await login(email, password);
+      navigate(loggedIn.role === 'instructor' ? '/instructor' : '/chat');
     } catch (err) {
       setError(err.message || 'Unable to log in');
     } finally {
@@ -50,6 +54,7 @@ function LoginPage() {
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
+          <p className="text-xs text-gray-500 mt-1">Detectado como: {detectedRole}</p>
         </div>
         <div>
           <label className="block text-gray-600 mb-1">Password</label>

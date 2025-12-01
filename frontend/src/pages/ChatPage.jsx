@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, UserCircle, Menu, X, BookOpen, GraduationCap, Lightbulb } from 'lucide-react';
+import { Plus, Search, UserCircle, Menu, X, BookOpen, GraduationCap, Lightbulb, ListFilter } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { apiRequest } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
@@ -19,6 +21,9 @@ const ChatPage = () => {
   const [creatingChat, setCreatingChat] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [courses, setCourses] = useState([]);
+  const [selectedCourse, setSelectedCourse] = useState('');
+  const [loadingCourses, setLoadingCourses] = useState(true);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -45,6 +50,33 @@ const ChatPage = () => {
     };
 
     loadChats();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCourses = async () => {
+      try {
+        const data = await apiRequest('/courses');
+        if (!isMounted) return;
+        setCourses(data.courses || []);
+        setError('');
+      } catch (err) {
+        if (isMounted) {
+          setError(err.message);
+        }
+      } finally {
+        if (isMounted) {
+          setLoadingCourses(false);
+        }
+      }
+    };
+
+    loadCourses();
 
     return () => {
       isMounted = false;
@@ -129,7 +161,7 @@ const ChatPage = () => {
     try {
       const data = await apiRequest(`/chats/${selectedChatId}/messages`, {
         method: 'POST',
-        body: { content },
+        body: { content, courseCode: selectedCourse || undefined },
       });
       setMessages((prev) => [...prev, data.userMessage, data.aiMessage]);
       setInput('');
@@ -152,6 +184,43 @@ const ChatPage = () => {
   const filteredChats = chats.filter((chat) =>
     chat.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const activeCourseLabel = selectedCourse
+    ? `Usando RAG del curso ${selectedCourse}`
+    : 'Chat por defecto (sin RAG)';
+
+  const markdownComponents = {
+    code({ inline, className, children, ...props }) {
+      if (inline) {
+        return (
+          <code
+            className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs"
+            {...props}
+          >
+            {children}
+          </code>
+        );
+      }
+
+      return (
+        <pre className="bg-gray-900 text-gray-100 rounded-md p-3 overflow-x-auto text-xs" {...props}>
+          <code className={className}>{children}</code>
+        </pre>
+      );
+    },
+    table({ children }) {
+      return <table className="min-w-full border border-gray-300 text-sm">{children}</table>;
+    },
+    th({ children }) {
+      return <th className="border border-gray-300 px-2 py-1 bg-gray-100">{children}</th>;
+    },
+    td({ children }) {
+      return <td className="border border-gray-300 px-2 py-1">{children}</td>;
+    },
+    p({ children }) {
+      return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>;
+    },
+  };
 
   const suggestions = [
     { icon: <BookOpen className="h-5 w-5" />, text: 'Help me study for a test' },
@@ -258,6 +327,39 @@ const ChatPage = () => {
               {error}
             </div>
           )}
+          <div className="mb-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-2">
+              <ListFilter className="h-5 w-5 text-blue-600" />
+              <div>
+                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Selecciona la RAG del curso</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">{activeCourseLabel}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedCourse}
+                onChange={(e) => setSelectedCourse(e.target.value)}
+                disabled={loadingCourses}
+                className="text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded px-3 py-2"
+              >
+                <option value="">Chat por defecto</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.code}>
+                    {course.code} — {course.name}
+                  </option>
+                ))}
+              </select>
+              {selectedCourse ? (
+                <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                  RAG activa
+                </span>
+              ) : (
+                <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
+                  Sin RAG
+                </span>
+              )}
+            </div>
+          </div>
           {loadingMessages ? (
             <div className="flex flex-1 items-center justify-center text-gray-500">Loading messages...</div>
           ) : messages.length === 0 ? (
@@ -274,17 +376,23 @@ const ChatPage = () => {
               ))}
             </div>
           ) : (
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto flex flex-col gap-3">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`my-2 max-w-xl px-4 py-2 rounded-lg text-sm ${
+                  className={`max-w-3xl px-4 py-3 rounded-lg text-sm shadow-sm border ${
                     msg.sender === 'user'
-                      ? 'bg-blue-500 text-white self-end ml-auto'
-                      : 'bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-white mr-auto'
+                      ? 'bg-blue-500 text-white self-end ml-auto border-blue-600'
+                      : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white mr-auto border-gray-200 dark:border-gray-700'
                   }`}
                 >
-                  {msg.content}
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={markdownComponents}
+                    className="prose prose-sm dark:prose-invert max-w-none"
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
                 </div>
               ))}
               <div ref={messagesEndRef} />
