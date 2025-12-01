@@ -54,7 +54,7 @@ function LoginPage() {
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">Detected role: {detectedRole}</p>
+          <p className="text-xs text-gray-500 mt-1">{detectedRole}</p>
         </div>
         <div>
           <label className="block text-gray-600 mb-1">Password</label>
