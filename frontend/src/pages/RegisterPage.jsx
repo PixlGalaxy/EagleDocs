@@ -31,7 +31,7 @@ function RegisterPage() {
       const loginResponse = await fetch('http://localhost:5000/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: email, password }),
+        body: JSON.stringify({email, password}),
       });
       const loginData = await loginResponse.json();
 
@@ -56,7 +56,7 @@ function RegisterPage() {
     } catch (error) {
       console.error('Error:', error);
     }
-  }; // ✅ Fixed: this closing brace was missing!
+  }; 
 
   useEffect(() => {
     document.title = 'EagleDocs'; // Page Title

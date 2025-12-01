@@ -8,10 +8,10 @@ export async function cleanInput(potemail, potPassword) {
         return await GetLoginInfo(potemail, potPassword);
     }
     else if( potPassword.length <= 0 ){
-        return "Password cannot be empty";
+        return {message:"Password cannot be empty"};
     }
     else{
-        return "Invalid username format";
+        return {message: "Invalid username format"};
     }
 }
 

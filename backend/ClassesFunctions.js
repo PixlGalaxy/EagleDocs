@@ -43,7 +43,7 @@ export async function addStudentToClass(student_id, class_key) {
     }
 }
 
-export async function classCreation(class_name, teacher_id, class_key) {
+export async function ClassCreation(class_name, teacher_id, class_key) {
     const db = await getdatabase();
     
     try{
