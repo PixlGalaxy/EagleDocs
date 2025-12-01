@@ -2,6 +2,7 @@ import express from 'express';
 import pool from '../db/pool.js';
 import { authenticate } from '../middleware/auth.js';
 import { generateOllamaResponse } from '../services/ollamaService.js';
+import { buildCourseContext } from '../services/ragService.js';
 
 const router = express.Router();
 
@@ -75,6 +76,7 @@ router.get('/:chatId', async (req, res) => {
 router.post('/:chatId/messages', async (req, res) => {
   const chatId = Number(req.params.chatId);
   const content = (req.body?.content || '').trim();
+  const courseCode = (req.body?.courseCode || '').trim();
 
   if (Number.isNaN(chatId)) {
     return res.status(400).json({ error: 'Invalid chat id' });
@@ -114,6 +116,22 @@ router.post('/:chatId/messages', async (req, res) => {
     }));
     conversation.push({ role: 'user', content });
 
+    let ragContext = '';
+
+    if (courseCode) {
+      const courseResult = await client.query(
+        'SELECT code FROM courses WHERE LOWER(code) = LOWER($1)',
+        [courseCode]
+      );
+
+      if (!courseResult.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Course not found for this RAG selection' });
+      }
+
+      ragContext = await buildCourseContext(courseResult.rows[0].code, content);
+    }
+
     const userMessageResult = await client.query(
       'INSERT INTO messages (chat_id, sender, content) VALUES ($1, $2, $3) RETURNING id, sender, content, timestamp',
       [chatId, 'user', content]
@@ -121,7 +139,18 @@ router.post('/:chatId/messages', async (req, res) => {
 
     let aiContent;
     try {
-      aiContent = await generateOllamaResponse(conversation);
+      const enhancedConversation = ragContext
+        ? [
+            {
+              role: 'system',
+              content:
+                'Answer as an academic assistant. Prioritize the course context when available and preserve tables or code blocks in a clear format.',
+            },
+            { role: 'system', content: ragContext },
+            ...conversation,
+          ]
+        : conversation;
+      aiContent = await generateOllamaResponse(enhancedConversation);
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('Ollama error:', error.message);
