@@ -1,5 +1,3 @@
-//ChatPage.jsx
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Search, UserCircle, Menu, X, BookOpen, GraduationCap, Lightbulb, Paperclip } from 'lucide-react';
 
@@ -14,6 +12,7 @@ const ChatPage = () => {
   const [attachments, setAttachments] = useState([]);
   const fileInputRef = useRef(null);
   const createdUrlsRef = useRef(new Set());
+  const [loading, setLoading] = useState(false);
 
   const handleAttachClick = () => {
     fileInputRef.current?.click();
@@ -63,23 +62,56 @@ const ChatPage = () => {
     };
   };
 
-  const handleSend = (e) => {
+  // ✅ Updated handleSend
+  const handleSend = async (e) => {
     e.preventDefault();
-    if (!input.trim() && attachments.length === 0) return;
+    if (!input.trim()) return;
 
-    const userMessage = {
+    const newMessage = {
       id: Date.now(),
       content: input,
       sender: 'user',
       attachments: attachments.map((a) => ({ id: a.id, name: a.name, url: a.url, type: a.type }))
     };
 
-    const assistantMessage = generateAssistantResponse(input);
-    setMessages([...messages, userMessage, assistantMessage]);
+    setMessages((prev) => [...prev, newMessage]);
 
-    // clear input and current attachment selections (message keeps its copies)
     setInput('');
-    setAttachments([]);
+
+    // Start Loading indicator
+    setLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: input })
+      });
+
+      const data = await response.json();
+
+      const aiMessage = {
+        id: Date.now() + 1,
+        content: data.response || 'No reply received from AI.',
+        sender: 'ai'
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+
+    } catch (error) {
+      console.error('Error:', error);
+
+      const errorMessage = {
+        id: Date.now() + 2,
+        content: '⚠️ Error: Unable to reach AI backend.',
+        sender: 'ai'
+      };
+
+      setMessages((prev) => [errorMessage, ...prev]);
+    }
+    // Stop Loading indicator after ai  response is handled
+    setLoading(false);
+  
   };
 
   const scrollToBottom = () => {
@@ -161,7 +193,7 @@ const ChatPage = () => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div ref={messagesEndRef} />
+      
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full space-y-4">
               <h1 className="text-4xl font-semibold mb-8 text-gray-800 dark:text-gray-200">EagleDocs</h1>
@@ -172,10 +204,35 @@ const ChatPage = () => {
                     {s.text}
                   </button>
                 ))}
+                
+                <div ref={messagesEndRef} />
+
               </div>
             </div>
           ) : (
             <div className="flex flex-col">
+
+              {/* 🔵 AI LOADING INDICATOR */}
+  {loading && (
+    <div className="border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800">
+      <div className="max-w-3xl mx-auto px-4 py-6 flex gap-4 items-center">
+        <div className="w-7 h-7 rounded-sm bg-blue-500 flex items-center justify-center text-white text-sm">
+          A
+        </div>
+
+        {/* Three bouncing dots */}
+        <div className="flex items-center space-x-2">
+          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
+          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-150"></div>
+          <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce delay-300"></div>
+        </div>
+
+        <span className="text-sm text-gray-700 dark:text-gray-300 italic ml-2">
+          Thinking…
+        </span>
+      </div>
+    </div>
+  )}
               {messages.map((msg) => (
                 <div
                   key={msg.id}

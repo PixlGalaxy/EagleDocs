@@ -1,5 +1,6 @@
 import { getdatabase } from "./db.js"; 
-import { sendVerificationEmail } from "./services/emailService.js";     
+
+
 
 export async function cleanInput(potemail, potPassword, potaccountType) {
 
@@ -28,9 +29,9 @@ export async function AddLoginInfo(email, password, accountType) {
         }
 
         // EMAIL VERIFICATION STEP
-        await sendVerificationEmail(email);
+        
 
-        return "Account created successfully. Check your email for verification.";
+        return "Account created successfully";
         
     } catch (error) {
         console.error("Error during account creation:", error);
