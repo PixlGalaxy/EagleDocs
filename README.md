@@ -27,8 +27,6 @@ For more details on setting up and using Vite with React, refer to the official 
 - Instructor PDFs are stored in `backend/storage/documents` (mount this as a Docker volume to persist uploads).
 - Generated RAG indexes are written to `backend/storage/rag` (mount this directory to keep the chunked context across deployments).
 
-Share the course code defined by cada instructor with students so they can seleccionar la RAG del curso desde el chat.
-
 ### Official Plugins
 
 - **[@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md)**
