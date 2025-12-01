@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import zlib from 'zlib';
 import pool from '../db/pool.js';
 import { RAG_INDEX_DIR } from '../config/storage.js';
 
@@ -8,11 +9,50 @@ const sanitizeCourseCode = (code = '') => code.trim().toLowerCase().replace(/[^a
 const getIndexFileName = (courseCode, documentId) =>
   path.join(RAG_INDEX_DIR, `${sanitizeCourseCode(courseCode)}-${documentId}.json`);
 
+const decodePdfStreams = (buffer) => {
+  const binary = buffer.toString('binary');
+  const streamRegex = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
+  const segments = [];
+
+  let match;
+  while ((match = streamRegex.exec(binary)) !== null) {
+    const streamContent = match[1];
+    const streamStart = Math.max(0, match.index - 200);
+    const header = binary.slice(streamStart, match.index);
+    const hasFlate = /\/FlateDecode/.test(header);
+    let data = Buffer.from(streamContent, 'binary');
+
+    if (hasFlate) {
+      try {
+        data = zlib.inflateSync(data);
+      } catch {
+        // If the stream cannot be inflated, fall back to the raw bytes.
+      }
+    }
+
+    segments.push(data.toString('utf8'));
+  }
+
+  return segments;
+};
+
 export const extractTextFromBuffer = (buffer) => {
+  const decodedSegments = decodePdfStreams(buffer);
+  const extracted = decodedSegments
+    .flatMap((segment) => Array.from(segment.matchAll(/\(([^()]+)\)/g)).map((m) => m[1]))
+    .join(' ')
+    .replace(/\\n/g, ' ');
+
+  const cleaned = extracted.replace(/\s+/g, ' ').trim();
+
+  if (cleaned) {
+    return cleaned;
+  }
+
   const raw = buffer.toString('latin1');
   const matches = raw.match(/[\x20-\x7E]{3,}/g) || [];
-  const text = matches.join(' ');
-  return text.replace(/\s+/g, ' ').trim();
+  const fallback = matches.join(' ');
+  return fallback.replace(/\s+/g, ' ').trim();
 };
 
 const chunkText = (text = '', chunkSize = 1200) => {
@@ -25,7 +65,13 @@ const chunkText = (text = '', chunkSize = 1200) => {
 };
 
 export const storeCourseChunks = async (courseCode, documentId, text) => {
-  const chunks = chunkText(text);
+  const cleaned = (text || '').trim();
+
+  if (!cleaned) {
+    return { indexPath: null, chunkCount: 0 };
+  }
+
+  const chunks = chunkText(cleaned);
   const indexPath = getIndexFileName(courseCode, documentId);
   await fs.writeFile(indexPath, JSON.stringify(chunks, null, 2), 'utf-8');
   return { indexPath, chunkCount: chunks.length };

@@ -160,6 +160,12 @@ router.post('/:courseId/documents', async (req, res) => {
     await fs.writeFile(targetPath, buffer);
     const extractedText = extractTextFromBuffer(buffer);
 
+    if (!extractedText) {
+      await client.query('ROLLBACK');
+      await fs.unlink(targetPath);
+      return res.status(422).json({ error: 'No readable text found in this PDF. Please upload a text-based PDF.' });
+    }
+
     await client.query('BEGIN');
     const insertResult = await client.query(
       `INSERT INTO course_documents (course_id, file_name, original_name, mime_type, size_bytes)
