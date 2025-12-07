@@ -23,7 +23,7 @@ const mapSourcesToLinks = (sources = []) =>
   sources.map((source) => ({
     ...source,
     url: source.courseId && source.documentId
-      ? `/api/courses/${source.courseId}/documents/${source.documentId}/file`
+      ? `/courses/${source.courseId}/documents/${source.documentId}/file`
       : null,
   }));
 

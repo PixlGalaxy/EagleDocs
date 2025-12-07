@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { apiRequest, API_ORIGIN } from '../utils/api';
+import { apiRequest, API_BASE_URL } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 const ChatPage = () => {
