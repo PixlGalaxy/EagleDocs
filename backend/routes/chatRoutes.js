@@ -27,6 +27,30 @@ const mapSourcesToLinks = (sources = []) =>
       : null,
   }));
 
+const suggestChatTitle = async (question) => {
+  try {
+    const suggestion = await generateOllamaResponse(
+      [
+        {
+          role: 'system',
+          content:
+            'You write concise, engaging chat titles in English using 3-6 words. Return only the title text without quotes.',
+        },
+        {
+          role: 'user',
+          content: `Propose a short chat title for this first question: ${question}`,
+        },
+      ],
+      process.env.RAG_ANALYSIS_MODEL
+    );
+
+    return normalizeTitle(suggestion);
+  } catch (error) {
+    console.error('Chat title suggestion failed:', error.message);
+    return 'New Chat';
+  }
+};
+
 router.use(authenticate);
 
 router.get('/', async (req, res) => {
@@ -86,6 +110,55 @@ router.get('/:chatId', async (req, res) => {
   }
 });
 
+router.patch('/:chatId', async (req, res) => {
+  const chatId = Number(req.params.chatId);
+  const title = normalizeTitle(req.body?.title);
+
+  if (Number.isNaN(chatId)) {
+    return res.status(400).json({ error: 'Invalid chat id' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE chats SET title = $1 WHERE id = $2 AND user_id = $3 RETURNING id, title, created_at',
+      [title, chatId, req.user.id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    return res.json({ chat: result.rows[0] });
+  } catch (error) {
+    console.error('Rename chat error:', error);
+    return res.status(500).json({ error: 'Unable to rename chat' });
+  }
+});
+
+router.delete('/:chatId', async (req, res) => {
+  const chatId = Number(req.params.chatId);
+
+  if (Number.isNaN(chatId)) {
+    return res.status(400).json({ error: 'Invalid chat id' });
+  }
+
+  try {
+    const result = await pool.query('DELETE FROM chats WHERE id = $1 AND user_id = $2 RETURNING id', [
+      chatId,
+      req.user.id,
+    ]);
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Delete chat error:', error);
+    return res.status(500).json({ error: 'Unable to delete chat' });
+  }
+});
+
 router.post('/:chatId/messages/stream', async (req, res) => {
   const chatId = Number(req.params.chatId);
   const content = (req.body?.content || '').trim();
@@ -122,6 +195,7 @@ router.post('/:chatId/messages/stream', async (req, res) => {
 
   let ragContext = '';
   let sources = [];
+  const isFirstMessage = historyResult.rows.length === 0;
 
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -140,6 +214,13 @@ router.post('/:chatId/messages/stream', async (req, res) => {
   );
 
   try {
+    if (isFirstMessage) {
+      sendEvent(res, 'status', { message: 'Finding a title for this chat...' });
+      const suggestedTitle = await suggestChatTitle(content);
+      await pool.query('UPDATE chats SET title = $1 WHERE id = $2', [suggestedTitle, chatId]);
+      sendEvent(res, 'chatRenamed', { chatId, title: suggestedTitle });
+    }
+
     if (courseCode) {
       const courseResult = await pool.query('SELECT code FROM courses WHERE LOWER(code) = LOWER($1)', [courseCode]);
 
@@ -243,6 +324,7 @@ router.post('/:chatId/messages', async (req, res) => {
     conversation.push({ role: 'user', content });
 
     let ragContext = '';
+    const isFirstMessage = historyResult.rows.length === 0;
 
     if (courseCode) {
       const courseResult = await client.query(
@@ -263,6 +345,11 @@ router.post('/:chatId/messages', async (req, res) => {
       'INSERT INTO messages (chat_id, sender, content) VALUES ($1, $2, $3) RETURNING id, sender, content, timestamp',
       [chatId, 'user', content]
     );
+
+    if (isFirstMessage) {
+      const suggestedTitle = await suggestChatTitle(content);
+      await client.query('UPDATE chats SET title = $1 WHERE id = $2', [suggestedTitle, chatId]);
+    }
 
     let aiContent;
     try {

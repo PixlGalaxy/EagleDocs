@@ -12,6 +12,8 @@ import {
   ListFilter,
   FileSearch,
   ExternalLink,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -38,6 +40,8 @@ const ChatPage = () => {
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
   const [sourceByMessage, setSourceByMessage] = useState({});
+  const [renamingChatId, setRenamingChatId] = useState(null);
+  const [deletingChatId, setDeletingChatId] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -229,6 +233,11 @@ const ChatPage = () => {
             continue;
           }
 
+          if (eventType === 'chatRenamed') {
+            setChats((prev) => prev.map((chat) => (chat.id === data.chatId ? { ...chat, title: data.title } : chat)));
+            continue;
+          }
+
           if (eventType === 'token') {
             setMessages((prev) =>
               prev.map((msg) =>
@@ -332,6 +341,45 @@ const ChatPage = () => {
 
   const disableInput = !selectedChatId || sending;
 
+  const handleRenameChat = async (chatId) => {
+    const current = chats.find((c) => c.id === chatId);
+    const proposed = window.prompt('Chat title', current?.title || '');
+    if (!proposed || !proposed.trim()) return;
+    setRenamingChatId(chatId);
+    try {
+      const data = await apiRequest(`/chats/${chatId}`, {
+        method: 'PATCH',
+        body: { title: proposed },
+      });
+      setChats((prev) => prev.map((chat) => (chat.id === chatId ? data.chat : chat)));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRenamingChatId(null);
+    }
+  };
+
+  const handleDeleteChat = async (chatId) => {
+    if (!window.confirm('Delete this chat? Messages will be removed.')) return;
+    setDeletingChatId(chatId);
+    try {
+      await apiRequest(`/chats/${chatId}`, { method: 'DELETE' });
+      setChats((prev) => {
+        const remaining = prev.filter((chat) => chat.id !== chatId);
+        if (selectedChatId === chatId) {
+          setSelectedChatId(remaining[0]?.id || null);
+          setMessages([]);
+          setSourceByMessage({});
+        }
+        return remaining;
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeletingChatId(null);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
       <div
@@ -377,13 +425,39 @@ const ChatPage = () => {
                 <li
                   key={chat.id}
                   onClick={() => handleSelectChat(chat.id)}
-                  className={`cursor-pointer px-3 py-2 rounded transition-colors ${
+                  className={`group cursor-pointer px-3 py-2 rounded transition-colors ${
                     chat.id === selectedChatId
                       ? 'bg-blue-100 text-blue-700 dark:bg-gray-800'
                       : 'text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800'
                   }`}
                 >
-                  {chat.title}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate">{chat.title}</span>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        title="Rename"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRenameChat(chat.id);
+                        }}
+                        disabled={renamingChatId === chat.id}
+                        className="p-1 rounded hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-60"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </button>
+                      <button
+                        title="Delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteChat(chat.id);
+                        }}
+                        disabled={deletingChatId === chat.id}
+                        className="p-1 rounded hover:bg-red-100 text-red-600 dark:hover:bg-red-900 disabled:opacity-60"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
                 </li>
               ))
             ) : (
