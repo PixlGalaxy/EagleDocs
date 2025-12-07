@@ -10,14 +10,13 @@ function About() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // Graph Data
-  const data = [
-    { name: "AIME 2024", OpenAI: 63.6, AzulV2: 72.6 },
-    { name: "Codeforces", OpenAI: 58.7, AzulV2: 90.6 },
-    { name: "GPQA Diamond", OpenAI: 60.0, AzulV2: 62.1 },
-    { name: "MATH-500", OpenAI: 90.2, AzulV2: 94.3 },
-    { name: "MMLU", OpenAI: 87.4, AzulV2: 85.2 },
-    { name: "SWE-bench Verified", OpenAI: 36.8, AzulV2: 42.0 },
-  ];
+const data = [
+  { name: "MMLU", AzulAI: 69, Llama4: 85, DeepSeekR1: 98 },
+  { name: "GSM8K", AzulAI: 78, Llama4: 85, DeepSeekR1: 91 },
+  { name: "HumanEval", AzulAI: 73, Llama4: 78, DeepSeekR1: 88 },
+  { name: "C-Eval", AzulAI: 46, Llama4: 77, DeepSeekR1: 81 },
+];
+
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col items-center">
@@ -38,30 +37,35 @@ function About() {
         
         {/* About Text */}
         <h1 className="text-4xl font-extrabold text-gray-900 mb-4">About EagleDocs</h1>
-        <p className="text-lg text-gray-700 leading-relaxed">
-          EagleDocs is an AI-powered educational platform designed to assist students by providing accurate and 
-          specialized learning resources. Our goal is to enhance education through intelligent assistance, making 
-          learning more efficient and engaging.
+        <p className="text-lg text-gray-700 leading-relaxed mt-4">
+          EagleDocs is powered by <span className="font-bold text-blue-600">AzulAI</span>, 
+          our proprietary tuning built on top of <span className="font-semibold">GPT-OSS 20B</span>. 
+          Azul is optimized for student support, mathematical reasoning, and education-focused tasks.
         </p>
         <p className="text-lg text-gray-700 leading-relaxed mt-4">
-          The platform integrates cutting-edge AI models to deliver high-quality answers and explanations. 
-          Our latest AI versions include <span className="font-bold text-green-600">Azul AI V1</span> (Depreciated), 
-          based on <span className="font-semibold">Llama3.1:8B-Instruct-fp16</span>, and 
-          <span className="font-bold text-blue-600"> Azul AI V2</span>, based on <span className="font-semibold">DeepSeek-R1:32B</span>.
+          The platform integrates modern, open-source AI models enhanced specifically for education. 
+          Our current model, <span className="font-bold text-blue-600">AzulAI</span>, is built on 
+          <span className="font-semibold"> GPT-OSS 20B</span> and optimized for student learning, 
+          mathematical reasoning, and accurate explanations across academic subjects.
         </p>
       </div>
 
       {/* Comparison Graph */}
       <div className="w-full max-w-4xl bg-white shadow-lg rounded-lg p-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4 text-center">AI Model Performance Comparison</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-4 text-center">AI Model Benchmark Comparison</h2>
+        <p className="text-xs text-gray-500 text-center mt-2">
+          Source: arXiv 2508.12461 — Benchmarks: MMLU, GSM8K, HumanEval, C-Eval
+        </p>
+
         <ResponsiveContainer width="100%" height={350}>
           <BarChart data={data} margin={{ top: 20, right: 30, left: 0, bottom: 10 }}>
             <XAxis dataKey="name" tick={{ fontSize: 12 }} />
             <YAxis label={{ value: "Accuracy (%)", angle: -90, position: "insideLeft", fontSize: 12 }} />
             <Tooltip />
             <Legend />
-            <Bar dataKey="OpenAI" fill="purple" name="OpenAI-o1-Mini" />
-            <Bar dataKey="AzulV2" fill="blue" name="Azul AI V2: 32B" />
+            <Bar dataKey="AzulAI" fill="#0070FF" name="AzulAI (GPT-OSS 20B)" />
+            <Bar dataKey="Llama4" fill="#FF7F0E" name="Llama 4 Scout 109B" />
+            <Bar dataKey="DeepSeekR1" fill="#2ca02c" name="DeepSeek-R1 70B" />
           </BarChart>
         </ResponsiveContainer>
       </div>
