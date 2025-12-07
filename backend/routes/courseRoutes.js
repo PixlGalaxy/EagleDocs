@@ -21,12 +21,11 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   const ownedOnly = req.query.scope === 'mine';
   const params = [];
-  const conditions = [];
+  const conditions = ['NOT c.archived'];
 
   if (ownedOnly) {
     params.push(req.user.id);
     conditions.push('c.owner_id = $1');
-    conditions.push('NOT c.archived');
   }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

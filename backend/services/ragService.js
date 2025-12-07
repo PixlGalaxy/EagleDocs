@@ -55,15 +55,20 @@ export const extractTextFromBuffer = (buffer) => {
   return normalizeForJson(fallback);
 };
 
-const chunkText = (text = '', chunkSize = 1200) => {
-  const words = text.split(/\s+/).filter(Boolean);
+const clampChunk = (text = '', maxLength = 1200) => {
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength)}…`;
+};
+
+const chunkText = (text = '', chunkSize = 400) => {
+  const words = text.replace(/\s+/g, ' ').trim().split(/\s+/).filter(Boolean);
   const chunks = [];
   for (let i = 0; i < words.length; i += chunkSize) {
     const start = i;
     const end = Math.min(i + chunkSize, words.length);
     const chunkWords = words.slice(start, end).join(' ');
     const pageEstimate = Math.max(1, Math.floor(start / 500) + 1);
-    chunks.push({ text: chunkWords, start, page: pageEstimate });
+    chunks.push({ text: clampChunk(chunkWords, 1400), start, page: pageEstimate });
   }
   return chunks;
 };
@@ -158,14 +163,17 @@ const scoreChunks = (chunks, question) => {
     .sort((a, b) => b.score - a.score);
 };
 
-const summarizeChunks = (chunks = []) => chunks.map((chunk) => chunk.text.trim()).join('\n\n');
+const summarizeChunks = (chunks = []) => {
+  const joined = chunks.map((chunk) => chunk.text.trim()).join('\n\n');
+  return clampChunk(joined, 1400);
+};
 
 export const buildCourseContext = async ({ courseCode, question, onStatus = () => {} }) => {
   const { rows } = await pool.query(
     `SELECT cd.id, cd.index_path, cd.original_name, cd.file_name, c.id as course_id, c.code, c.crn, c.academic_year
      FROM course_documents cd
      JOIN courses c ON c.id = cd.course_id
-     WHERE LOWER(c.code) = LOWER($1)`,
+     WHERE LOWER(c.code) = LOWER($1) AND NOT c.archived`,
     [courseCode]
   );
 
@@ -177,11 +185,15 @@ export const buildCourseContext = async ({ courseCode, question, onStatus = () =
   const chunks = await readIndexFiles(indexPaths);
 
   if (!chunks.length) {
+    onStatus('No RAG chunks available for this course.');
     return { context: '', sources: [] };
   }
 
   const scored = scoreChunks(chunks, question);
-  const topChunks = scored.slice(0, 12).filter((entry) => entry.score > 0 || scored.length <= 12);
+  const hasKeywords = question.trim().split(/\s+/).some((word) => word.length > 3);
+  const topChunks = hasKeywords
+    ? scored.slice(0, 12).filter((entry) => entry.score > 0 || scored.length <= 12)
+    : scored.slice(0, 8);
 
   const groupedByDocument = new Map();
   topChunks.forEach((chunk) => {
@@ -236,6 +248,7 @@ export const buildCourseContext = async ({ courseCode, question, onStatus = () =
   }
 
   if (!approvedContexts.length) {
+    onStatus('No RAG matches passed the relevance check.');
     return { context: '', sources: [] };
   }
 
