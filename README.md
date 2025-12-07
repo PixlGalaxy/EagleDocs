@@ -30,14 +30,6 @@ For more details on setting up and using Vite with React, refer to the official 
 
 Share the course code and CRN defined by each instructor with students so they can select the course RAG from the chat experience.
 
-### Official Plugins
-
-- **[@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md)**
-  - Uses [Babel](https://babeljs.io/) for Fast Refresh in Vite.
-
-- **[@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc)**
-  - Utilizes [SWC](https://swc.rs/) for Fast Refresh, an alternative to Babel.
-
 ### Links
 
 - Website: [eagledocs.org](https://eagledocs.org)
