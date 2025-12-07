@@ -2,6 +2,8 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.MODE === 'development' ? 'http://localhost:5000/api' : '/api');
 
+const API_ORIGIN = API_BASE_URL.replace(/\/api$/, '');
+
 const buildConfig = (options = {}) => {
   const config = {
     credentials: 'include',
@@ -44,4 +46,4 @@ export const apiRequest = async (path, options = {}) => {
   return data ?? {};
 };
 
-export { API_BASE_URL };
+export { API_BASE_URL, API_ORIGIN };
