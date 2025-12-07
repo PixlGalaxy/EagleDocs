@@ -9,6 +9,7 @@ import courseRoutes from './routes/courseRoutes.js';
 import ensureSchema from './db/schema.js';
 import { ensureStorage } from './config/storage.js';
 
+//initialize server instance
 const app = express();
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -72,6 +73,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+//starts the server and listens on specified port
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
 });
+
+
+
+

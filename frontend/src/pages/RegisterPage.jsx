@@ -83,6 +83,35 @@ function RegisterPage() {
             required
           />
         </div>
+
+        {/* Account Type Buttons */}
+        <div className="flex justify-center space-x-4 mb-4">
+          <button
+            type="button"
+            className={`flex-1 py-2 rounded-md font-semibold border-2 transition-all duration-200 ${
+              accountType === 'Student'
+                ? 'bg-blue-500 text-white border-blue-500'
+                : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100'
+            }`}
+            onClick={() => setAccountType('Student')}
+          >
+            Student
+          </button>
+
+          <button
+            type="button"
+            className={`flex-1 py-2 rounded-md font-semibold border-2 transition-all duration-200 ${
+              accountType === 'Teacher'
+                ? 'bg-green-500 text-white border-green-500'
+                : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100'
+            }`}
+            onClick={() => setAccountType('Teacher')}
+          >
+            Teacher
+          </button>
+        </div>
+
+        {/* Submit Button */}
         <button
           type="submit"
           disabled={submitting}
