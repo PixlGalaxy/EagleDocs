@@ -1,0 +1,293 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.background404 {
+  opacity: 0.4;
+  background: #ffd000;
+}
+
+/* ####################################################################### */
+/* Animated Lines CSS */
+
+#home {
+  clip-path: url(#cache);
+}
+
+#red {
+fill: none;
+opacity: 0.4;
+stroke: #ffdd00;
+stroke-width: 12;
+stroke-miterlimit:10;
+animation: show 4s;
+animation-fill-mode: forwards;
+animation-iteration-count: infinite;
+animation-timing-function: ease-in-out; 
+}
+
+#blue {
+fill: none;
+opacity: 0.4;
+stroke: #ff7b00;
+stroke-width: 12;
+stroke-miterlimit:10;
+animation: show 4s;
+animation-fill-mode: forwards;
+animation-iteration-count: infinite;
+animation-timing-function: ease-in-out;
+}
+
+#light-blue {
+fill: none;
+opacity: 0.4;
+stroke: #00ff9d;
+stroke-width: 6;
+stroke-miterlimit:10;
+stroke-dasharray: 200;
+stroke-dashoffset: 800;
+animation: draw 4s;
+animation-fill-mode: forwards;
+animation-iteration-count: infinite;
+animation-timing-function: ease-in-out;    
+}
+
+@keyframes draw {
+to {
+  stroke-dashoffset: 0;
+}
+  }
+
+@keyframes show {
+0% {
+  opacity: 0.4;
+}
+50% {
+  opacity: 0.7;
+}
+100% {
+  opacity: 0.4;
+}
+  }  
+
+/* ==== Basic rules ==== */
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+}
+
+/* ==== Links ==== */
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+@media (prefers-color-scheme: light) {
+  a:hover {
+    color: #747bff;
+  }
+}
+
+/* ==== Body & general reset ==== */
+body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+}
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+/* ==== Buttons ==== */
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+@media (prefers-color-scheme: light) {
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+/* ==== Blinking cursor (for code blocks, etc.) ==== */
+.blinking-cursor {
+  width: 1px;
+  background-color: rgb(107, 107, 107);
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 0; }
+  50%      { opacity: 1; }
+}
+
+/* ==== Styles for custom scrollbar ==== */
+.custom-scrollbar {
+  max-height: 500px;
+  overflow-y: auto;
+
+  /* For Firefox */
+  scrollbar-width: thin;               /* scrollbar thickness */
+  scrollbar-color: #888 transparent;   /* thumb and track color */
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px; /* thickness in Chrome, Safari, etc. */
+  /* height: 8px;  for horizontal scroll if it exists */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;  /* the track */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #888;         /* thumb color */
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* ==== Textarea optimizations ==== */
+textarea {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform: translate3d(0, 0, 0);
+  -webkit-transform: translate3d(0, 0, 0);
+}
+@supports (contain: strict) {
+  textarea {
+    contain: strict;
+  }
+}
+
+/* ==== Contributor fade-in ==== */
+.contributor {
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+}
+.contributor.visible {
+  opacity: 1;
+}
+
+/* ==== Animations and containers for "think" ==== */
+.think-container {
+  margin: 10px 0;
+}
+.think-toggle {
+  background: none;
+  border: none;
+  color: #007bff;
+  cursor: pointer;
+  padding: 5px;
+  font-size: 14px;
+}
+.think-content {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f9f9f9;
+  border-radius: 5px;
+  border: 1px solid #ddd;
+}
+
+/* ==== Example of custom animations ==== */
+.falling-logo {
+  animation: fall 2s ease-in-out forwards, fadeIn 3s ease-in-out 2s;
+}
+@keyframes fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: translateY(200px) rotate(45deg);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(400px) rotate(90deg);
+    opacity: 0;
+  }
+}
+@keyframes fadeIn {
+  0%   { opacity: 0; }
+  25%  { opacity: 0.25; }
+  50%  { opacity: 0.5; }
+  75%  { opacity: 0.75; }
+  100% { opacity: 1; }
+}
+
+/* ==== Custom fonts ==== */
+@font-face {
+  font-family: 'RaceSpace';
+  src: url('/fonts/RaceSpace.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+.race-font {
+  font-family: 'RaceSpace', sans-serif;
+}
+
+/* ==== Unraid Icons === */
+@font-face {
+  font-family: 'UnraidIcons';
+  src: url('/fonts/font-unraid.woff') format('woff');
+  font-weight: normal;
+  font-style: normal;
+}
+[class^='icon-'], [class*=' icon-'] {
+  font-family: 'UnraidIcons' !important;
+  font-style: normal;
+  font-weight: normal;
+  text-transform: none;
+  display: inline-block;
+  line-height: 1;
+}
+/* === Icon definitions === */
+.icon-nvme::before    { content: "\e929"; }
+.icon-disk::before    { content: "\e907"; }
+.icon-memory::before  { content: "\e913"; }
+.icon-cpu-pinning::before { content: "\e904"; }
+.icon-cpu::before     { content: "\e905"; }
+
+.icon {
+  font-size: 1.5rem;
+  color: inherit;
+}
