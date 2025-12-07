@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
 import Navbar from "../components/Navbar";
@@ -11,7 +11,7 @@ function HomePage() {
   const [clickCount, setClickCount] = useState(0);
   const [isLogoAnimated, setIsLogoAnimated] = useState(false);
 
-  const phrases = [
+  const phrases = useMemo(() => [
     'Your Knowledge, Our Mission.',
     'Elevating Education For Every Eagle.',
     'Smart Learning Made Simple.',
@@ -20,7 +20,7 @@ function HomePage() {
     'Turning Challenges Into Achievements.',
     'Discover. Learn. Excel.',
     'Your Academic Companion At FGCU.'
-  ];
+  ], []);
 
   useEffect(() => {
     document.title = 'EagleDocs';
@@ -28,6 +28,24 @@ function HomePage() {
     if (favicon) {
       favicon.href = '/favicon.ico';
     }
+  }, []);
+
+  const [imageExists, setImageExists] = useState(true);
+
+  // Verify that the background image exists in the public folder. If not, fall back to the gradient.
+  useEffect(() => {
+    let mounted = true;
+    // Try fetching the image (HEAD may be unsupported in some environments, so use GET but don't read body)
+    fetch('/fgcu.jpg', { method: 'GET' })
+      .then((res) => {
+        if (!mounted) return;
+        setImageExists(res.ok);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setImageExists(false);
+      });
+    return () => { mounted = false; };
   }, []);
 
   useEffect(() => {
@@ -58,8 +76,20 @@ function HomePage() {
     }
   };
 
+  const bgStyle = imageExists
+    ? {
+        backgroundImage: "linear-gradient(rgba(255,255,255,0.6), rgba(255,255,255,0.6)), url('/fgcu.jpg')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }
+    : undefined;
+
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-b from-gray-100 to-blue-50">
+    <div
+      className={`flex flex-col min-h-screen ${!imageExists ? 'bg-gradient-to-b from-gray-100 to-blue-50' : ''}`}
+      style={bgStyle}
+    >
       <Helmet>
         <title>Home - EagleDocs</title>
       </Helmet>

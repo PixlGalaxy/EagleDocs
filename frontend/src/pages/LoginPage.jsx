@@ -1,51 +1,62 @@
+//import { application } from 'express';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 
 function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuth();
-
-  const detectedRole = email.trim().toLowerCase().endsWith('@fgcu.edu')
-    ? 'Instructor'
-    : 'Student';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
-    setSubmitting(true);
 
-    try {
-      const loggedIn = await login(email, password);
-      navigate(loggedIn.role === 'instructor' ? '/instructor' : '/chat');
-    } catch (err) {
-      setError(err.message || 'Unable to log in');
-    } finally {
-      setSubmitting(false);
-    }
+    //localStorage.setItem('token', 'mockToken'); // Save the token
+    // gets the server info and makes a post request
+    fetch('http://localhost:5000/api/login', {
+      method: 'POST', //type of request
+      headers: {'Content-Type': 'application/json',}, //type of data being sent
+      body: JSON.stringify({ username: email, password: password }), //converts js object to json string
+    })
+    .then(res => res.json()) //when response is received, it will read it and convert it back to js object
+    .then(data => 
+      {
+         console.log(data);
+        if (data.message === "Login successful") {
+          
+          navigate('/Chat'); // Redirect to chat
+        }
+        else{
+          alert(data.message);
+        }
+      })//how to handle the data from the response
+    .catch((error) => 
+      {console.error('Error:', error);//error handling
+    });
   };
-
   useEffect(() => {
-    document.title = 'EagleDocs';
+    document.title = 'EagleDocs'; // Page Title
     const favicon = document.querySelector("link[rel='icon']");
     if (favicon) {
-      favicon.href = '/favicon.ico';
+      favicon.href = '/favicon.ico'; // Page Icon
     }
   }, []);
 
   return (
     <div className="h-screen flex items-center justify-center bg-gray-50">
-      <form onSubmit={handleSubmit} className="w-full max-w-md bg-white rounded-lg shadow-md p-6 space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md bg-white rounded-lg shadow-md p-6"
+      >
+        {/* Logo inside the form */}
         <Link to="/">
-          <img src="/EagleDocs Logo.png" alt="EagleDocs Logo" className="w-32 mx-auto mb-4 cursor-pointer" />
+          <img
+            src="/EagleDocs Logo.png"
+            alt="EagleDocs Logo"
+            className="w-32 mx-auto mb-6 cursor-pointer"
+          />
         </Link>
-        <h2 className="text-2xl font-bold text-gray-800 text-center">EagleDocs Login</h2>
-        {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
-        <div>
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">EagleDocs Login</h2>
+        <div className="mb-4">
           <label className="block text-gray-600 mb-1">Email</label>
           <input
             type="email"
@@ -54,9 +65,8 @@ function LoginPage() {
             className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
-          <p className="text-xs text-gray-500 mt-1">Detected role: {detectedRole}</p>
         </div>
-        <div>
+        <div className="mb-4">
           <label className="block text-gray-600 mb-1">Password</label>
           <input
             type="password"
@@ -68,12 +78,9 @@ function LoginPage() {
         </div>
         <button
           type="submit"
-          disabled={submitting}
-          className={`w-full py-2 rounded-md text-white ${
-            submitting ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-          }`}
+          className="w-full bg-blue-500 text-white py-2 rounded-md hover:bg-blue-600"
         >
-          {submitting ? 'Signing in...' : 'Login'}
+          Login
         </button>
       </form>
     </div>
