@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - Pixl
   pull_request:
     branches:
       - main
@@ -33,11 +32,6 @@ jobs:
         run: |
           echo "REPOSITORY_OWNER=$(echo $GITHUB_REPOSITORY_OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "IMAGE_NAME=eagledocs" >> $GITHUB_ENV
-          if [ "${GITHUB_REF_NAME}" = "main" ]; then
-            echo "IMAGE_TAG=latest" >> $GITHUB_ENV
-          else
-            echo "IMAGE_TAG=$(echo ${GITHUB_REF_NAME} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          fi
 
       - name: 🔑 Log in to GitHub Container Registry
         uses: docker/login-action@v2
@@ -48,10 +42,6 @@ jobs:
 
       - name: 🏗 Build and Push Docker Image
         uses: docker/build-push-action@v4
-        env:
-          REPOSITORY_OWNER: ${{ env.REPOSITORY_OWNER }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG: ${{ env.IMAGE_TAG }}
         with:
           context: .
           push: true
