@@ -1,7 +1,8 @@
 import express from 'express';
 import pool from '../db/pool.js';
 import { authenticate } from '../middleware/auth.js';
-import { generateOllamaResponse } from '../services/ollamaService.js';
+import { generateOllamaResponse, streamOllamaResponse } from '../services/ollamaService.js';
+import { buildCourseContext } from '../services/ragService.js';
 
 const router = express.Router();
 
@@ -11,6 +12,72 @@ const normalizeTitle = (title = '') => {
     return trimmed.slice(0, 255);
   }
   return 'New Chat';
+};
+
+const sendEvent = (res, type, payload) => {
+  res.write(`event: ${type}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+};
+
+const mapSourcesToLinks = (sources = []) =>
+  sources.map((source) => ({
+    ...source,
+    url: source.courseId && source.documentId
+      ? `/api/courses/${source.courseId}/documents/${source.documentId}/file`
+      : null,
+  }));
+
+const suggestChatTitle = async (question) => {
+  try {
+    const suggestion = await generateOllamaResponse([
+      {
+        role: 'system',
+        content:
+          'You write concise, engaging chat titles in English using 3-6 words. Return only the title text without quotes.',
+      },
+      {
+        role: 'user',
+        content: `Propose a short chat title for this first question: ${question}`,
+      },
+    ]);
+
+    return normalizeTitle(suggestion);
+  } catch (error) {
+    console.error('Chat title suggestion failed:', error.message);
+    return 'New Chat';
+  }
+};
+
+const buildConversationWithContext = ({ conversation, ragContext, courseCode, sources }) => {
+  const baseSystem = {
+    role: 'system',
+    content:
+      'You are an academic assistant. Prefer the supplied course context when available, cite document names and page ranges, and keep code blocks/tables well formatted.',
+  };
+
+  if (!ragContext) {
+    return [baseSystem, ...conversation];
+  }
+
+  const sourceLines = (sources || [])
+    .map((source) => {
+      const pages = source.pageRange?.start === source.pageRange?.end
+        ? `page ${source.pageRange?.start}`
+        : `pages ${source.pageRange?.start}-${source.pageRange?.end}`;
+      return `- ${source.documentName || 'Document'} (${pages || 'pages n/a'})`;
+    })
+    .join('\n');
+
+  const contextBlock = [
+    sourceLines ? `Sources:\n${sourceLines}` : null,
+    'Context:',
+    ragContext,
+    'Use only the context above for course facts; answer briefly if unrelated.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return [baseSystem, { role: 'system', content: `Course ${courseCode || ''} context\n${contextBlock}` }, ...conversation];
 };
 
 router.use(authenticate);
@@ -72,9 +139,175 @@ router.get('/:chatId', async (req, res) => {
   }
 });
 
+router.patch('/:chatId', async (req, res) => {
+  const chatId = Number(req.params.chatId);
+  const title = normalizeTitle(req.body?.title);
+
+  if (Number.isNaN(chatId)) {
+    return res.status(400).json({ error: 'Invalid chat id' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE chats SET title = $1 WHERE id = $2 AND user_id = $3 RETURNING id, title, created_at',
+      [title, chatId, req.user.id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    return res.json({ chat: result.rows[0] });
+  } catch (error) {
+    console.error('Rename chat error:', error);
+    return res.status(500).json({ error: 'Unable to rename chat' });
+  }
+});
+
+router.delete('/:chatId', async (req, res) => {
+  const chatId = Number(req.params.chatId);
+
+  if (Number.isNaN(chatId)) {
+    return res.status(400).json({ error: 'Invalid chat id' });
+  }
+
+  try {
+    const result = await pool.query('DELETE FROM chats WHERE id = $1 AND user_id = $2 RETURNING id', [
+      chatId,
+      req.user.id,
+    ]);
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Chat not found' });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Delete chat error:', error);
+    return res.status(500).json({ error: 'Unable to delete chat' });
+  }
+});
+
+router.post('/:chatId/messages/stream', async (req, res) => {
+  const chatId = Number(req.params.chatId);
+  const content = (req.body?.content || '').trim();
+  const courseCode = (req.body?.courseCode || '').trim();
+
+  if (Number.isNaN(chatId)) {
+    return res.status(400).json({ error: 'Invalid chat id' });
+  }
+
+  if (!content) {
+    return res.status(400).json({ error: 'Message content is required' });
+  }
+
+  if (content.length > 4000) {
+    return res.status(400).json({ error: 'Message is too long' });
+  }
+
+  const chatResult = await pool.query('SELECT id FROM chats WHERE id = $1 AND user_id = $2', [chatId, req.user.id]);
+
+  if (!chatResult.rows.length) {
+    return res.status(404).json({ error: 'Chat not found' });
+  }
+
+  const historyResult = await pool.query(
+    'SELECT sender, content FROM messages WHERE chat_id = $1 ORDER BY timestamp ASC',
+    [chatId]
+  );
+
+  const conversation = historyResult.rows.map((msg) => ({
+    role: msg.sender === 'user' ? 'user' : 'assistant',
+    content: msg.content,
+  }));
+  conversation.push({ role: 'user', content });
+
+  let ragContext = '';
+  let sources = [];
+  const isFirstMessage = historyResult.rows.length === 0;
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const sendError = (message) => {
+    sendEvent(res, 'error', { message });
+    res.end();
+  };
+
+  const userMessageResult = await pool.query(
+    'INSERT INTO messages (chat_id, sender, content) VALUES ($1, $2, $3) RETURNING id, sender, content, timestamp',
+    [chatId, 'user', content]
+  );
+
+  try {
+    if (isFirstMessage) {
+      sendEvent(res, 'status', { message: 'Finding a title for this chat...' });
+      const suggestedTitle = await suggestChatTitle(content);
+      await pool.query('UPDATE chats SET title = $1 WHERE id = $2', [suggestedTitle, chatId]);
+      sendEvent(res, 'chatRenamed', { chatId, title: suggestedTitle });
+    }
+
+    if (courseCode) {
+      const courseResult = await pool.query('SELECT code FROM courses WHERE LOWER(code) = LOWER($1)', [courseCode]);
+
+      if (!courseResult.rows.length) {
+        return sendError('Course not found for this RAG selection');
+      }
+
+      sendEvent(res, 'status', { message: `Gathering context for ${courseResult.rows[0].code}...` });
+
+      const contextResult = await buildCourseContext({
+        courseCode: courseResult.rows[0].code,
+        question: content,
+        onStatus: (message) => sendEvent(res, 'status', { message }),
+      });
+
+      ragContext = contextResult.context;
+      sources = mapSourcesToLinks(contextResult.sources);
+    }
+
+    const enhancedConversation = buildConversationWithContext({
+      conversation,
+      ragContext,
+      courseCode,
+      sources,
+    });
+
+    sendEvent(res, 'status', { message: 'Generating answer...' });
+
+    const stream = await streamOllamaResponse(enhancedConversation);
+    let aiContent = '';
+
+    for await (const token of stream) {
+      aiContent += token;
+      sendEvent(res, 'token', { content: token });
+    }
+
+    const trimmed = aiContent.trim();
+    const aiMessageResult = await pool.query(
+      'INSERT INTO messages (chat_id, sender, content) VALUES ($1, $2, $3) RETURNING id, sender, content, timestamp',
+      [chatId, 'ai', trimmed || 'I could not generate a response.']
+    );
+
+    sendEvent(res, 'done', {
+      userMessage: userMessageResult.rows[0],
+      aiMessage: aiMessageResult.rows[0],
+      sources,
+    });
+    res.end();
+  } catch (error) {
+    console.error('Streaming message error:', error);
+    sendError(error.message || 'AI response failed');
+  }
+});
+
 router.post('/:chatId/messages', async (req, res) => {
   const chatId = Number(req.params.chatId);
   const content = (req.body?.content || '').trim();
+  const courseCode = (req.body?.courseCode || '').trim();
 
   if (Number.isNaN(chatId)) {
     return res.status(400).json({ error: 'Invalid chat id' });
@@ -114,14 +347,45 @@ router.post('/:chatId/messages', async (req, res) => {
     }));
     conversation.push({ role: 'user', content });
 
+    let ragContext = '';
+    let sources = [];
+    const isFirstMessage = historyResult.rows.length === 0;
+
+    if (courseCode) {
+      const courseResult = await client.query(
+        'SELECT code FROM courses WHERE LOWER(code) = LOWER($1)',
+        [courseCode]
+      );
+
+      if (!courseResult.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Course not found for this RAG selection' });
+      }
+
+      const contextResult = await buildCourseContext({ courseCode: courseResult.rows[0].code, question: content });
+      ragContext = contextResult.context;
+      sources = contextResult.sources || [];
+    }
+
     const userMessageResult = await client.query(
       'INSERT INTO messages (chat_id, sender, content) VALUES ($1, $2, $3) RETURNING id, sender, content, timestamp',
       [chatId, 'user', content]
     );
 
+    if (isFirstMessage) {
+      const suggestedTitle = await suggestChatTitle(content);
+      await client.query('UPDATE chats SET title = $1 WHERE id = $2', [suggestedTitle, chatId]);
+    }
+
     let aiContent;
     try {
-      aiContent = await generateOllamaResponse(conversation);
+      const enhancedConversation = buildConversationWithContext({
+        conversation,
+        ragContext,
+        courseCode,
+        sources,
+      });
+      aiContent = await generateOllamaResponse(enhancedConversation);
     } catch (error) {
       await client.query('ROLLBACK');
       console.error('Ollama error:', error.message);
