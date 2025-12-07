@@ -163,7 +163,7 @@ const InstructorPage = () => {
           </div>
           <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm text-gray-600 mb-1">Course code</label>
+              <label className="block text-sm text-gray-600 mb-1">Course code (can repeat)</label>
               <input
                 value={newCourse.code}
                 onChange={(e) => setNewCourse((prev) => ({ ...prev, code: e.target.value }))}
@@ -194,7 +194,7 @@ const InstructorPage = () => {
               />
             </div>
             <div>
-              <label className="block text-sm text-gray-600 mb-1">CRN</label>
+              <label className="block text-sm text-gray-600 mb-1">CRN (must be unique)</label>
               <input
                 value={newCourse.crn}
                 onChange={(e) => setNewCourse((prev) => ({ ...prev, crn: e.target.value }))}

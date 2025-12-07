@@ -207,18 +207,21 @@ const requestDocumentSelection = async ({ question, documents }) => {
   };
 };
 
-export const buildCourseContext = async ({ courseCode, question, onStatus = () => {} }) => {
+export const buildCourseContext = async ({ courseCrn, question, onStatus = () => {} }) => {
   const { rows } = await pool.query(
     `SELECT cd.id, cd.index_path, cd.original_name, cd.file_name, c.id as course_id, c.code, c.crn, c.academic_year
      FROM course_documents cd
      JOIN courses c ON c.id = cd.course_id
-     WHERE LOWER(c.code) = LOWER($1) AND NOT c.archived`,
-    [courseCode]
+     WHERE LOWER(c.crn) = LOWER($1) AND NOT c.archived`,
+    [courseCrn]
   );
 
   if (!rows.length) {
     return { context: '', sources: [] };
   }
+
+  const courseCode = rows[0]?.code;
+  const courseCrnValue = rows[0]?.crn;
 
   onStatus('Asking the model if PDFs are needed...');
   let intent;
@@ -308,7 +311,7 @@ export const buildCourseContext = async ({ courseCode, question, onStatus = () =
     .join('\n\n---\n\n');
 
   return {
-    context: `Course context ${courseCode}:\n${contextText.slice(0, 10000)}`,
+    context: `Course context ${courseCode || ''} (CRN ${courseCrnValue || courseCrn}):\n${contextText.slice(0, 10000)}`,
     sources,
   };
 };

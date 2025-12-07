@@ -36,7 +36,7 @@ const ChatPage = () => {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [courses, setCourses] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState('');
+  const [selectedCourseCrn, setSelectedCourseCrn] = useState('');
   const [loadingCourses, setLoadingCourses] = useState(true);
   const [statusMessage, setStatusMessage] = useState('');
   const [sourceByMessage, setSourceByMessage] = useState({});
@@ -180,7 +180,7 @@ const ChatPage = () => {
 
     setSending(true);
     setError('');
-    setStatusMessage(selectedCourse ? 'Searching course materials...' : 'Generating answer...');
+    setStatusMessage(selectedCourseCrn ? 'Searching course materials...' : 'Generating answer...');
     setMessages((prev) => [
       ...prev,
       { id: tempUserId, sender: 'user', content },
@@ -193,7 +193,7 @@ const ChatPage = () => {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, courseCode: selectedCourse || undefined }),
+        body: JSON.stringify({ content, courseCrn: selectedCourseCrn || undefined }),
       });
 
       if (!response.ok || !response.body) {
@@ -296,8 +296,12 @@ const ChatPage = () => {
     chat.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const activeCourseLabel = selectedCourse
-    ? `Using course RAG: ${selectedCourse}`
+  const selectedCourseInfo = courses.find(
+    (course) => course.crn?.toUpperCase() === selectedCourseCrn.toUpperCase()
+  );
+
+  const activeCourseLabel = selectedCourseCrn
+    ? `Using course RAG: ${selectedCourseInfo ? `${selectedCourseInfo.code} (CRN ${selectedCourseInfo.crn})` : selectedCourseCrn}`
     : 'Default chat (no RAG)';
 
   const markdownComponents = {
@@ -513,19 +517,19 @@ const ChatPage = () => {
             </div>
             <div className="flex items-center gap-2">
               <select
-                value={selectedCourse}
-                onChange={(e) => setSelectedCourse(e.target.value)}
+                value={selectedCourseCrn}
+                onChange={(e) => setSelectedCourseCrn(e.target.value)}
                 disabled={loadingCourses}
                 className="text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded px-3 py-2"
               >
                 <option value="">Default chat</option>
                 {courses.map((course) => (
-                  <option key={course.id} value={course.code}>
-                    {course.code} — {course.name}
+                  <option key={course.id} value={course.crn}>
+                    {course.code} (CRN {course.crn}) — {course.name}
                   </option>
                 ))}
               </select>
-              {selectedCourse ? (
+              {selectedCourseCrn ? (
                 <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">
                   RAG active
                 </span>

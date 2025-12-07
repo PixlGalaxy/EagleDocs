@@ -11,6 +11,7 @@ const router = express.Router();
 const isInstructor = (user) => user?.role === 'instructor';
 
 const normalizeCourseCode = (code = '') => code.trim().toUpperCase();
+const normalizeCrn = (value = '') => value.trim().toUpperCase();
 
 const ensureDir = async (dir) => {
   await fs.mkdir(dir, { recursive: true });
@@ -57,7 +58,7 @@ router.post('/', async (req, res) => {
   const name = (req.body?.name || '').trim();
   const description = (req.body?.description || '').trim();
   const academicYear = Number(req.body?.academicYear) || new Date().getFullYear();
-  const crn = (req.body?.crn || '').trim();
+  const crn = normalizeCrn(req.body?.crn || '');
 
   if (!code || code.length < 3 || code.length > 32) {
     return res.status(400).json({ error: 'Enter a valid course code' });
@@ -78,13 +79,13 @@ router.post('/', async (req, res) => {
   try {
     const { rows } = await pool.query(
       'INSERT INTO courses (code, name, description, owner_id, academic_year, crn) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [code, name.slice(0, 255), description || null, req.user.id, academicYear, crn || null]
+      [code, name.slice(0, 255), description || null, req.user.id, academicYear, crn]
     );
 
     return res.status(201).json({ course: rows[0] });
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(409).json({ error: 'A course with this code already exists' });
+      return res.status(409).json({ error: 'A course with this CRN already exists' });
     }
     console.error('Create course error:', error);
     return res.status(500).json({ error: 'Unable to create course' });

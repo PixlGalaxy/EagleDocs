@@ -48,7 +48,7 @@ const suggestChatTitle = async (question) => {
   }
 };
 
-const buildConversationWithContext = ({ conversation, ragContext, courseCode, sources }) => {
+const buildConversationWithContext = ({ conversation, ragContext, courseLabel, sources }) => {
   const baseSystem = {
     role: 'system',
     content:
@@ -77,7 +77,7 @@ const buildConversationWithContext = ({ conversation, ragContext, courseCode, so
     .filter(Boolean)
     .join('\n\n');
 
-  return [baseSystem, { role: 'system', content: `Course ${courseCode || ''} context\n${contextBlock}` }, ...conversation];
+  return [baseSystem, { role: 'system', content: `Course ${courseLabel || ''} context\n${contextBlock}` }, ...conversation];
 };
 
 router.use(authenticate);
@@ -191,7 +191,7 @@ router.delete('/:chatId', async (req, res) => {
 router.post('/:chatId/messages/stream', async (req, res) => {
   const chatId = Number(req.params.chatId);
   const content = (req.body?.content || '').trim();
-  const courseCode = (req.body?.courseCode || '').trim();
+  const courseCrn = (req.body?.courseCrn || '').trim();
 
   if (Number.isNaN(chatId)) {
     return res.status(400).json({ error: 'Invalid chat id' });
@@ -250,17 +250,20 @@ router.post('/:chatId/messages/stream', async (req, res) => {
       sendEvent(res, 'chatRenamed', { chatId, title: suggestedTitle });
     }
 
-    if (courseCode) {
-      const courseResult = await pool.query('SELECT code FROM courses WHERE LOWER(code) = LOWER($1)', [courseCode]);
+    let courseLabel = '';
+
+    if (courseCrn) {
+      const courseResult = await pool.query('SELECT code, crn FROM courses WHERE LOWER(crn) = LOWER($1)', [courseCrn]);
 
       if (!courseResult.rows.length) {
         return sendError('Course not found for this RAG selection');
       }
 
-      sendEvent(res, 'status', { message: `Gathering context for ${courseResult.rows[0].code}...` });
+      courseLabel = `${courseResult.rows[0].code} (CRN ${courseResult.rows[0].crn})`;
+      sendEvent(res, 'status', { message: `Gathering context for ${courseLabel}...` });
 
       const contextResult = await buildCourseContext({
-        courseCode: courseResult.rows[0].code,
+        courseCrn: courseResult.rows[0].crn,
         question: content,
         onStatus: (message) => sendEvent(res, 'status', { message }),
       });
@@ -272,7 +275,7 @@ router.post('/:chatId/messages/stream', async (req, res) => {
     const enhancedConversation = buildConversationWithContext({
       conversation,
       ragContext,
-      courseCode,
+      courseLabel,
       sources,
     });
 
@@ -307,7 +310,7 @@ router.post('/:chatId/messages/stream', async (req, res) => {
 router.post('/:chatId/messages', async (req, res) => {
   const chatId = Number(req.params.chatId);
   const content = (req.body?.content || '').trim();
-  const courseCode = (req.body?.courseCode || '').trim();
+  const courseCrn = (req.body?.courseCrn || '').trim();
 
   if (Number.isNaN(chatId)) {
     return res.status(400).json({ error: 'Invalid chat id' });
@@ -349,12 +352,13 @@ router.post('/:chatId/messages', async (req, res) => {
 
     let ragContext = '';
     let sources = [];
+    let courseLabel = '';
     const isFirstMessage = historyResult.rows.length === 0;
 
-    if (courseCode) {
+    if (courseCrn) {
       const courseResult = await client.query(
-        'SELECT code FROM courses WHERE LOWER(code) = LOWER($1)',
-        [courseCode]
+        'SELECT code, crn FROM courses WHERE LOWER(crn) = LOWER($1)',
+        [courseCrn]
       );
 
       if (!courseResult.rows.length) {
@@ -362,7 +366,8 @@ router.post('/:chatId/messages', async (req, res) => {
         return res.status(404).json({ error: 'Course not found for this RAG selection' });
       }
 
-      const contextResult = await buildCourseContext({ courseCode: courseResult.rows[0].code, question: content });
+      courseLabel = `${courseResult.rows[0].code} (CRN ${courseResult.rows[0].crn})`;
+      const contextResult = await buildCourseContext({ courseCrn: courseResult.rows[0].crn, question: content });
       ragContext = contextResult.context;
       sources = contextResult.sources || [];
     }
@@ -380,11 +385,11 @@ router.post('/:chatId/messages', async (req, res) => {
     let aiContent;
     try {
       const enhancedConversation = buildConversationWithContext({
-        conversation,
-        ragContext,
-        courseCode,
-        sources,
-      });
+      conversation,
+      ragContext,
+      courseLabel,
+      sources,
+    });
       aiContent = await generateOllamaResponse(enhancedConversation);
     } catch (error) {
       await client.query('ROLLBACK');

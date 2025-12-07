@@ -4,9 +4,9 @@ const ensureSchema = async () => {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS courses (
       id SERIAL PRIMARY KEY,
-      code VARCHAR(32) UNIQUE NOT NULL,
+      code VARCHAR(32) NOT NULL,
       academic_year INTEGER DEFAULT EXTRACT(YEAR FROM NOW()),
-      crn VARCHAR(32),
+      crn VARCHAR(32) UNIQUE NOT NULL,
       name VARCHAR(255) NOT NULL,
       description TEXT,
       owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -21,6 +21,10 @@ const ensureSchema = async () => {
     ADD COLUMN IF NOT EXISTS crn VARCHAR(32),
     ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE
   `);
+
+  await pool.query('DROP INDEX IF EXISTS courses_code_key');
+  await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS courses_crn_key ON courses (crn)');
+  await pool.query('ALTER TABLE courses ALTER COLUMN crn SET NOT NULL');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS course_documents (
