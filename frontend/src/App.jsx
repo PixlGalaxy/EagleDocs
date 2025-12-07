@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ChatPage from './pages/ChatPage';
+import InstructorPage from './pages/InstructorPage';
 import NotFound from './pages/NotFound';
 import Developers from './pages/Developers';
 import About from './pages/About';
@@ -43,6 +44,16 @@ const GuestRoute = ({ children }) => {
   }
 
   if (user) {
+    return <Navigate to={user.role === 'instructor' ? '/instructor' : '/chat'} replace />;
+  }
+
+  return children;
+};
+
+const InstructorRoute = ({ children }) => {
+  const { user } = useAuth();
+
+  if (user?.role !== 'instructor') {
     return <Navigate to="/chat" replace />;
   }
 
@@ -76,6 +87,16 @@ function App() {
             element={(
               <ProtectedRoute>
                 <ChatPage />
+              </ProtectedRoute>
+            )}
+          />
+          <Route
+            path="/instructor"
+            element={(
+              <ProtectedRoute>
+                <InstructorRoute>
+                  <InstructorPage />
+                </InstructorRoute>
               </ProtectedRoute>
             )}
           />
