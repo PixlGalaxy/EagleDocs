@@ -1,321 +1,315 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Upload, FileText, PlusCircle, BookOpenCheck, RefreshCw } from 'lucide-react';
-import { apiRequest } from '../utils/api';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect, useRef } from 'react';
+import { Helmet } from 'react-helmet';
+import {
+  Home,
+  BookOpen,
+  Users,
+  Calendar,
+  MessageSquare,
+  File,
+  Settings,
+  ChevronRight,
+  Bell,
+  Plus,
+  MoreHorizontal
+} from 'lucide-react';
 
 const InstructorPage = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [courses, setCourses] = useState([]);
-  const [documentsByCourse, setDocumentsByCourse] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [uploadingCourseId, setUploadingCourseId] = useState(null);
-  const [newCourse, setNewCourse] = useState({
-    code: '',
-    name: '',
-    description: '',
-    academicYear: new Date().getFullYear(),
-    crn: '',
-  });
-
-  const archiveCourse = async (courseId) => {
-    setError('');
-    try {
-      await apiRequest(`/courses/${courseId}`, { method: 'DELETE' });
-      setCourses((prev) => prev.filter((course) => course.id !== courseId));
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  const fetchCourses = async () => {
-    setLoading(true);
-    try {
-      const data = await apiRequest('/courses?scope=mine');
-      setCourses(data.courses || []);
-      setError('');
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [selectedNav, setSelectedNav] = useState('home');
+  const [isSidebarOpen, setSidebarOpen] = useState(true);
+  const [isProfileOpen, setProfileOpen] = useState(false);
+  const [isAuthenticated, setAuthenticated] = useState(true);
+  const username = 'Instructor Jane'; // placeholder; replace with real user data as available
+  const initials = username
+    .split(' ')
+    .map((n) => n[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  const profileRef = useRef(null);
 
   useEffect(() => {
-    fetchCourses();
-  }, []);
-
-  const handleCreateCourse = async (e) => {
-    e.preventDefault();
-    setCreating(true);
-    setError('');
-
-    try {
-      const body = {
-        code: newCourse.code,
-        name: newCourse.name,
-        description: newCourse.description,
-        academicYear: newCourse.academicYear,
-        crn: newCourse.crn,
-      };
-      const data = await apiRequest('/courses', { method: 'POST', body });
-      setCourses((prev) => [data.course, ...prev]);
-      setNewCourse({ code: '', name: '', description: '', academicYear: new Date().getFullYear(), crn: '' });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setCreating(false);
+    function handleClickOutside(e) {
+      if (profileRef.current && !profileRef.current.contains(e.target)) {
+        setProfileOpen(false);
+      }
     }
-  };
+    if (isProfileOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isProfileOpen]);
+  
+  const navigationItems = [
+    { id: 'home', label: 'Home', icon: <Home size={20} /> },
+    { id: 'modules', label: 'Modules', icon: <BookOpen size={20} /> },
+    { id: 'people', label: 'People', icon: <Users size={20} /> },
+    { id: 'calendar', label: 'Calendar', icon: <Calendar size={20} /> },
+    { id: 'discussions', label: 'Discussions', icon: <MessageSquare size={20} /> },
+    { id: 'files', label: 'Files', icon: <File size={20} /> },
+    { id: 'settings', label: 'Settings', icon: <Settings size={20} /> }
+  ];
 
-  const readFileAsBase64 = (file) =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result || '';
-        const base64 = result.toString().split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = () => reject(new Error('Could not read the file'));
-      reader.readAsDataURL(file);
-    });
-
-  const loadDocuments = async (courseId) => {
-    try {
-      const data = await apiRequest(`/courses/${courseId}/documents`);
-      setDocumentsByCourse((prev) => ({ ...prev, [courseId]: data.documents || [] }));
-    } catch (err) {
-      setError(err.message);
+  const announcements = [
+    {
+      id: 1,
+      title: 'Welcome to the Course',
+      date: 'Nov 5, 2025',
+      preview: 'Welcome to the Fall 2025 semester! Please review the syllabus...'
+    },
+    {
+      id: 2,
+      title: 'Module 1 Now Available',
+      date: 'Nov 5, 2025',
+      preview: 'The first module has been published and is ready for review...'
     }
-  };
+  ];
 
-  const handleFileChange = async (courseId, event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (file.type !== 'application/pdf') {
-      setError('Only PDF files are allowed');
-      return;
+  const upcomingAssignments = [
+    {
+      id: 1,
+      title: 'Course Introduction Quiz',
+      dueDate: 'Nov 10, 2025',
+      points: 10
+    },
+    {
+      id: 2,
+      title: 'Assignment 1: Project Proposal',
+      dueDate: 'Nov 15, 2025',
+      points: 50
     }
-
-    if (file.size > 20 * 1024 * 1024) {
-      setError('Files must be under 20MB');
-      return;
-    }
-
-    setUploadingCourseId(courseId);
-    setError('');
-
-    try {
-      const base64 = await readFileAsBase64(file);
-      await apiRequest(`/courses/${courseId}/documents`, {
-        method: 'POST',
-        body: { fileName: file.name, fileData: base64 },
-      });
-      await loadDocuments(courseId);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setUploadingCourseId(null);
-      event.target.value = '';
-    }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
+  ];
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
-      <header className="bg-white shadow-sm">
-        <div className="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/EagleDocs Logo.png" alt="EagleDocs" className="w-10 h-10" />
-            <div>
-              <h1 className="text-2xl font-semibold">Instructor Dashboard</h1>
-              <p className="text-sm text-gray-500">Upload PDFs and define course-scoped RAG by code</p>
+      <div className="min-h-screen bg-gray-50 relative">
+      <Helmet>
+        <title>Course Dashboard - EagleDocs</title>
+      </Helmet>
+
+      {/* Course Header */}
+        <header className="fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-30">
+          <div className={`transition-all duration-300 ${isSidebarOpen ? 'pl-64' : 'pl-0'} w-full`}>
+            <div className="px-6">
+            <div className="flex items-center justify-between h-16">
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setSidebarOpen(!isSidebarOpen)}
+                    className="p-2 rounded-md text-gray-500 hover:text-gray-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-300"
+                >
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    {isSidebarOpen ? (
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    ) : (
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 6h16M4 12h16M4 18h16"
+                      />
+                    )}
+                  </svg>
+                </button>
+                <h1 className="text-xl font-semibold text-gray-900">
+                  CSE 101: Introduction to Computer Science
+                </h1>
+              </div>
+              <div className="flex items-center space-x-4">
+                <button className="p-2 text-gray-400 hover:text-gray-500">
+                  <Bell size={20} />
+                </button>
+                <button className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">
+                  <Plus size={16} className="mr-2" />
+                  Create
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-sm font-medium">{user?.email}</p>
-              <p className="text-xs text-gray-500">Instructor</p>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="text-sm bg-gray-100 px-3 py-2 rounded hover:bg-gray-200"
-            >
-              Sign Out
-            </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-4 py-8 space-y-8">
-        <section className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <PlusCircle className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold">Create course</h2>
-          </div>
-          <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Course code (can repeat)</label>
-              <input
-                value={newCourse.code}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, code: e.target.value }))}
-                className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="E.g., COP1234"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Name</label>
-              <input
-                value={newCourse.name}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, name: e.target.value }))}
-                className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Intro to..."
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">Academic year</label>
-              <input
-                type="number"
-                value={newCourse.academicYear}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, academicYear: e.target.value }))}
-                className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="2025"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1">CRN (must be unique)</label>
-              <input
-                value={newCourse.crn}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, crn: e.target.value }))}
-                className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="5-digit CRN"
-                required
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm text-gray-600 mb-1">Description</label>
-              <input
-                value={newCourse.description}
-                onChange={(e) => setNewCourse((prev) => ({ ...prev, description: e.target.value }))}
-                className="w-full border rounded px-3 py-2 text-sm"
-                placeholder="Optional"
-              />
-            </div>
-            <div className="md:col-span-4 flex justify-end">
+      {/* Sidebar */}
+      <nav
+        className={`fixed left-0 top-0 bottom-0 w-64 bg-gray-800 text-white transform transition-all duration-300 ease-in-out z-20 ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="pt-20 px-4 relative h-full">
+          <ul className="space-y-2">
+            {navigationItems.map((item) => (
+              <li key={item.id}>
+                <button
+                  onClick={() => setSelectedNav(item.id)}
+                  className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-gray-500 ${
+                    selectedNav === item.id
+                      ? 'bg-gray-700 text-white'
+                      : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  }`}
+                >
+                  <span className="mr-3">{item.icon}</span>
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* Profile area at bottom of sidebar */}
+          <div className="absolute left-0 right-0 bottom-4 px-4">
+            <div className="relative" ref={profileRef}>
               <button
-                type="submit"
-                disabled={creating}
-                className={`px-4 py-2 text-sm text-white rounded ${
-                  creating ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-                }`}
+                onClick={() => setProfileOpen(!isProfileOpen)}
+                className="w-full flex items-center p-2 rounded-md hover:bg-gray-700 focus:outline-none"
               >
-                {creating ? 'Creating...' : 'Create course'}
+                <div className="w-8 h-8 bg-gray-600 rounded-full flex items-center justify-center text-sm font-medium text-white">{initials}</div>
+                <div className="ml-3 flex-1 text-left">
+                  <div className="text-sm font-medium">{isAuthenticated ? username : 'Guest'}</div>
+                  <div className="text-xs text-gray-300">{isAuthenticated ? 'Signed in' : 'Not signed in'}</div>
+                </div>
+                <ChevronRight size={16} className={`text-gray-300 transition-transform ${isProfileOpen ? 'rotate-90' : ''}`} />
               </button>
+
+              {isProfileOpen && (
+                <div className="absolute left-0 bottom-14 w-full z-30 bg-gray-700 text-white rounded-md shadow-lg overflow-hidden">
+                  <div className="px-3 py-2 text-sm border-b border-gray-600">Signed in as <strong className="text-white">{username}</strong></div>
+                  <button
+                    className="w-full text-left px-3 py-2 hover:bg-gray-600"
+                    onClick={() => {
+                      // open settings - replace with real navigation when available
+                      console.log('Open settings');
+                      setProfileOpen(false);
+                    }}
+                  >
+                    Settings
+                  </button>
+                  <button
+                    className="w-full text-left px-3 py-2 hover:bg-gray-600"
+                    onClick={() => {
+                      // toggle authentication for demo purposes
+                      setAuthenticated((s) => !s);
+                      setProfileOpen(false);
+                    }}
+                  >
+                    {isAuthenticated ? 'Log out' : 'Log in'}
+                  </button>
+                </div>
+              )}
             </div>
-          </form>
-        </section>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded p-3">{error}</div>
-        )}
-
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <BookOpenCheck className="h-5 w-5 text-blue-600" />
-            <h2 className="text-lg font-semibold">Your courses</h2>
-            <button
-              onClick={fetchCourses}
-              className="ml-auto inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
-            >
-              <RefreshCw className="h-4 w-4" /> Refresh
-            </button>
           </div>
+        </div>
+      </nav>
 
-          {loading ? (
-            <p className="text-gray-500">Loading courses...</p>
-          ) : courses.length === 0 ? (
-            <p className="text-gray-500">You haven't created any courses yet.</p>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {courses.map((course) => (
-                <div key={course.id} className="bg-white rounded-lg shadow p-4 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-xs uppercase text-blue-600 font-semibold">{course.code}</p>
-                      <h3 className="text-lg font-semibold">{course.name}</h3>
-                      {course.description && (
-                        <p className="text-sm text-gray-600">{course.description}</p>
-                      )}
-                    </div>
-                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-1 rounded-full">
-                      {course.document_count || 0} PDF
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Upload className="h-4 w-4" />
-                    <label className="cursor-pointer text-blue-600 hover:text-blue-700">
-                      <span>{uploadingCourseId === course.id ? 'Uploading...' : 'Upload PDF'}</span>
-                      <input
-                        type="file"
-                        accept="application/pdf"
-                        className="hidden"
-                        onChange={(e) => handleFileChange(course.id, e)}
-                        disabled={uploadingCourseId === course.id}
-                      />
-                    </label>
-                    <button
-                      onClick={() => loadDocuments(course.id)}
-                      className="ml-auto text-xs text-gray-500 underline"
-                    >
-                      View files
-                    </button>
-                    <button
-                      onClick={() => archiveCourse(course.id)}
-                      className="text-xs text-red-500 hover:text-red-600 underline"
-                    >
-                      Remove course
-                    </button>
-                  </div>
-
-                  <div className="bg-gray-50 rounded p-3 space-y-2 text-sm">
-                    <p className="text-gray-700">
-                      Share the code <span className="font-semibold">{course.code}</span> with your students.
-                    </p>
-                    <p className="text-gray-500">
-                      The RAG will use every PDF uploaded for this course during chat.
-                    </p>
-                  </div>
-
-                  {documentsByCourse[course.id]?.length ? (
-                    <div className="border-t pt-3 space-y-2">
-                      {documentsByCourse[course.id].map((doc) => (
-                        <div key={doc.id} className="flex items-center gap-2 text-sm text-gray-700">
-                          <FileText className="h-4 w-4 text-gray-500" />
-                          <span className="truncate">{doc.original_name}</span>
-                          <span className="text-xs text-gray-500">
-                            {(doc.size_bytes / 1024 / 1024).toFixed(2)} MB
-                          </span>
+      {/* Main Content Area */}
+      <main className={`transition-all duration-300 ${isSidebarOpen ? 'ml-64' : 'ml-0'}`}>
+        <div className="pt-20 px-6 max-w-7xl mx-auto">
+          <div className="flex-1 space-y-6">
+            {/* Course Overview Section */}
+            <section className="bg-white rounded-lg shadow">
+              <div className="p-6">
+                <h2 className="text-lg font-medium text-gray-900 mb-4">
+                  Course Overview
+                </h2>
+                <div className="grid md:grid-cols-2 gap-6">
+                  {/* Recent Announcements */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
+                      Recent Announcements
+                    </h3>
+                    <div className="space-y-4">
+                      {announcements.map((announcement) => (
+                        <div
+                          key={announcement.id}
+                          className="border-l-4 border-blue-500 bg-blue-50 p-4"
+                        >
+                          <div className="flex justify-between items-start">
+                            <h4 className="text-sm font-medium text-gray-900">
+                              {announcement.title}
+                            </h4>
+                            <span className="text-xs text-gray-500">
+                              {announcement.date}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-sm text-gray-600">
+                            {announcement.preview}
+                          </p>
                         </div>
                       ))}
                     </div>
-                  ) : null}
+                  </div>
+
+                  {/* Upcoming Assignments */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
+                      Upcoming Assignments
+                    </h3>
+                    <div className="bg-white rounded-lg border border-gray-200">
+                      {upcomingAssignments.map((assignment, index) => (
+                        <div
+                          key={assignment.id}
+                          className={`p-4 flex items-center justify-between ${
+                            index !== upcomingAssignments.length - 1
+                              ? 'border-b border-gray-200'
+                              : ''
+                          }`}
+                        >
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-900">
+                              {assignment.title}
+                            </h4>
+                            <p className="text-xs text-gray-500">
+                              Due: {assignment.dueDate}
+                            </p>
+                          </div>
+                          <div className="flex items-center">
+                            <span className="text-sm text-gray-600 mr-2">
+                              {assignment.points} pts
+                            </span>
+                            <ChevronRight size={16} className="text-gray-400" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+              </div>
+            </section>
+
+            {/* Modules Section */}
+            <section className="bg-white rounded-lg shadow">
+              <div className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-medium text-gray-900">Modules</h2>
+                  <button className="text-sm text-blue-600 hover:text-blue-700 font-medium">
+                    View All
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {[1, 2, 3].map((module) => (
+                    <div
+                      key={module}
+                      className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-medium text-gray-900">
+                          Module {module}: Introduction to Programming
+                        </h3>
+                        <button className="p-2 hover:bg-gray-100 rounded-full">
+                          <MoreHorizontal size={16} className="text-gray-400" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
       </main>
     </div>
   );

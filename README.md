@@ -22,13 +22,13 @@ This will map port 3000 from the container to your host machine.
 
 For more details on setting up and using Vite with React, refer to the official documentation of each plugin linked above.
 
-### RAG storage paths
+### Official Plugins
 
-- Instructor PDFs are stored in `backend/storage/documents/<year>/<instructor>/<course>-<crn>` (mount `backend/storage/documents` as a Docker volume to persist uploads).
-- Generated RAG indexes are written to `backend/storage/rag/<year>/<instructor>/<course>-<crn>` (mount `backend/storage/rag` to keep chunked context across deployments).
-- The primary `OLLAMA_MODEL` both gates intent (deciding when to read PDFs) and generates answers, returning JSON for document selection before receiving course context.
+- **[@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md)**
+  - Uses [Babel](https://babeljs.io/) for Fast Refresh in Vite.
 
-Share the course code and CRN defined by each instructor with students so they can select the course RAG from the chat experience.
+- **[@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc)**
+  - Utilizes [SWC](https://swc.rs/) for Fast Refresh, an alternative to Babel.
 
 ### Links
 
