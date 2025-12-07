@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { apiRequest, API_ORIGIN } from '../utils/api';
+import { apiRequest, API_BASE_URL } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 const ChatPage = () => {
@@ -584,7 +584,7 @@ const ChatPage = () => {
                       {sourceByMessage[msg.id].map((source) => (
                         <a
                           key={`${source.documentId}-${source.pageRange?.start || ''}-${source.pageRange?.end || ''}`}
-                          href={`${API_ORIGIN}${source.url}`}
+                          href={`${API_BASE_URL}${source.url}`}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-800 rounded border border-emerald-200 hover:bg-emerald-100 text-xs"
