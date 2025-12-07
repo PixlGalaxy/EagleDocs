@@ -2,13 +2,83 @@ import fetch from 'node-fetch';
 
 const DEFAULT_TIMEOUT = 60000;
 
-export const generateOllamaResponse = async (messages) => {
+const getBaseUrl = () => {
   if (!process.env.OLLAMA_HOST || !process.env.OLLAMA_PORT) {
     throw new Error('Ollama connection settings are missing');
   }
+  return `http://${process.env.OLLAMA_HOST}:${process.env.OLLAMA_PORT}`;
+};
 
-  const baseUrl = `http://${process.env.OLLAMA_HOST}:${process.env.OLLAMA_PORT}`;
-  const model = process.env.OLLAMA_MODEL || 'gpt-oss:20b';
+const decodeStreamChunks = async function* (response) {
+  const body = response.body;
+  if (!body) return;
+
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  const handleChunk = (value) => {
+    buffer += decoder.decode(value, { stream: true });
+
+    const parts = buffer.split('\n');
+    buffer = parts.pop() ?? '';
+
+    const tokens = [];
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      try {
+        const parsed = JSON.parse(part);
+        const token = parsed?.message?.content || parsed?.response || parsed?.delta;
+        if (token) {
+          tokens.push(token);
+        }
+      } catch {
+        // Skip malformed chunks
+      }
+    }
+    return tokens;
+  };
+
+  if (typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const maybeTokens = handleChunk(value);
+      if (maybeTokens?.length) {
+        for (const token of maybeTokens) {
+          yield token;
+        }
+      }
+    }
+  } else if (typeof body[Symbol.asyncIterator] === 'function') {
+    for await (const value of body) {
+      const maybeTokens = handleChunk(value);
+      if (maybeTokens?.length) {
+        for (const token of maybeTokens) {
+          yield token;
+        }
+      }
+    }
+  } else {
+    return;
+  }
+
+  if (buffer.trim()) {
+    try {
+      const parsed = JSON.parse(buffer.trim());
+      const token = parsed?.message?.content || parsed?.response || parsed?.delta;
+      if (token) {
+        yield token;
+      }
+    } catch {
+      // ignore
+    }
+  }
+};
+
+export const generateOllamaResponse = async (messages, modelOverride) => {
+  const baseUrl = getBaseUrl();
+  const model = modelOverride || process.env.OLLAMA_MODEL || 'gpt-oss:20b';
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
 
@@ -46,3 +116,34 @@ export const generateOllamaResponse = async (messages) => {
     clearTimeout(timeout);
   }
 };
+
+export const streamOllamaResponse = async (messages, modelOverride) => {
+  const baseUrl = getBaseUrl();
+  const model = modelOverride || process.env.OLLAMA_MODEL || 'gpt-oss:20b';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+
+  try {
+    const response = await fetch(`${baseUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, stream: true }),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Ollama error: ${errorText || response.statusText}`);
+    }
+
+    return decodeStreamChunks(response);
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error('Ollama request timed out');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+

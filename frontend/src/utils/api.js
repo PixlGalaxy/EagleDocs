@@ -2,6 +2,9 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
   (import.meta.env.MODE === 'development' ? 'http://localhost:5000/api' : '/api');
 
+// Helpful when building absolute links to files (e.g., PDF sources) without doubling "/api"
+const API_ORIGIN = API_BASE_URL.replace(/\/api$/, '');
+
 const buildConfig = (options = {}) => {
   const config = {
     credentials: 'include',
@@ -44,4 +47,4 @@ export const apiRequest = async (path, options = {}) => {
   return data ?? {};
 };
 
-export { API_BASE_URL };
+export { API_BASE_URL, API_ORIGIN };

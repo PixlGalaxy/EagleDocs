@@ -4,13 +4,14 @@ import pool from '../db/pool.js';
 import { hashPassword, verifyPassword } from '../utils/password.js';
 import { authenticate } from '../middleware/auth.js';
 import { COOKIE_NAME, getCookieOptions } from '../utils/cookies.js';
+import { deriveRoleFromEmail } from '../utils/role.js';
 
 const router = express.Router();
 
 const createToken = (userId) =>
   jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-const sanitizeUser = ({ password_hash, ...rest }) => rest;
+const sanitizeUser = ({ password_hash, ...rest }) => ({ ...rest, role: deriveRoleFromEmail(rest.email) });
 
 const isValidEmail = (email) =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || '');
