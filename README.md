@@ -26,7 +26,7 @@ For more details on setting up and using Vite with React, refer to the official 
 
 - Instructor PDFs are stored in `backend/storage/documents/<year>/<instructor>/<course>-<crn>` (mount `backend/storage/documents` as a Docker volume to persist uploads).
 - Generated RAG indexes are written to `backend/storage/rag/<year>/<instructor>/<course>-<crn>` (mount `backend/storage/rag` to keep chunked context across deployments).
-- Configure the lightweight guardrail model with `RAG_ANALYSIS_MODEL` in your `.env` to vet document relevance before injecting context into the main `OLLAMA_MODEL`.
+- The primary `OLLAMA_MODEL` both gates intent (deciding when to read PDFs) and generates answers, returning JSON for document selection before receiving course context.
 
 Share the course code and CRN defined by each instructor with students so they can select the course RAG from the chat experience.
 

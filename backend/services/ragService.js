@@ -3,7 +3,7 @@ import path from 'path';
 import zlib from 'zlib';
 import pool from '../db/pool.js';
 import { RAG_INDEX_DIR, buildScopedDir } from '../config/storage.js';
-import { runOllamaRelevanceCheck, runOllamaSearchIntent } from './ollamaService.js';
+import { generateOllamaResponse } from './ollamaService.js';
 
 const normalizeForJson = (text = '') => text.replace(/[^\x09\x0A\x0D\x20-\x7E]+/g, ' ').replace(/\s+/g, ' ').trim();
 
@@ -123,15 +123,6 @@ export const storeCourseChunks = async ({ course, documentId, documentName, text
   return { indexPath, chunkCount: chunks.length, folder };
 };
 
-export const shouldSearchCourseDocuments = async (question) => {
-  try {
-    return await runOllamaSearchIntent(question);
-  } catch (error) {
-    console.error('Search intent check failed:', error.message);
-    return { shouldSearch: true, reason: 'Defaulting to search after an error.' };
-  }
-};
-
 const readIndexFiles = async (indexPaths = []) => {
   const chunkGroups = await Promise.all(
     indexPaths.map(async (indexPath) => {
@@ -168,6 +159,54 @@ const summarizeChunks = (chunks = []) => {
   return clampChunk(joined, 1400);
 };
 
+const parseJsonOrDefault = (text, fallback) => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
+};
+
+const requestDocumentIntent = async ({ question, documents }) => {
+  const docList = documents
+    .map((doc) => `- ${doc.original_name || doc.file_name || 'PDF'} (id ${doc.id || 'n/a'})`)
+    .join('\n');
+  const prompt = `You are a JSON-only router. Decide if the user's question needs course PDFs. Respond strictly as JSON {"needs_documents":true|false,"reason":"short"}. Use false for greetings or unrelated questions. Documents available:\n${docList || 'none'}.\nQuestion: ${question}`;
+
+  const content = await generateOllamaResponse([
+    { role: 'system', content: 'Only output JSON with keys needs_documents and reason.' },
+    { role: 'user', content: prompt },
+  ]);
+
+  const parsed = parseJsonOrDefault(content, {});
+  return {
+    needsDocuments: Boolean(parsed.needs_documents ?? parsed.needsDocuments),
+    reason: parsed.reason || 'No reason given',
+  };
+};
+
+const requestDocumentSelection = async ({ question, documents }) => {
+  const docList = documents
+    .map((doc) => `- id:${doc.id} name:${doc.original_name || doc.file_name || 'PDF'} course:${doc.code || doc.course_code || ''}`)
+    .join('\n');
+  const prompt = `Select the best PDFs to answer the user. Return JSON {"use_documents":[ids],"reason":"short"}. Choose at least one when any document seems relevant. Only use ids from the list.\nDocuments:\n${docList}\nQuestion: ${question}`;
+
+  const content = await generateOllamaResponse([
+    { role: 'system', content: 'Only output JSON with keys use_documents and reason. ids must come from the provided list.' },
+    { role: 'user', content: prompt },
+  ]);
+
+  const parsed = parseJsonOrDefault(content, {});
+  const docIds = Array.isArray(parsed.use_documents)
+    ? parsed.use_documents.filter((id) => Number.isInteger(Number(id))).map((id) => Number(id))
+    : [];
+
+  return {
+    documentIds: docIds,
+    reason: parsed.reason || 'No reason given',
+  };
+};
+
 export const buildCourseContext = async ({ courseCode, question, onStatus = () => {} }) => {
   const { rows } = await pool.query(
     `SELECT cd.id, cd.index_path, cd.original_name, cd.file_name, c.id as course_id, c.code, c.crn, c.academic_year
@@ -181,22 +220,43 @@ export const buildCourseContext = async ({ courseCode, question, onStatus = () =
     return { context: '', sources: [] };
   }
 
-  const indexPaths = rows.map((row) => row.index_path).filter(Boolean).map((p) => path.resolve(p));
+  onStatus('Asking the model if PDFs are needed...');
+  let intent;
+  try {
+    intent = await requestDocumentIntent({ question, documents: rows });
+  } catch (error) {
+    console.error('Intent routing failed, defaulting to use PDFs:', error.message);
+    intent = { needsDocuments: true, reason: 'Defaulted after error' };
+  }
+
+  if (!intent.needsDocuments) {
+    onStatus('Model will answer without PDFs.');
+    return { context: '', sources: [] };
+  }
+
+  onStatus('Letting the model pick relevant PDFs...');
+  let selection;
+  try {
+    selection = await requestDocumentSelection({ question, documents: rows });
+  } catch (error) {
+    console.error('Document selection failed, using all PDFs:', error.message);
+    selection = { documentIds: rows.map((row) => row.id), reason: 'Defaulted after error' };
+  }
+  const selectedIds = selection.documentIds.length ? selection.documentIds : rows.map((row) => row.id);
+  const selectedRows = rows.filter((row) => selectedIds.includes(row.id));
+
+  const indexPaths = selectedRows.map((row) => row.index_path).filter(Boolean).map((p) => path.resolve(p));
   const chunks = await readIndexFiles(indexPaths);
 
   if (!chunks.length) {
-    onStatus('No RAG chunks available for this course.');
+    onStatus('No RAG chunks available for the selected PDFs.');
     return { context: '', sources: [] };
   }
 
   const scored = scoreChunks(chunks, question);
-  const hasKeywords = question.trim().split(/\s+/).some((word) => word.length > 3);
-  const topChunks = hasKeywords
-    ? scored.slice(0, 12).filter((entry) => entry.score > 0 || scored.length <= 12)
-    : scored.slice(0, 8);
-
   const groupedByDocument = new Map();
-  topChunks.forEach((chunk) => {
+  scored.forEach((chunk) => {
+    if (!selectedIds.includes(chunk.meta.documentId)) return;
     const key = chunk.meta.documentId;
     if (!groupedByDocument.has(key)) {
       groupedByDocument.set(key, []);
@@ -211,20 +271,6 @@ export const buildCourseContext = async ({ courseCode, question, onStatus = () =
     const meta = chunkList[0]?.meta || {};
     const documentRow = rows.find((row) => row.id === documentId);
     const snippet = summarizeChunks(chunkList.slice(0, 3));
-
-    onStatus(`Checking ${meta.documentName || documentRow?.original_name || 'document'}...`);
-
-    const relevance = await runOllamaRelevanceCheck({
-      question,
-      snippet,
-      documentName: meta.documentName || documentRow?.original_name,
-      courseCode: meta.courseCode,
-      crn: meta.crn,
-    });
-
-    if (!relevance.relevant) {
-      continue;
-    }
 
     const minPage = Math.min(...chunkList.map((chunk) => chunk.meta.page || 1));
     const maxPage = Math.max(...chunkList.map((chunk) => chunk.meta.page || 1));
@@ -248,7 +294,7 @@ export const buildCourseContext = async ({ courseCode, question, onStatus = () =
   }
 
   if (!approvedContexts.length) {
-    onStatus('No RAG matches passed the relevance check.');
+    onStatus('No RAG snippets selected by the model.');
     return { context: '', sources: [] };
   }
 

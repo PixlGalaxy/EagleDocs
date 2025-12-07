@@ -2,7 +2,7 @@ import express from 'express';
 import pool from '../db/pool.js';
 import { authenticate } from '../middleware/auth.js';
 import { generateOllamaResponse, streamOllamaResponse } from '../services/ollamaService.js';
-import { buildCourseContext, shouldSearchCourseDocuments } from '../services/ragService.js';
+import { buildCourseContext } from '../services/ragService.js';
 
 const router = express.Router();
 
@@ -29,20 +29,17 @@ const mapSourcesToLinks = (sources = []) =>
 
 const suggestChatTitle = async (question) => {
   try {
-    const suggestion = await generateOllamaResponse(
-      [
-        {
-          role: 'system',
-          content:
-            'You write concise, engaging chat titles in English using 3-6 words. Return only the title text without quotes.',
-        },
-        {
-          role: 'user',
-          content: `Propose a short chat title for this first question: ${question}`,
-        },
-      ],
-      process.env.RAG_ANALYSIS_MODEL
-    );
+    const suggestion = await generateOllamaResponse([
+      {
+        role: 'system',
+        content:
+          'You write concise, engaging chat titles in English using 3-6 words. Return only the title text without quotes.',
+      },
+      {
+        role: 'user',
+        content: `Propose a short chat title for this first question: ${question}`,
+      },
+    ]);
 
     return normalizeTitle(suggestion);
   } catch (error) {
@@ -260,23 +257,16 @@ router.post('/:chatId/messages/stream', async (req, res) => {
         return sendError('Course not found for this RAG selection');
       }
 
-      sendEvent(res, 'status', { message: 'Checking if this needs course PDFs...' });
-      const intent = await shouldSearchCourseDocuments(content);
+      sendEvent(res, 'status', { message: `Gathering context for ${courseResult.rows[0].code}...` });
 
-      if (intent.shouldSearch) {
-        sendEvent(res, 'status', { message: `Collecting matches for ${courseResult.rows[0].code}...` });
+      const contextResult = await buildCourseContext({
+        courseCode: courseResult.rows[0].code,
+        question: content,
+        onStatus: (message) => sendEvent(res, 'status', { message }),
+      });
 
-        const contextResult = await buildCourseContext({
-          courseCode: courseResult.rows[0].code,
-          question: content,
-          onStatus: (message) => sendEvent(res, 'status', { message }),
-        });
-
-        ragContext = contextResult.context;
-        sources = mapSourcesToLinks(contextResult.sources);
-      } else {
-        sendEvent(res, 'status', { message: 'Skipping PDF lookup for this question.' });
-      }
+      ragContext = contextResult.context;
+      sources = mapSourcesToLinks(contextResult.sources);
     }
 
     const enhancedConversation = buildConversationWithContext({
@@ -372,13 +362,9 @@ router.post('/:chatId/messages', async (req, res) => {
         return res.status(404).json({ error: 'Course not found for this RAG selection' });
       }
 
-      const intent = await shouldSearchCourseDocuments(content);
-
-      if (intent.shouldSearch) {
-        const contextResult = await buildCourseContext({ courseCode: courseResult.rows[0].code, question: content });
-        ragContext = contextResult.context;
-        sources = contextResult.sources || [];
-      }
+      const contextResult = await buildCourseContext({ courseCode: courseResult.rows[0].code, question: content });
+      ragContext = contextResult.context;
+      sources = contextResult.sources || [];
     }
 
     const userMessageResult = await client.query(
