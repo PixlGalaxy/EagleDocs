@@ -24,10 +24,11 @@ For more details on setting up and using Vite with React, refer to the official 
 
 ### RAG storage paths
 
-- Instructor PDFs are stored in `backend/storage/documents` (mount this as a Docker volume to persist uploads).
-- Generated RAG indexes are written to `backend/storage/rag` (mount this directory to keep the chunked context across deployments).
+- Instructor PDFs are stored in `backend/storage/documents/<year>/<instructor>/<course>-<crn>` (mount `backend/storage/documents` as a Docker volume to persist uploads).
+- Generated RAG indexes are written to `backend/storage/rag/<year>/<instructor>/<course>-<crn>` (mount `backend/storage/rag` to keep chunked context across deployments).
+- Configure the lightweight guardrail model with `RAG_ANALYSIS_MODEL` in your `.env` to vet document relevance before injecting context into the main `OLLAMA_MODEL`.
 
-Share the course code defined by each instructor with students so they can select the course RAG from the chat experience.
+Share the course code and CRN defined by each instructor with students so they can select the course RAG from the chat experience.
 
 ### Official Plugins
 

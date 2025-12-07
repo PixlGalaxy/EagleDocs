@@ -1,9 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, UserCircle, Menu, X, BookOpen, GraduationCap, Lightbulb, ListFilter } from 'lucide-react';
+import {
+  Plus,
+  Search,
+  UserCircle,
+  Menu,
+  X,
+  BookOpen,
+  GraduationCap,
+  Lightbulb,
+  ListFilter,
+  FileSearch,
+  ExternalLink,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { apiRequest } from '../utils/api';
+import { apiRequest, API_BASE_URL } from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 
 const ChatPage = () => {
@@ -24,6 +36,8 @@ const ChatPage = () => {
   const [courses, setCourses] = useState([]);
   const [selectedCourse, setSelectedCourse] = useState('');
   const [loadingCourses, setLoadingCourses] = useState(true);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [sourceByMessage, setSourceByMessage] = useState({});
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -92,6 +106,8 @@ const ChatPage = () => {
 
     let isMounted = true;
     setLoadingMessages(true);
+    setSourceByMessage({});
+    setStatusMessage('');
 
     const loadMessages = async () => {
       try {
@@ -155,20 +171,106 @@ const ChatPage = () => {
     }
 
     const content = input.trim();
+    const tempUserId = `temp-user-${Date.now()}`;
+    const tempAiId = `temp-ai-${Date.now()}`;
+
     setSending(true);
     setError('');
+    setStatusMessage(selectedCourse ? 'Searching course materials...' : 'Generating answer...');
+    setMessages((prev) => [
+      ...prev,
+      { id: tempUserId, sender: 'user', content },
+      { id: tempAiId, sender: 'ai', content: '' },
+    ]);
+    setInput('');
 
     try {
-      const data = await apiRequest(`/chats/${selectedChatId}/messages`, {
+      const response = await fetch(`${API_BASE_URL}/chats/${selectedChatId}/messages/stream`, {
         method: 'POST',
-        body: { content, courseCode: selectedCourse || undefined },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, courseCode: selectedCourse || undefined }),
       });
-      setMessages((prev) => [...prev, data.userMessage, data.aiMessage]);
-      setInput('');
+
+      if (!response.ok || !response.body) {
+        const text = await response.text();
+        throw new Error(text || 'Unable to send message');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let completed = false;
+
+      while (!completed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split('\n\n');
+        buffer = parts.pop() ?? '';
+
+        for (const part of parts) {
+          const lines = part.split('\n').filter(Boolean);
+          const eventLine = lines.find((line) => line.startsWith('event:'));
+          const dataLine = lines.find((line) => line.startsWith('data:'));
+          if (!eventLine || !dataLine) continue;
+
+          const eventType = eventLine.replace('event:', '').trim();
+          let data;
+          try {
+            data = JSON.parse(dataLine.replace('data:', '').trim());
+          } catch {
+            data = {};
+          }
+
+          if (eventType === 'status') {
+            setStatusMessage(data.message || '');
+            continue;
+          }
+
+          if (eventType === 'token') {
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === tempAiId
+                  ? { ...msg, content: `${msg.content || ''}${data.content || ''}` }
+                  : msg
+              )
+            );
+            continue;
+          }
+
+          if (eventType === 'done') {
+            completed = true;
+            setStatusMessage('');
+            setMessages((prev) =>
+              prev.map((msg) => {
+                if (msg.id === tempUserId && data.userMessage) {
+                  return data.userMessage;
+                }
+                if (msg.id === tempAiId && data.aiMessage) {
+                  return { ...data.aiMessage, sender: 'ai' };
+                }
+                return msg;
+              })
+            );
+            if (data.aiMessage?.id) {
+              setSourceByMessage((prev) => ({ ...prev, [data.aiMessage.id]: data.sources || [] }));
+            }
+            break;
+          }
+
+          if (eventType === 'error') {
+            throw new Error(data.message || 'AI response failed');
+          }
+        }
+      }
     } catch (err) {
       setError(err.message);
+      setMessages((prev) => prev.filter((msg) => msg.id !== tempUserId && msg.id !== tempAiId));
     } finally {
       setSending(false);
+      setStatusMessage('');
     }
   };
 
@@ -360,6 +462,12 @@ const ChatPage = () => {
               )}
             </div>
           </div>
+          {statusMessage && (
+            <div className="flex items-center gap-2 mb-3 text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded px-3 py-2">
+              <FileSearch className="h-4 w-4" />
+              <span>{statusMessage}</span>
+            </div>
+          )}
           {loadingMessages ? (
             <div className="flex flex-1 items-center justify-center text-gray-500">Loading messages...</div>
           ) : messages.length === 0 ? (
@@ -393,6 +501,30 @@ const ChatPage = () => {
                   >
                     {msg.content}
                   </ReactMarkdown>
+                  {msg.sender === 'ai' && sourceByMessage[msg.id]?.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {sourceByMessage[msg.id].map((source) => (
+                        <a
+                          key={`${source.documentId}-${source.pageRange?.start || ''}-${source.pageRange?.end || ''}`}
+                          href={`${API_BASE_URL}${source.url}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-800 rounded border border-emerald-200 hover:bg-emerald-100 text-xs"
+                        >
+                          <FileSearch className="h-4 w-4" />
+                          <span className="font-medium">{source.documentName}</span>
+                          {source.pageRange && (
+                            <span className="text-[11px] text-emerald-700">
+                              {source.pageRange.start === source.pageRange.end
+                                ? `(p.${source.pageRange.start})`
+                                : `(p.${source.pageRange.start}-${source.pageRange.end})`}
+                            </span>
+                          )}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
               <div ref={messagesEndRef} />

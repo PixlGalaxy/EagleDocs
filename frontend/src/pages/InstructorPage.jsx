@@ -13,7 +13,13 @@ const InstructorPage = () => {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [uploadingCourseId, setUploadingCourseId] = useState(null);
-  const [newCourse, setNewCourse] = useState({ code: '', name: '', description: '' });
+  const [newCourse, setNewCourse] = useState({
+    code: '',
+    name: '',
+    description: '',
+    academicYear: new Date().getFullYear(),
+    crn: '',
+  });
 
   const fetchCourses = async () => {
     setLoading(true);
@@ -42,10 +48,12 @@ const InstructorPage = () => {
         code: newCourse.code,
         name: newCourse.name,
         description: newCourse.description,
+        academicYear: newCourse.academicYear,
+        crn: newCourse.crn,
       };
       const data = await apiRequest('/courses', { method: 'POST', body });
       setCourses((prev) => [data.course, ...prev]);
-      setNewCourse({ code: '', name: '', description: '' });
+      setNewCourse({ code: '', name: '', description: '', academicYear: new Date().getFullYear(), crn: '' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -143,7 +151,7 @@ const InstructorPage = () => {
             <PlusCircle className="h-5 w-5 text-blue-600" />
             <h2 className="text-lg font-semibold">Create course</h2>
           </div>
-          <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <form onSubmit={handleCreateCourse} className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm text-gray-600 mb-1">Course code</label>
               <input
@@ -165,6 +173,27 @@ const InstructorPage = () => {
               />
             </div>
             <div>
+              <label className="block text-sm text-gray-600 mb-1">Academic year</label>
+              <input
+                type="number"
+                value={newCourse.academicYear}
+                onChange={(e) => setNewCourse((prev) => ({ ...prev, academicYear: e.target.value }))}
+                className="w-full border rounded px-3 py-2 text-sm"
+                placeholder="2025"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-600 mb-1">CRN</label>
+              <input
+                value={newCourse.crn}
+                onChange={(e) => setNewCourse((prev) => ({ ...prev, crn: e.target.value }))}
+                className="w-full border rounded px-3 py-2 text-sm"
+                placeholder="5-digit CRN"
+                required
+              />
+            </div>
+            <div className="md:col-span-2">
               <label className="block text-sm text-gray-600 mb-1">Description</label>
               <input
                 value={newCourse.description}
@@ -173,7 +202,7 @@ const InstructorPage = () => {
                 placeholder="Optional"
               />
             </div>
-            <div className="md:col-span-3 flex justify-end">
+            <div className="md:col-span-4 flex justify-end">
               <button
                 type="submit"
                 disabled={creating}
