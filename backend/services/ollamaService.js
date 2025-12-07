@@ -10,32 +10,57 @@ const getBaseUrl = () => {
 };
 
 const decodeStreamChunks = async function* (response) {
-  const reader = response.body?.getReader();
-  if (!reader) return;
+  const body = response.body;
+  if (!body) return;
 
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  const handleChunk = (value) => {
     buffer += decoder.decode(value, { stream: true });
 
     const parts = buffer.split('\n');
     buffer = parts.pop() ?? '';
 
+    const tokens = [];
     for (const part of parts) {
       if (!part.trim()) continue;
       try {
         const parsed = JSON.parse(part);
         const token = parsed?.message?.content || parsed?.response || parsed?.delta;
         if (token) {
-          yield token;
+          tokens.push(token);
         }
       } catch {
         // Skip malformed chunks
       }
     }
+    return tokens;
+  };
+
+  if (typeof body.getReader === 'function') {
+    const reader = body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const maybeTokens = handleChunk(value);
+      if (maybeTokens?.length) {
+        for (const token of maybeTokens) {
+          yield token;
+        }
+      }
+    }
+  } else if (typeof body[Symbol.asyncIterator] === 'function') {
+    for await (const value of body) {
+      const maybeTokens = handleChunk(value);
+      if (maybeTokens?.length) {
+        for (const token of maybeTokens) {
+          yield token;
+        }
+      }
+    }
+  } else {
+    return;
   }
 
   if (buffer.trim()) {
