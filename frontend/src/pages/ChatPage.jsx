@@ -612,7 +612,7 @@ const ChatPage = () => {
 
         <form
           onSubmit={handleSend}
-          className="absolute bottom-0 left-0 md:left-64 right-0 p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800"
+          className="absolute bottom-0 left-0 md:left-64 right-0 bg-white dark:bg-gray-900"
         >
           <div className="flex gap-2">
             <input
