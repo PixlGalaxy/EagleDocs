@@ -1,341 +1,94 @@
+//ChatPage.jsx
+
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import {
-  Plus,
-  Search,
-  UserCircle,
-  Menu,
-  X,
-  BookOpen,
-  GraduationCap,
-  Lightbulb,
-  ListFilter,
-  FileSearch,
-  ExternalLink,
-  Edit3,
-  Trash2,
-} from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { apiRequest, API_BASE_URL } from '../utils/api';
-import { useAuth } from '../context/AuthContext';
+import { Plus, Search, UserCircle, Menu, X, BookOpen, GraduationCap, Lightbulb, Paperclip } from 'lucide-react';
 
 const ChatPage = () => {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [chats, setChats] = useState([]);
-  const [selectedChatId, setSelectedChatId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
+  const messagesEndRef = useRef(null);
   const [showMenu, setShowMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [loadingChats, setLoadingChats] = useState(true);
-  const [loadingMessages, setLoadingMessages] = useState(false);
-  const [creatingChat, setCreatingChat] = useState(false);
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState('');
-  const [courses, setCourses] = useState([]);
-  const [selectedCourseCrn, setSelectedCourseCrn] = useState('');
-  const [loadingCourses, setLoadingCourses] = useState(true);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [sourceByMessage, setSourceByMessage] = useState({});
-  const [renamingChatId, setRenamingChatId] = useState(null);
-  const [deletingChatId, setDeletingChatId] = useState(null);
-  const messagesEndRef = useRef(null);
+  const selectedChatTitle = messages.length > 0 ? 'Chat' : 'Start a New Chat';
+  const [attachments, setAttachments] = useState([]);
+  const fileInputRef = useRef(null);
+  const createdUrlsRef = useRef(new Set());
 
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    const newFiles = files.map((file, idx) => ({
+      id: Date.now() + idx,
+      file,
+      url: URL.createObjectURL(file),
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    }));
+    newFiles.forEach(f => createdUrlsRef.current.add(f.url));
+    setAttachments((prev) => [...prev, ...newFiles]);
+    // reset input so same file can be selected again if needed
+    e.target.value = null;
+  };
+
+  const removeAttachment = (id) => {
+    setAttachments((prev) => {
+      const toRemove = prev.find((p) => p.id === id);
+      if (toRemove) URL.revokeObjectURL(toRemove.url);
+      if (toRemove) createdUrlsRef.current.delete(toRemove.url);
+      return prev.filter((p) => p.id !== id);
+    });
+  };
+
+  // cleanup any created object URLs when component unmounts
   useEffect(() => {
-    let isMounted = true;
-
-    const loadChats = async () => {
-      try {
-        const data = await apiRequest('/chats');
-        if (!isMounted) return;
-        setChats(data.chats);
-        setError('');
-        if (data.chats.length) {
-          setSelectedChatId((prev) => prev ?? data.chats[0].id);
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(err.message);
-        }
-      } finally {
-        if (isMounted) {
-          setLoadingChats(false);
-        }
-      }
-    };
-
-    loadChats();
-
     return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadCourses = async () => {
-      try {
-        const data = await apiRequest('/courses');
-        if (!isMounted) return;
-        setCourses(data.courses || []);
-        setError('');
-      } catch (err) {
-        if (isMounted) {
-          setError(err.message);
-        }
-      } finally {
-        if (isMounted) {
-          setLoadingCourses(false);
-        }
-      }
-    };
-
-    loadCourses();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!selectedChatId) {
-      setMessages([]);
-      setLoadingMessages(false);
-      return;
-    }
-
-    let isMounted = true;
-    setLoadingMessages(true);
-    setSourceByMessage({});
-    setStatusMessage('');
-
-    const loadMessages = async () => {
-      try {
-        const data = await apiRequest(`/chats/${selectedChatId}`);
-        if (isMounted) {
-          setMessages(data.messages);
-          setError('');
-        }
-      } catch (err) {
-        if (isMounted) {
-          setError(err.message);
-        }
-      } finally {
-        if (isMounted) {
-          setLoadingMessages(false);
-        }
-      }
-    };
-
-    loadMessages();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [selectedChatId]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const handleCreateChat = async () => {
-    setError('');
-    setCreatingChat(true);
-    try {
-      const data = await apiRequest('/chats', {
-        method: 'POST',
-        body: { title: 'New Chat' },
+      createdUrlsRef.current.forEach((u) => {
+        try { URL.revokeObjectURL(u); } catch (e) {}
       });
-      setChats((prev) => [data.chat, ...prev]);
-      setSelectedChatId(data.chat.id);
-      setMessages([]);
-      setSidebarOpen(false);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setCreatingChat(false);
-    }
+      createdUrlsRef.current.clear();
+    };
+  }, []);
+
+  const generateAssistantResponse = (userMessage) => {
+    return {
+      id: Date.now() + 1,
+      content: `This is a simulated response to: "${userMessage}"`,
+      sender: 'assistant'
+    };
   };
 
-  const handleSelectChat = (chatId) => {
-    setSelectedChatId(chatId);
-    setSidebarOpen(false);
-    setShowMenu(false);
-    setError('');
-  };
-
-  const handleSend = async (e) => {
+  const handleSend = (e) => {
     e.preventDefault();
-    if (!input.trim() || !selectedChatId || sending) {
-      return;
-    }
+    if (!input.trim() && attachments.length === 0) return;
 
-    const content = input.trim();
-    const tempUserId = `temp-user-${Date.now()}`;
-    const tempAiId = `temp-ai-${Date.now()}`;
+    const userMessage = {
+      id: Date.now(),
+      content: input,
+      sender: 'user',
+      attachments: attachments.map((a) => ({ id: a.id, name: a.name, url: a.url, type: a.type }))
+    };
 
-    setSending(true);
-    setError('');
-    setStatusMessage(selectedCourseCrn ? 'Searching course materials...' : 'Generating answer...');
-    setMessages((prev) => [
-      ...prev,
-      { id: tempUserId, sender: 'user', content },
-      { id: tempAiId, sender: 'ai', content: '' },
-    ]);
+    const assistantMessage = generateAssistantResponse(input);
+    setMessages([...messages, userMessage, assistantMessage]);
+
+    // clear input and current attachment selections (message keeps its copies)
     setInput('');
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/chats/${selectedChatId}/messages/stream`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, courseCrn: selectedCourseCrn || undefined }),
-      });
-
-      if (!response.ok || !response.body) {
-        const text = await response.text();
-        throw new Error(text || 'Unable to send message');
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let completed = false;
-
-      while (!completed) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n\n');
-        buffer = parts.pop() ?? '';
-
-        for (const part of parts) {
-          const lines = part.split('\n').filter(Boolean);
-          const eventLine = lines.find((line) => line.startsWith('event:'));
-          const dataLine = lines.find((line) => line.startsWith('data:'));
-          if (!eventLine || !dataLine) continue;
-
-          const eventType = eventLine.replace('event:', '').trim();
-          let data;
-          try {
-            data = JSON.parse(dataLine.replace('data:', '').trim());
-          } catch {
-            data = {};
-          }
-
-          if (eventType === 'status') {
-            setStatusMessage(data.message || '');
-            continue;
-          }
-
-          if (eventType === 'chatRenamed') {
-            setChats((prev) => prev.map((chat) => (chat.id === data.chatId ? { ...chat, title: data.title } : chat)));
-            continue;
-          }
-
-          if (eventType === 'token') {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === tempAiId
-                  ? { ...msg, content: `${msg.content || ''}${data.content || ''}` }
-                  : msg
-              )
-            );
-            continue;
-          }
-
-          if (eventType === 'done') {
-            completed = true;
-            setStatusMessage('');
-            setMessages((prev) =>
-              prev.map((msg) => {
-                if (msg.id === tempUserId && data.userMessage) {
-                  return data.userMessage;
-                }
-                if (msg.id === tempAiId && data.aiMessage) {
-                  return { ...data.aiMessage, sender: 'ai' };
-                }
-                return msg;
-              })
-            );
-            if (data.aiMessage?.id) {
-              setSourceByMessage((prev) => ({ ...prev, [data.aiMessage.id]: data.sources || [] }));
-            }
-            break;
-          }
-
-          if (eventType === 'error') {
-            throw new Error(data.message || 'AI response failed');
-          }
-        }
-      }
-    } catch (err) {
-      setError(err.message);
-      setMessages((prev) => prev.filter((msg) => msg.id !== tempUserId && msg.id !== tempAiId));
-    } finally {
-      setSending(false);
-      setStatusMessage('');
-    }
+    setAttachments([]);
   };
 
-  const handleLogout = async () => {
-    setShowMenu(false);
-    await logout();
-    navigate('/login');
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const selectedChat = chats.find((chat) => chat.id === selectedChatId);
-  const selectedChatTitle = selectedChat?.title || 'Start a New Chat';
-
-  const filteredChats = chats.filter((chat) =>
-    chat.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const selectedCourseInfo = courses.find(
-    (course) => course.crn?.toUpperCase() === selectedCourseCrn.toUpperCase()
-  );
-
-  const activeCourseLabel = selectedCourseCrn
-    ? `Using course RAG: ${selectedCourseInfo ? `${selectedCourseInfo.code} (CRN ${selectedCourseInfo.crn})` : selectedCourseCrn}`
-    : 'Default chat (no RAG)';
-
-  const markdownComponents = {
-    code({ inline, className, children, ...props }) {
-      if (inline) {
-        return (
-          <code
-            className="bg-gray-200 dark:bg-gray-800 px-1 py-0.5 rounded text-xs"
-            {...props}
-          >
-            {children}
-          </code>
-        );
-      }
-
-      return (
-        <pre className="bg-gray-900 text-gray-100 rounded-md p-3 overflow-x-auto text-xs" {...props}>
-          <code className={className}>{children}</code>
-        </pre>
-      );
-    },
-    table({ children }) {
-      return <table className="min-w-full border border-gray-300 text-sm">{children}</table>;
-    },
-    th({ children }) {
-      return <th className="border border-gray-300 px-2 py-1 bg-gray-100">{children}</th>;
-    },
-    td({ children }) {
-      return <td className="border border-gray-300 px-2 py-1">{children}</td>;
-    },
-    p({ children }) {
-      return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p>;
-    },
-  };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   const suggestions = [
     { icon: <BookOpen className="h-5 w-5" />, text: 'Help me study for a test' },
@@ -343,55 +96,11 @@ const ChatPage = () => {
     { icon: <Lightbulb className="h-5 w-5" />, text: 'Give me ideas for a project' },
   ];
 
-  const disableInput = !selectedChatId || sending;
-
-  const handleRenameChat = async (chatId) => {
-    const current = chats.find((c) => c.id === chatId);
-    const proposed = window.prompt('Chat title', current?.title || '');
-    if (!proposed || !proposed.trim()) return;
-    setRenamingChatId(chatId);
-    try {
-      const data = await apiRequest(`/chats/${chatId}`, {
-        method: 'PATCH',
-        body: { title: proposed },
-      });
-      setChats((prev) => prev.map((chat) => (chat.id === chatId ? data.chat : chat)));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setRenamingChatId(null);
-    }
-  };
-
-  const handleDeleteChat = async (chatId) => {
-    if (!window.confirm('Delete this chat? Messages will be removed.')) return;
-    setDeletingChatId(chatId);
-    try {
-      await apiRequest(`/chats/${chatId}`, { method: 'DELETE' });
-      setChats((prev) => {
-        const remaining = prev.filter((chat) => chat.id !== chatId);
-        if (selectedChatId === chatId) {
-          setSelectedChatId(remaining[0]?.id || null);
-          setMessages([]);
-          setSourceByMessage({});
-        }
-        return remaining;
-      });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDeletingChatId(null);
-    }
-  };
-
   return (
     <div className="flex h-screen bg-gray-100 dark:bg-gray-900">
-      <div
-        className={`fixed z-50 md:relative md:translate-x-0 top-0 left-0 h-full w-64 bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col justify-between transition-transform duration-300 transform ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:flex`}
-      >
-        <div className="flex-1 overflow-hidden">
+      {/* Sidebar */}
+      <div className={`fixed z-50 md:relative md:translate-x-0 top-0 left-0 h-full w-64 bg-white dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col justify-between transition-transform duration-300 transform ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:flex`}>
+        <div>
           <div className="flex items-center justify-between px-4 py-5 text-xl font-semibold">
             <div className="flex items-center gap-2">
               <img src="/EagleDocs Logo.png" alt="EagleDocs" className="w-8 h-8" />
@@ -401,72 +110,25 @@ const ChatPage = () => {
               <X className="h-6 w-6 text-gray-500" />
             </button>
           </div>
-          <div className="px-4 space-y-4">
-            <button
-              className="w-full flex items-center gap-2 text-sm bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:opacity-60"
-              onClick={handleCreateChat}
-              disabled={creatingChat}
-            >
-              <Plus className="h-4 w-4" /> {creatingChat ? 'Creating...' : 'New Chat'}
+          <div className="px-4">
+            <button className="w-full flex items-center gap-2 text-sm bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+              <Plus className="h-4 w-4" /> New Chat
             </button>
-            <div className="relative">
+            <div className="mt-4 relative">
               <Search className="h-4 w-4 absolute left-3 top-2.5 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search chats"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-sm rounded border border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
               />
             </div>
           </div>
           <div className="px-4 mt-6 text-xs text-gray-500 dark:text-gray-400">Recent</div>
-          <ul className="mt-1 text-sm px-4 space-y-1 overflow-y-auto h-[calc(100%-220px)]">
-            {loadingChats ? (
-              <li className="text-gray-500">Loading chats...</li>
-            ) : filteredChats.length ? (
-              filteredChats.map((chat) => (
-                <li
-                  key={chat.id}
-                  onClick={() => handleSelectChat(chat.id)}
-                  className={`group cursor-pointer px-3 py-2 rounded transition-colors ${
-                    chat.id === selectedChatId
-                      ? 'bg-blue-100 text-blue-700 dark:bg-gray-800'
-                      : 'text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate">{chat.title}</span>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        title="Rename"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRenameChat(chat.id);
-                        }}
-                        disabled={renamingChatId === chat.id}
-                        className="p-1 rounded hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-60"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-                      <button
-                        title="Delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteChat(chat.id);
-                        }}
-                        disabled={deletingChatId === chat.id}
-                        className="p-1 rounded hover:bg-red-100 text-red-600 dark:hover:bg-red-900 disabled:opacity-60"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))
-            ) : (
-              <li className="text-gray-500">No chats yet</li>
-            )}
+          <ul className="mt-1 text-sm px-4 space-y-1 overflow-y-auto flex-1">
+            <li className="text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800 px-3 py-2 rounded cursor-pointer">Math Midterm Review</li>
+            <li className="text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800 px-3 py-2 rounded cursor-pointer">Software Fundamentals</li>
+            <li className="text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800 px-3 py-2 rounded cursor-pointer">Physics 2 Concepts</li>
+            <li className="text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-800 px-3 py-2 rounded cursor-pointer">Quiz Questions</li>
           </ul>
         </div>
         <div className="border-t px-4 py-3">
@@ -476,23 +138,20 @@ const ChatPage = () => {
               className="flex items-center gap-2 w-full hover:bg-gray-100 dark:hover:bg-gray-800 px-2 py-1 rounded"
             >
               <UserCircle className="h-6 w-6 text-gray-500" />
-              <span className="text-sm text-gray-800 dark:text-gray-200">{user?.username}</span>
+              <span className="text-sm text-gray-800 dark:text-gray-200">Pixl</span>
             </button>
             {showMenu && (
               <div className="absolute bottom-10 left-0 w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-md z-10">
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  Sign Out
-                </button>
+                <button className="w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700">Settings</button>
+                <button className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-gray-100 dark:hover:bg-gray-700">Sign Out</button>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col ml-0 md:ml-64">
+      {/* Chat area */}
+      <div className="flex-1 flex flex-col ml-0 md:ml-90">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-800 md:hidden">
           <button onClick={() => setSidebarOpen(true)}>
             <Menu className="h-6 w-6 text-gray-700 dark:text-gray-200" />
@@ -501,136 +160,134 @@ const ChatPage = () => {
           <div className="w-6" />
         </div>
 
-        <div className="flex-1 overflow-y-auto flex flex-col px-6 pt-6 pb-28">
-          {error && (
-            <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600">
-              {error}
-            </div>
-          )}
-          <div className="mb-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg p-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div className="flex items-center gap-2">
-              <ListFilter className="h-5 w-5 text-blue-600" />
-              <div>
-                <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">Select a course RAG</p>
-                <p className="text-xs text-gray-600 dark:text-gray-400">{activeCourseLabel}</p>
+        <div className="flex-1 overflow-y-auto">
+          <div ref={messagesEndRef} />
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full space-y-4">
+              <h1 className="text-4xl font-semibold mb-8 text-gray-800 dark:text-gray-200">EagleDocs</h1>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-w-4xl px-4">
+                {suggestions.map((s, i) => (
+                  <button key={i} className="flex items-center gap-2 bg-gray-200 dark:bg-gray-800 px-4 py-3 rounded hover:bg-gray-300 dark:hover:bg-gray-700 text-sm">
+                    {s.icon}
+                    {s.text}
+                  </button>
+                ))}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={selectedCourseCrn}
-                onChange={(e) => setSelectedCourseCrn(e.target.value)}
-                disabled={loadingCourses}
-                className="text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded px-3 py-2"
-              >
-                <option value="">Default chat</option>
-                {courses.map((course) => (
-                  <option key={course.id} value={course.crn}>
-                    {course.code} (CRN {course.crn}) — {course.name}
-                  </option>
-                ))}
-              </select>
-              {selectedCourseCrn ? (
-                <span className="text-xs text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                  RAG active
-                </span>
-              ) : (
-                <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded-full">
-                  No RAG
-                </span>
-              )}
-            </div>
-          </div>
-          {statusMessage && (
-            <div className="flex items-center gap-2 mb-3 text-xs text-blue-800 bg-blue-50 border border-blue-100 rounded px-3 py-2">
-              <FileSearch className="h-4 w-4" />
-              <span>{statusMessage}</span>
-            </div>
-          )}
-          {loadingMessages ? (
-            <div className="flex flex-1 items-center justify-center text-gray-500">Loading messages...</div>
-          ) : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center flex-1 space-y-4 text-sm text-gray-600 dark:text-gray-400">
-              {suggestions.map((s, i) => (
-                <button
-                  key={i}
-                  onClick={() => setInput(s.text)}
-                  className="flex items-center gap-2 bg-gray-200 dark:bg-gray-800 px-4 py-2 rounded hover:bg-gray-300 dark:hover:bg-gray-700"
-                >
-                  {s.icon}
-                  {s.text}
-                </button>
-              ))}
-            </div>
           ) : (
-            <div className="flex-1 overflow-y-auto flex flex-col gap-3">
+            <div className="flex flex-col">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={`max-w-3xl px-4 py-3 rounded-lg text-sm shadow-sm border ${
-                    msg.sender === 'user'
-                      ? 'bg-blue-500 text-white self-end ml-auto border-blue-600'
-                      : 'bg-white dark:bg-gray-900 text-gray-900 dark:text-white mr-auto border-gray-200 dark:border-gray-700'
+                  className={`border-b border-gray-200 dark:border-gray-800 ${
+                    msg.sender === 'user' ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'
                   }`}
                 >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={markdownComponents}
-                    className="prose prose-sm dark:prose-invert max-w-none"
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
-                  {msg.sender === 'ai' && sourceByMessage[msg.id]?.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {sourceByMessage[msg.id].map((source) => (
-                        <a
-                          key={`${source.documentId}-${source.pageRange?.start || ''}-${source.pageRange?.end || ''}`}
-                          href={`${API_BASE_URL}${source.url}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inline-flex items-center gap-1 px-2 py-1 bg-emerald-50 text-emerald-800 rounded border border-emerald-200 hover:bg-emerald-100 text-xs"
-                        >
-                          <FileSearch className="h-4 w-4" />
-                          <span className="font-medium">{source.documentName}</span>
-                          {source.pageRange && (
-                            <span className="text-[11px] text-emerald-700">
-                              {source.pageRange.start === source.pageRange.end
-                                ? `(p.${source.pageRange.start})`
-                                : `(p.${source.pageRange.start}-${source.pageRange.end})`}
-                            </span>
-                          )}
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ))}
+                  <div className="max-w-3xl mx-auto px-4 py-6 flex gap-4">
+                    <div className="w-7 h-7 flex-shrink-0">
+                      {msg.sender === 'user' ? (
+                        <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">
+                          U
+                        </div>
+                      ) : (
+                        <div className="w-7 h-7 rounded-sm bg-blue-500 flex items-center justify-center text-white text-sm">
+                          A
+                        </div>
+                      )}
                     </div>
-                  )}
+                          <div className="prose dark:prose-invert flex-1">
+                            <div className="text-sm text-gray-800 dark:text-gray-100">
+                              {msg.content}
+                            </div>
+
+                            {msg.attachments && msg.attachments.length > 0 && (
+                              <div className="mt-3 flex flex-wrap gap-3">
+                                {msg.attachments.map((att) => (
+                                  att.type && att.type.startsWith('image/') ? (
+                                    <img key={att.id} src={att.url} alt={att.name} className="w-40 h-28 object-cover rounded" />
+                                  ) : (
+                                    <a key={att.id} href={att.url} download={att.name} className="inline-flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded text-sm text-gray-700 dark:text-gray-200">
+                                      <Paperclip className="h-4 w-4" />
+                                      <span className="truncate max-w-[8rem]">{att.name}</span>
+                                    </a>
+                                  )
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                  </div>
                 </div>
               ))}
-              <div ref={messagesEndRef} />
             </div>
           )}
         </div>
 
+        {/* Input */}
         <form
           onSubmit={handleSend}
           className="absolute bottom-0 left-0 md:left-64 right-0 bg-white dark:bg-gray-900"
         >
-          <div className="flex gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={selectedChatId ? 'Type here...' : 'Create a chat to get started'}
-              disabled={disableInput}
-              className="flex-1 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-4 py-2 rounded-md text-sm focus:outline-none"
-            />
-            <button
-              type="submit"
-              disabled={disableInput}
-              className={`px-4 py-2 rounded-md text-sm text-white ${
-                disableInput ? 'bg-blue-300 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'
-              }`}
-            >
-              {sending ? 'Sending...' : 'Send'}
-            </button>
+          <div className="max-w-3xl mx-auto px-4 py-4">
+            <div className="relative border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm">
+              {/* preview selected attachments */}
+              {attachments.length > 0 && (
+                <div className="p-3 border-b border-gray-100 dark:border-gray-800 flex gap-2 overflow-x-auto">
+                  {attachments.map((att) => (
+                    <div key={att.id} className="relative">
+                      {att.type && att.type.startsWith('image/') ? (
+                        <img src={att.url} alt={att.name} className="w-24 h-16 object-cover rounded" />
+                      ) : (
+                        <div className="w-36 h-12 flex items-center px-2 bg-gray-100 dark:bg-gray-800 rounded text-sm">
+                          <Paperclip className="h-4 w-4 mr-2" />
+                          <span className="truncate">{att.name}</span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeAttachment(att.id)}
+                        className="absolute -top-1 -right-1 bg-white dark:bg-gray-900 rounded-full p-0.5 shadow"
+                        aria-label="Remove attachment"
+                      >
+                        <X className="h-4 w-4 text-gray-600" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                rows="1"
+                placeholder="Send a message..."
+                className="w-full resize-none bg-white dark:bg-gray-900 pr-12 pl-12 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-800 dark:text-white text-sm"
+              />
+
+              {/* hidden file input */}
+              <input ref={fileInputRef} onChange={handleFileChange} type="file" multiple className="hidden" />
+
+              {/* attach button (left) */}
+              <button
+                type="button"
+                onClick={handleAttachClick}
+                className="absolute left-3 bottom-2.5 p-1 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Attach file"
+              >
+                <Paperclip className="h-5 w-5" />
+              </button>
+
+              <button
+                type="submit"
+                className="absolute right-3 bottom-2.5 p-1 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:hover:bg-transparent dark:disabled:hover:bg-transparent transition-colors"
+              >
+                <svg stroke="currentColor" fill="none" strokeWidth="2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 mr-1" height="1em" width="1em" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                </svg>
+              </button>
+            </div>
+            <div className="text-center text-xs text-gray-600 dark:text-gray-400 mt-2">
+              Free Research Preview. EagleDocs may produce inaccurate information about people, places, or facts.
+            </div>
           </div>
         </form>
       </div>

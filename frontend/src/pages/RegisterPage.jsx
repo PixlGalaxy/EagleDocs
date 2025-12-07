@@ -1,87 +1,147 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
 
 function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [accountType, setAccountType] = useState('');
+  const [passwordError, setPasswordError] = useState(false);
+  const [emailError, setEmailError] = useState(false);
   const navigate = useNavigate();
-  const { register } = useAuth();
-
-  const detectedRole = email.trim().toLowerCase().endsWith('@fgcu.edu')
-    ? 'Instructor'
-    : 'Student';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
 
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+    // Validate email domain
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@eagle\.fgcu\.edu$/;
+    if (!emailRegex.test(email)) {
+      setEmailError(true);
       return;
     }
 
-    setSubmitting(true);
+    // Validate passwords match
+    if (password !== confirmPassword) {
+      setPasswordError(true);
+      return;
+    }
 
     try {
-      const created = await register(email, password);
-      navigate(created.role === 'instructor' ? '/instructor' : '/chat');
-    } catch (err) {
-      setError(err.message || 'Unable to register');
-    } finally {
-      setSubmitting(false);
+      // Try login first
+      const loginResponse = await fetch('http://localhost:5000/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: email, password }),
+      });
+      const loginData = await loginResponse.json();
+
+      if (loginData.message === 'Login successful') {
+        alert('User already exists');
+        return;
+      }
+
+      // Register new account
+      const registerResponse = await fetch('http://localhost:5000/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, accountType }),
+      });
+      const registerData = await registerResponse.json();
+
+      if (registerData.message === 'Account Created Successfully') {
+        navigate('/login');
+      } else {
+        alert(registerData.message);
+      }
+    } catch (error) {
+      console.error('Error:', error);
     }
-  };
+  }; // ✅ Fixed: this closing brace was missing!
 
   useEffect(() => {
-    document.title = 'EagleDocs';
+    document.title = 'EagleDocs'; // Page Title
     const favicon = document.querySelector("link[rel='icon']");
     if (favicon) {
-      favicon.href = '/favicon.ico';
+      favicon.href = '/favicon.ico'; // Page Icon
     }
   }, []);
 
   return (
     <div className="h-screen flex items-center justify-center bg-gray-50">
-      <form onSubmit={handleSubmit} className="w-full max-w-md bg-white rounded-lg shadow-md p-6 space-y-4">
+      <form
+        onSubmit={handleSubmit}
+        className="w-full max-w-md bg-white rounded-lg shadow-md p-6"
+      >
+        {/* Logo */}
         <Link to="/">
-          <img src="/EagleDocs Logo.png" alt="EagleDocs Logo" className="w-32 mx-auto mb-4 cursor-pointer" />
+          <img
+            src="/EagleDocs Logo.png"
+            alt="EagleDocs Logo"
+            className="w-32 mx-auto mb-6 cursor-pointer"
+          />
         </Link>
-        <h2 className="text-2xl font-bold text-gray-800 text-center">Register</h2>
-        {error && <div className="rounded-md bg-red-50 p-3 text-sm text-red-600">{error}</div>}
-        <div>
+
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">
+          Register
+        </h2>
+
+        {/* Email */}
+        <div className="mb-4">
           <label className="block text-gray-600 mb-1">Email</label>
           <input
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setEmailError(false);
+            }}
+            className={`w-full px-4 py-2 border rounded-md focus:outline-none ${
+              emailError ? 'border-red-500' : 'focus:ring-2 focus:ring-blue-500'
+            }`}
             required
           />
-          <p className="text-xs text-gray-500 mt-1">Detected role: {detectedRole}</p>
+          {emailError && (
+            <p className="text-red-500 text-sm mt-2">
+              Please use a valid FGCU email (e.g., Pixl@eagle.fgcu.edu).
+            </p>
+          )}
         </div>
-        <div>
+
+        {/* Password */}
+        <div className="mb-4">
           <label className="block text-gray-600 mb-1">Password</label>
           <input
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => {
+              setPassword(e.target.value);
+              setPasswordError(false);
+            }}
+            className={`w-full px-4 py-2 border rounded-md focus:outline-none ${
+              passwordError ? 'border-red-500' : 'focus:ring-2 focus:ring-blue-500'
+            }`}
             required
           />
         </div>
-        <div>
+
+        {/* Confirm Password */}
+        <div className="mb-4">
           <label className="block text-gray-600 mb-1">Repeat Password</label>
           <input
             type="password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              setPasswordError(false);
+            }}
+            className={`w-full px-4 py-2 border rounded-md focus:outline-none ${
+              passwordError ? 'border-red-500' : 'focus:ring-2 focus:ring-blue-500'
+            }`}
             required
           />
+          {passwordError && (
+            <p className="text-red-500 text-sm mt-2">Passwords do not match.</p>
+          )}
         </div>
 
         {/* Account Type Buttons */}
@@ -114,12 +174,9 @@ function RegisterPage() {
         {/* Submit Button */}
         <button
           type="submit"
-          disabled={submitting}
-          className={`w-full py-2 rounded-md text-white ${
-            submitting ? 'bg-gray-300 cursor-not-allowed' : 'bg-gray-500 hover:bg-gray-600'
-          }`}
+          className="w-full bg-gray-500 text-white py-2 rounded-md hover:bg-gray-600"
         >
-          {submitting ? 'Creating account...' : 'Register'}
+          Register
         </button>
       </form>
     </div>
