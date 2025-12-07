@@ -2,7 +2,7 @@ import express from 'express';
 import pool from '../db/pool.js';
 import { authenticate } from '../middleware/auth.js';
 import { generateOllamaResponse, streamOllamaResponse } from '../services/ollamaService.js';
-import { buildCourseContext } from '../services/ragService.js';
+import { buildCourseContext, shouldSearchCourseDocuments } from '../services/ragService.js';
 
 const router = express.Router();
 
@@ -228,16 +228,23 @@ router.post('/:chatId/messages/stream', async (req, res) => {
         return sendError('Course not found for this RAG selection');
       }
 
-      sendEvent(res, 'status', { message: `Collecting matches for ${courseResult.rows[0].code}...` });
+      sendEvent(res, 'status', { message: 'Checking if this needs course PDFs...' });
+      const intent = await shouldSearchCourseDocuments(content);
 
-      const contextResult = await buildCourseContext({
-        courseCode: courseResult.rows[0].code,
-        question: content,
-        onStatus: (message) => sendEvent(res, 'status', { message }),
-      });
+      if (intent.shouldSearch) {
+        sendEvent(res, 'status', { message: `Collecting matches for ${courseResult.rows[0].code}...` });
 
-      ragContext = contextResult.context;
-      sources = mapSourcesToLinks(contextResult.sources);
+        const contextResult = await buildCourseContext({
+          courseCode: courseResult.rows[0].code,
+          question: content,
+          onStatus: (message) => sendEvent(res, 'status', { message }),
+        });
+
+        ragContext = contextResult.context;
+        sources = mapSourcesToLinks(contextResult.sources);
+      } else {
+        sendEvent(res, 'status', { message: 'Skipping PDF lookup for this question.' });
+      }
     }
 
     const enhancedConversation = ragContext
@@ -337,8 +344,12 @@ router.post('/:chatId/messages', async (req, res) => {
         return res.status(404).json({ error: 'Course not found for this RAG selection' });
       }
 
-      const contextResult = await buildCourseContext({ courseCode: courseResult.rows[0].code, question: content });
-      ragContext = contextResult.context;
+      const intent = await shouldSearchCourseDocuments(content);
+
+      if (intent.shouldSearch) {
+        const contextResult = await buildCourseContext({ courseCode: courseResult.rows[0].code, question: content });
+        ragContext = contextResult.context;
+      }
     }
 
     const userMessageResult = await client.query(

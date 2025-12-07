@@ -3,7 +3,9 @@ import path from 'path';
 import zlib from 'zlib';
 import pool from '../db/pool.js';
 import { RAG_INDEX_DIR, buildScopedDir } from '../config/storage.js';
-import { runOllamaRelevanceCheck } from './ollamaService.js';
+import { runOllamaRelevanceCheck, runOllamaSearchIntent } from './ollamaService.js';
+
+const normalizeForJson = (text = '') => text.replace(/[^\x09\x0A\x0D\x20-\x7E]+/g, ' ').replace(/\s+/g, ' ').trim();
 
 const sanitizeSegment = (value = '') => value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-');
 
@@ -41,7 +43,7 @@ export const extractTextFromBuffer = (buffer) => {
     .join(' ')
     .replace(/\\n/g, ' ');
 
-  const cleaned = extracted.replace(/\s+/g, ' ').trim();
+  const cleaned = normalizeForJson(extracted);
 
   if (cleaned) {
     return cleaned;
@@ -50,7 +52,7 @@ export const extractTextFromBuffer = (buffer) => {
   const raw = buffer.toString('latin1');
   const matches = raw.match(/[\x20-\x7E]{3,}/g) || [];
   const fallback = matches.join(' ');
-  return fallback.replace(/\s+/g, ' ').trim();
+  return normalizeForJson(fallback);
 };
 
 const chunkText = (text = '', chunkSize = 1200) => {
@@ -83,7 +85,7 @@ export const buildCourseStorageFolder = async ({ course, instructorEmail }) => {
 };
 
 export const storeCourseChunks = async ({ course, documentId, documentName, text, instructorEmail }) => {
-  const cleaned = (text || '').trim();
+  const cleaned = normalizeForJson(text || '');
 
   if (!cleaned) {
     return { indexPath: null, chunkCount: 0 };
@@ -114,6 +116,15 @@ export const storeCourseChunks = async ({ course, documentId, documentName, text
   };
   await fs.writeFile(indexPath, JSON.stringify(payload, null, 2), 'utf-8');
   return { indexPath, chunkCount: chunks.length, folder };
+};
+
+export const shouldSearchCourseDocuments = async (question) => {
+  try {
+    return await runOllamaSearchIntent(question);
+  } catch (error) {
+    console.error('Search intent check failed:', error.message);
+    return { shouldSearch: true, reason: 'Defaulting to search after an error.' };
+  }
 };
 
 const readIndexFiles = async (indexPaths = []) => {

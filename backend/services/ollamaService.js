@@ -168,3 +168,24 @@ export const runOllamaRelevanceCheck = async ({ question, snippet, documentName,
     return { relevant: false, reason: 'Unable to parse analysis response' };
   }
 };
+
+export const runOllamaSearchIntent = async (question) => {
+  const model = process.env.RAG_ANALYSIS_MODEL || process.env.OLLAMA_MODEL || 'gpt-oss:20b';
+  const prompt = `You are an intent router deciding whether to consult course assignments or PDFs. Return JSON {"search":true|false,"reason":"short"}. Reply false for greetings or chit-chat that do not need document lookup. Question: ${question}`;
+
+  const content = await generateOllamaResponse(
+    [
+      { role: 'system', content: 'Respond only with JSON keys search and reason.' },
+      { role: 'user', content: prompt },
+    ],
+    model
+  );
+
+  try {
+    const parsed = JSON.parse(content);
+    const shouldSearch = Boolean(parsed.search);
+    return { shouldSearch, reason: parsed.reason || '' };
+  } catch (error) {
+    return { shouldSearch: true, reason: 'Defaulting to search after parse failure' };
+  }
+};

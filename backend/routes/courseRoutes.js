@@ -21,11 +21,15 @@ router.use(authenticate);
 router.get('/', async (req, res) => {
   const ownedOnly = req.query.scope === 'mine';
   const params = [];
-  const whereClause = ownedOnly ? 'WHERE c.owner_id = $1' : '';
+  const conditions = [];
 
   if (ownedOnly) {
     params.push(req.user.id);
+    conditions.push('c.owner_id = $1');
+    conditions.push('NOT c.archived');
   }
+
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   try {
     const { rows } = await pool.query(
@@ -115,6 +119,34 @@ router.get('/:courseId/documents', async (req, res) => {
   } catch (error) {
     console.error('List course documents error:', error);
     return res.status(500).json({ error: 'Unable to load documents' });
+  }
+});
+
+router.delete('/:courseId', async (req, res) => {
+  const courseId = Number(req.params.courseId);
+
+  if (Number.isNaN(courseId)) {
+    return res.status(400).json({ error: 'Invalid course ID' });
+  }
+
+  if (!isInstructor(req.user)) {
+    return res.status(403).json({ error: 'Only instructors can archive courses' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE courses SET archived = TRUE WHERE id = $1 AND owner_id = $2 AND archived = FALSE RETURNING id',
+      [courseId, req.user.id]
+    );
+
+    if (!result.rows.length) {
+      return res.status(404).json({ error: 'Course not found or already archived' });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Archive course error:', error);
+    return res.status(500).json({ error: 'Unable to archive this course' });
   }
 });
 

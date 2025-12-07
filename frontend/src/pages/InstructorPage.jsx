@@ -21,6 +21,16 @@ const InstructorPage = () => {
     crn: '',
   });
 
+  const archiveCourse = async (courseId) => {
+    setError('');
+    try {
+      await apiRequest(`/courses/${courseId}`, { method: 'DELETE' });
+      setCourses((prev) => prev.filter((course) => course.id !== courseId));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const fetchCourses = async () => {
     setLoading(true);
     try {
@@ -270,6 +280,12 @@ const InstructorPage = () => {
                       className="ml-auto text-xs text-gray-500 underline"
                     >
                       View files
+                    </button>
+                    <button
+                      onClick={() => archiveCourse(course.id)}
+                      className="text-xs text-red-500 hover:text-red-600 underline"
+                    >
+                      Remove course
                     </button>
                   </div>
 

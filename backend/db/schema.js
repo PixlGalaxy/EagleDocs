@@ -10,6 +10,7 @@ const ensureSchema = async () => {
       name VARCHAR(255) NOT NULL,
       description TEXT,
       owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      archived BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
     )
   `);
@@ -17,7 +18,8 @@ const ensureSchema = async () => {
   await pool.query(`
     ALTER TABLE courses
     ADD COLUMN IF NOT EXISTS academic_year INTEGER DEFAULT EXTRACT(YEAR FROM NOW()),
-    ADD COLUMN IF NOT EXISTS crn VARCHAR(32)
+    ADD COLUMN IF NOT EXISTS crn VARCHAR(32),
+    ADD COLUMN IF NOT EXISTS archived BOOLEAN DEFAULT FALSE
   `);
 
   await pool.query(`
