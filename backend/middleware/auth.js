@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import pool from '../db/pool.js';
 import { COOKIE_NAME } from '../utils/cookies.js';
+import { deriveRoleFromEmail } from '../utils/role.js';
 
 export const authenticate = async (req, res, next) => {
   const token = req.cookies?.[COOKIE_NAME];
@@ -20,7 +21,7 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid session' });
     }
 
-    req.user = rows[0];
+    req.user = { ...rows[0], role: deriveRoleFromEmail(rows[0].email) };
     next();
   } catch (error) {
     console.error('Auth error:', error.message);
