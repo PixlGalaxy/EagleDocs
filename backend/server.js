@@ -5,6 +5,9 @@ import cookie from 'cookie';
 import pool from './db/pool.js';
 import authRoutes from './routes/authRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
+import courseRoutes from './routes/courseRoutes.js';
+import ensureSchema from './db/schema.js';
+import { ensureStorage } from './config/storage.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,6 +22,9 @@ const allowedOrigins = process.env.CLIENT_ORIGIN
   : NODE_ENV === 'development'
     ? ['http://localhost:5173']
     : [];
+
+await ensureSchema();
+ensureStorage();
 
 app.use((req, res, next) => {
   req.cookies = req.headers?.cookie ? cookie.parse(req.headers.cookie) : {};
@@ -41,7 +47,7 @@ if (NODE_ENV !== 'development') {
   console.log('CORS middleware is disabled in development mode.');
 }
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '25mb' }));
 
 app.get('/api/dbtest', async (req, res) => {
   try {
@@ -59,6 +65,7 @@ app.get('/api/uptime', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/chats', chatRoutes);
+app.use('/api/courses', courseRoutes);
 
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
