@@ -51,6 +51,38 @@ const suggestChatTitle = async (question) => {
   }
 };
 
+const buildConversationWithContext = ({ conversation, ragContext, courseCode, sources }) => {
+  const baseSystem = {
+    role: 'system',
+    content:
+      'You are an academic assistant. Prefer the supplied course context when available, cite document names and page ranges, and keep code blocks/tables well formatted.',
+  };
+
+  if (!ragContext) {
+    return [baseSystem, ...conversation];
+  }
+
+  const sourceLines = (sources || [])
+    .map((source) => {
+      const pages = source.pageRange?.start === source.pageRange?.end
+        ? `page ${source.pageRange?.start}`
+        : `pages ${source.pageRange?.start}-${source.pageRange?.end}`;
+      return `- ${source.documentName || 'Document'} (${pages || 'pages n/a'})`;
+    })
+    .join('\n');
+
+  const contextBlock = [
+    sourceLines ? `Sources:\n${sourceLines}` : null,
+    'Context:',
+    ragContext,
+    'Use only the context above for course facts; answer briefly if unrelated.',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  return [baseSystem, { role: 'system', content: `Course ${courseCode || ''} context\n${contextBlock}` }, ...conversation];
+};
+
 router.use(authenticate);
 
 router.get('/', async (req, res) => {
@@ -247,17 +279,12 @@ router.post('/:chatId/messages/stream', async (req, res) => {
       }
     }
 
-    const enhancedConversation = ragContext
-      ? [
-          {
-            role: 'system',
-            content:
-              'You are an academic assistant. Prioritize the provided course context and cite matching document names and page hints when responding.',
-          },
-          { role: 'system', content: ragContext },
-          ...conversation,
-        ]
-      : conversation;
+    const enhancedConversation = buildConversationWithContext({
+      conversation,
+      ragContext,
+      courseCode,
+      sources,
+    });
 
     sendEvent(res, 'status', { message: 'Generating answer...' });
 
@@ -331,6 +358,7 @@ router.post('/:chatId/messages', async (req, res) => {
     conversation.push({ role: 'user', content });
 
     let ragContext = '';
+    let sources = [];
     const isFirstMessage = historyResult.rows.length === 0;
 
     if (courseCode) {
@@ -349,6 +377,7 @@ router.post('/:chatId/messages', async (req, res) => {
       if (intent.shouldSearch) {
         const contextResult = await buildCourseContext({ courseCode: courseResult.rows[0].code, question: content });
         ragContext = contextResult.context;
+        sources = contextResult.sources || [];
       }
     }
 
@@ -364,17 +393,12 @@ router.post('/:chatId/messages', async (req, res) => {
 
     let aiContent;
     try {
-      const enhancedConversation = ragContext
-        ? [
-            {
-              role: 'system',
-              content:
-                'Answer as an academic assistant. Prioritize the course context when available and preserve tables or code blocks in a clear format.',
-            },
-            { role: 'system', content: ragContext },
-            ...conversation,
-          ]
-        : conversation;
+      const enhancedConversation = buildConversationWithContext({
+        conversation,
+        ragContext,
+        courseCode,
+        sources,
+      });
       aiContent = await generateOllamaResponse(enhancedConversation);
     } catch (error) {
       await client.query('ROLLBACK');
