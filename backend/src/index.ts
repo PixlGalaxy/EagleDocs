@@ -118,7 +118,7 @@ async function main() {
     await pruneJobEvents(db);
   });
   scheduleExclusive(db, 'scheduler', LOCKS.scheduler, 60 * 1000, () => runDueSchedules(db, bus));
-  scheduleExclusive(db, 'job-reaper', LOCKS.jobReaper, 30 * 1000, () => reapOrphanJobs(db, bus));
+  scheduleExclusive(db, 'job-reaper', LOCKS.jobReaper, 10 * 1000, () => reapOrphanJobs(db, bus));
   // TEMP files expire 24 h after their last change.
   scheduleExclusive(db, 'temp-sweep', LOCKS.tempSweep, 15 * 60 * 1000, async () => {
     await sweepTemp(config.DATA_ROOT);

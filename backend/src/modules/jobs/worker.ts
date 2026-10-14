@@ -383,13 +383,16 @@ export class JobWorker {
   }
 }
 
+/** A job with no heartbeat (every 15 s) for this long lost its replica. With the reaper every 10 s, the user knows within a minute. */
+export const JOB_ORPHAN_SECONDS = 40;
+
 /** Leader task: jobs whose replica stopped sending heartbeats are marked interrupted. */
 export async function reapOrphanJobs(db: Db, bus: Bus): Promise<void> {
   const { rows } = await db.query<{ id: string }>(
     `UPDATE jobs SET status = 'interrupted', finished_at = now(), error = 'The server running this job stopped'
      WHERE status IN ('running', 'waiting_approval', 'waiting_mfa') AND heartbeat_at < now() - make_interval(secs => $1)
      RETURNING id`,
-    [NODE_OFFLINE_SECONDS],
+    [JOB_ORPHAN_SECONDS],
   );
   for (const { id } of rows) {
     const writer = new JobEventWriter(db, bus, id);
