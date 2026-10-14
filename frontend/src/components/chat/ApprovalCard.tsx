@@ -30,6 +30,18 @@ const ApprovalCard = ({ approval, onDecide }: Props) => {
     }
   };
 
+  // Once decided it is only a record: one compact line.
+  if (decided) {
+    const ok = approval.status === 'approved';
+    return (
+      <p className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs ${ok ? 'border-emerald-200 bg-emerald-50/60 text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-300'}`}>
+        {ok ? <Check size={13} className="shrink-0" aria-hidden="true" /> : <X size={13} className="shrink-0" aria-hidden="true" />}
+        <span className="font-medium">{ok ? t('approval.approved') : approval.status === 'rejected' ? t('approval.rejected') : t('approval.expired')}</span>
+        <span className="min-w-0 truncate">{approval.summary}</span>
+      </p>
+    );
+  }
+
   return (
     <div className="rounded-xl border border-amber-300 bg-amber-50/70 p-4 dark:border-amber-500/40 dark:bg-amber-500/10">
       <div className="flex items-start gap-3">
@@ -51,7 +63,7 @@ const ApprovalCard = ({ approval, onDecide }: Props) => {
 
           <p className="mt-3 text-sm font-medium text-amber-900 dark:text-amber-200">
             {/* Sending is the one action the product says EagleDocs should not take for the student. */}
-            {approval.tool_name.endsWith('.send') ? t('approval.warningSend') : t('approval.warning')}
+            {/(^|[._])send$/.test(approval.tool_name) ? t('approval.warningSend') : t('approval.warning')}
           </p>
 
           {decided ? (

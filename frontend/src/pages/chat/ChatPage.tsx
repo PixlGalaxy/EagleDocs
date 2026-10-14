@@ -97,7 +97,9 @@ const ChatPage = () => {
           case 'tool_call':
           case 'tool_result': {
             const others = prev.toolCalls.filter((call) => call.id !== event.call.id);
-            return { ...prev, toolCalls: [...others, event.call] };
+            // Text written before a tool and text written after it are separate paragraphs.
+            const content = event.type === 'tool_call' && prev.content && !/\n\s*$/.test(prev.content) ? `${prev.content}\n\n` : prev.content;
+            return { ...prev, content, toolCalls: [...others, event.call] };
           }
           case 'mfa_required':
             return { ...prev, status: 'waiting_mfa', mfa: event.message };
@@ -124,6 +126,8 @@ const ChatPage = () => {
         setApprovals((prev) => [...prev.filter((a) => a.id !== event.approval.id), event.approval]);
       } else if (event.type === 'done') {
         setMessages((prev) => [...prev, event.message]);
+        // Decided approvals were only context for the running turn; the tool list keeps the record.
+        setApprovals((prev) => prev.filter((a) => a.status === 'pending'));
         setLive(null);
         refreshChats();
         // Reload so corrections sit exactly where the agent took them.
@@ -359,6 +363,17 @@ const ChatPage = () => {
               <MessageView key={m.id} role={m.role} content={m.content} modelLabel={m.model_label} toolCalls={m.tool_calls} steer={m.steer ? 'applied' : undefined} />
             ))}
 
+            {/* Decided approvals shrink to one line above the answer in progress. */}
+            {approvals.some((a) => a.status !== 'pending') && (
+              <div className="space-y-1.5">
+                {approvals
+                  .filter((a) => a.status !== 'pending')
+                  .map((approval) => (
+                    <ApprovalCard key={approval.id} approval={approval} />
+                  ))}
+              </div>
+            )}
+
             {live && (
               <div aria-live="polite">
                 {live.status === 'queued' && (
@@ -393,9 +408,11 @@ const ChatPage = () => {
               </div>
             )}
 
-            {approvals.map((approval) => (
-              <ApprovalCard key={approval.id} approval={approval} onDecide={(approve) => decide(approval, approve)} />
-            ))}
+            {approvals
+              .filter((a) => a.status === 'pending')
+              .map((approval) => (
+                <ApprovalCard key={approval.id} approval={approval} onDecide={(approve) => decide(approval, approve)} />
+              ))}
 
             {error && (
               <Notice tone="danger" icon={CircleAlert}>
