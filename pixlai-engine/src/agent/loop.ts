@@ -47,6 +47,16 @@ const EMPTY_REPLY_NUDGE =
   'Your last reply arrived empty. If you meant to call a tool, call it again with valid JSON arguments (keep very long ' +
   'code shorter or split it into steps); otherwise write your answer.';
 
+/** Dropped connections and server hiccups: worth trying the same request again. */
+const RETRY_DELAYS_MS = [1_000, 4_000];
+
+function isTransient(err: unknown): boolean {
+  const e = err as { status?: unknown; code?: unknown; message?: unknown; cause?: { code?: unknown } };
+  if (typeof e?.status === 'number') return e.status >= 500 || (e.status === 429 && e.code !== 'usage_limit_reached');
+  const code = String(e?.cause?.code ?? e?.code ?? '');
+  return /^(ECONNRESET|ETIMEDOUT|EPIPE|ECONNREFUSED|EAI_AGAIN|UND_ERR_w+)$/.test(code) || /^(terminated|fetch failed|other side closed)$/i.test(String(e?.message ?? ''));
+}
+
 export interface Services {
   runs: RunStore;
   memory: MemoryStore;
@@ -231,6 +241,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       : undefined;
 
     let emptyRetried = false;
+    let transientRetries = 0;
     let nudge: string | null = null;
     for (;;) {
       if (signal.aborted) return finish('cancelled');
@@ -258,6 +269,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
           : () => undefined;
 
       let text = '';
+      let retrying = false;
       const calls: ToolCallRequest[] = [];
       try {
         const request = {
@@ -286,12 +298,24 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         }
       } catch (err) {
         if (signal.aborted) return finish('cancelled');
-        if (!steered) throw err;
+        if (!steered) {
+          const delay = RETRY_DELAYS_MS[transientRetries];
+          if (delay === undefined || !isTransient(err)) throw err;
+          // The connection dropped mid-answer: start this step over instead of failing the run.
+          transientRetries++;
+          services.logger.warn(`Run ${runId}: model call failed (${(err as Error).message}); retrying in ${delay} ms`);
+          if (text) await emit({ type: 'interrupted' });
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          steps--;
+          retrying = true;
+        }
       } finally {
         signal.removeEventListener('abort', onCancel);
         stopWatching();
       }
       if (signal.aborted) return finish('cancelled');
+      if (retrying) continue;
+      transientRetries = 0;
 
       if (steered) {
         // Keep what the user already saw as context, then loop: the steer is applied at the top.

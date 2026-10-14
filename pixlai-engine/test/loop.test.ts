@@ -228,3 +228,27 @@ test('approval text can be async and read host data', async () => {
   stores.runs.decide(stores.runs.created[0]!.id, 'approved');
   await run;
 });
+
+test('a dropped connection is retried; a real error is not', async () => {
+  const { agent, events, sink } = setup();
+  const dropped = new ScriptedProvider([
+    async function* () {
+      yield { type: 'text', text: 'Half an ans' };
+      throw new TypeError('terminated');
+    },
+    () => text('The whole answer'),
+  ]);
+  const result = await agent.run({ runId: 'r1', model: model(dropped), history: [user('hi')], sink });
+  assert.equal(result.content, 'The whole answer');
+  assert.equal(dropped.requests.length, 2);
+  assert.ok(events.some((e) => e.type === 'interrupted'), 'the half answer is cleared');
+
+  const refused = new ScriptedProvider([
+    () => {
+      throw Object.assign(new Error('bad request'), { status: 400 });
+    },
+  ]);
+  const failed = await agent.run({ runId: 'r2', model: model(refused), history: [user('hi')], sink });
+  assert.equal(failed.status, 'failed');
+  assert.equal(refused.requests.length, 1);
+});
