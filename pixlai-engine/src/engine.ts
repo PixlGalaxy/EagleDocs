@@ -1,4 +1,23 @@
-import type { Clock, EmbeddingPort, Logger, MemoryStore, RunStore, ScheduleStore, SharedRagSource, SkillStore, TextExtractor, WorkspacePort } from './ports.js';
+import type {
+  BrowserPolicy,
+  BrowserPort,
+  Clock,
+  EmbeddingPort,
+  FetchPort,
+  Logger,
+  MemoryStore,
+  RunStore,
+  SandboxPort,
+  ScheduleStore,
+  SearchPort,
+  SharedRagSource,
+  SkillStore,
+  TextExtractor,
+  WorkspacePort,
+} from './ports.js';
+import { BROWSER_TOOLS } from './browser/tools.js';
+import { CODE_TOOLS } from './tools/code.js';
+import { webDownload, webFetch, webSearch } from './web/tools.js';
 import { agentDelegate } from './agent/delegate.js';
 import { runLoop } from './agent/loop.js';
 import { CRON_TOOLS, SCHEDULED_RUN_NOTE } from './cron/tools.js';
@@ -19,6 +38,19 @@ export interface EngineOptions {
   embeddings?: EmbeddingPort;
   /** Read-only RAGs shared with users (e.g. built by an instructor). */
   sharedRags?: SharedRagSource;
+  /** Code execution in a per-user sandbox. Enables the code pack (`code_run`). */
+  sandbox?: SandboxPort;
+  /** Web search. Enables `web_search`. */
+  search?: SearchPort;
+  /** Downloads public URLs. Enables `web_fetch` (and, with a workspace, `web_download`). */
+  fetcher?: FetchPort;
+  /** A real browser per user. Enables the browser pack. */
+  browser?: BrowserPort;
+  /**
+   * Which browser actions run freely, need approval or are blocked, per page.
+   * Without it, every click, typing and key press asks the user.
+   */
+  browserPolicy?: BrowserPolicy;
   /** Who the agent is and how it behaves. The engine adds the user, memory, skills and rules after it. */
   basePrompt: string;
   /** The host's own tools (its APIs, files...). Built-in memory, skills, cron, time and delegation tools are added. */
@@ -76,6 +108,11 @@ export function createEngine(options: EngineOptions): Engine {
     // Packs that need host services only appear when the host provides them.
     ...(options.workspace ? FILES_TOOLS : []),
     ...(options.workspace && options.embeddings ? RAG_TOOLS : []),
+    ...(options.sandbox ? CODE_TOOLS : []),
+    ...(options.search ? [webSearch] : []),
+    ...(options.fetcher ? [webFetch] : []),
+    ...(options.fetcher && options.workspace ? [webDownload] : []),
+    ...(options.browser ? BROWSER_TOOLS : []),
   ];
   const builtins = packs.filter((t) => !disabled.has(t.name));
   const registry = new ToolRegistry([...builtins, ...(options.tools ?? [])]);
@@ -87,6 +124,11 @@ export function createEngine(options: EngineOptions): Engine {
     extractor: options.extractor,
     embeddings: options.embeddings,
     sharedRags: options.sharedRags,
+    sandbox: options.sandbox,
+    search: options.search,
+    fetcher: options.fetcher,
+    browser: options.browser,
+    browserPolicy: options.browserPolicy,
   };
   const engineLimits: Limits = { ...DEFAULT_LIMITS, ...options.limits };
 

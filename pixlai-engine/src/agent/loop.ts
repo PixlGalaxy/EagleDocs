@@ -1,4 +1,20 @@
-import type { Clock, EmbeddingPort, Logger, MemoryStore, RunStore, ScheduleStore, SharedRagSource, SkillStore, TextExtractor, WorkspacePort } from '../ports.js';
+import type {
+  BrowserPolicy,
+  BrowserPort,
+  Clock,
+  EmbeddingPort,
+  FetchPort,
+  Logger,
+  MemoryStore,
+  RunStore,
+  SandboxPort,
+  ScheduleStore,
+  SearchPort,
+  SharedRagSource,
+  SkillStore,
+  TextExtractor,
+  WorkspacePort,
+} from '../ports.js';
 import type { RunKind, SubagentOutcome, Tool, ToolContext } from '../tools/tool.js';
 import { ToolRegistry } from '../tools/tool.js';
 import type {
@@ -37,6 +53,11 @@ export interface Services {
   extractor?: TextExtractor;
   embeddings?: EmbeddingPort;
   sharedRags?: SharedRagSource;
+  sandbox?: SandboxPort;
+  search?: SearchPort;
+  fetcher?: FetchPort;
+  browser?: BrowserPort;
+  browserPolicy?: BrowserPolicy;
 }
 
 /** Shared by a run and all its subagents. */
@@ -161,10 +182,12 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
 
     const canUseTools = model.supportsTools && tools.list().length > 0;
     const latestUser = [...input.history].reverse().find((m) => m.role === 'user')?.content ?? '';
-    const [memories, skills, workspaceNote] = await Promise.all([
+    const [memories, skills, workspaceNote, sandboxNote] = await Promise.all([
       input.kind === 'subagent' ? Promise.resolve([]) : services.memory.forPrompt(user.id, latestUser, 20),
       input.kind === 'subagent' || !canUseTools ? Promise.resolve([]) : services.skills.list(user.id),
       canUseTools && services.workspace ? services.workspace.describe(user.id) : Promise.resolve(undefined),
+      // Must be cheap: the host answers from its config, it does not start a sandbox for this.
+      canUseTools && services.sandbox && tools.get('code_run') ? services.sandbox.describe(user.id) : Promise.resolve(undefined),
     ]);
     const system = buildSystemPrompt({
       basePrompt: input.kind === 'subagent' ? SUBAGENT_PROMPT : input.basePrompt,
@@ -172,7 +195,10 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       memories,
       skills,
       canUseTools,
-      extra: [workspaceNote && `## Workspace\n${workspaceNote}`, input.extraInstructions].filter(Boolean).join('\n\n') || undefined,
+      extra:
+        [workspaceNote && `## Workspace\n${workspaceNote}`, sandboxNote && `## Code sandbox\n${sandboxNote}`, input.extraInstructions]
+          .filter(Boolean)
+          .join('\n\n') || undefined,
       today: services.clock.now(),
     });
     if (!model.supportsTools && tools.list().length > 0 && depth === 0) {
@@ -308,7 +334,21 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     }
     if (signal.aborted) return finish('error', stringify({ error: 'Skipped: the run was cancelled' }));
 
-    if (tool.sideEffect === 'external') {
+    let gate: 'run' | 'approve' | { refuse: string } = 'run';
+    if (tool.gate) {
+      try {
+        gate = await tool.gate(call.args, { user, runKind: input.kind, host: input.host, browser: services.browser, browserPolicy: services.browserPolicy });
+      } catch (err) {
+        await emit({ type: 'tool_call', call: { ...view } });
+        return finish('error', stringify({ error: errorText(err) }));
+      }
+    }
+    if (typeof gate === 'object') {
+      await emit({ type: 'tool_call', call: { ...view } });
+      return finish('rejected', stringify({ error: gate.refuse }));
+    }
+
+    if (tool.sideEffect === 'external' || gate === 'approve') {
       const described = tool.describe?.(call.args) ?? { summary: tool.name };
       const approval = await services.runs.createApproval({
         runId,
@@ -353,6 +393,11 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       extractor: services.extractor,
       embeddings: services.embeddings,
       sharedRags: services.sharedRags,
+      sandbox: services.sandbox,
+      search: services.search,
+      fetcher: services.fetcher,
+      browser: services.browser,
+      browserPolicy: services.browserPolicy,
       complete: (system: string, prompt: string) => completeOnce(system, prompt, toolSignal),
       clock: services.clock,
       logger: services.logger,

@@ -1,4 +1,19 @@
-import type { Clock, EmbeddingPort, Logger, MemoryStore, ScheduleStore, SharedRagSource, SkillStore, TextExtractor, WorkspacePort } from '../ports.js';
+import type {
+  BrowserPolicy,
+  BrowserPort,
+  Clock,
+  EmbeddingPort,
+  FetchPort,
+  Logger,
+  MemoryStore,
+  SandboxPort,
+  ScheduleStore,
+  SearchPort,
+  SharedRagSource,
+  SkillStore,
+  TextExtractor,
+  WorkspacePort,
+} from '../ports.js';
 import type { EngineEvent, JsonSchema, Limits, UserProfile } from '../types.js';
 
 /** What a tool sees while it runs. */
@@ -24,6 +39,14 @@ export interface ToolContext {
   embeddings?: EmbeddingPort;
   /** Read-only RAGs other people built for this user. */
   sharedRags?: SharedRagSource;
+  /** Code execution in the user's sandbox (code pack). */
+  sandbox?: SandboxPort;
+  /** Web search and page downloads (web pack). */
+  search?: SearchPort;
+  fetcher?: FetchPort;
+  /** A real browser per user (browser pack) and the rule for acting on pages. */
+  browser?: BrowserPort;
+  browserPolicy?: BrowserPolicy;
   /**
    * One extra call to the run's own model, outside the conversation (no tools,
    * no history): for summarizing or answering from retrieved text without
@@ -46,6 +69,9 @@ export interface ToolContext {
 }
 
 export type RunKind = 'chat' | 'scheduled' | 'subagent';
+
+/** What a gate can look at: who runs, which kind of run, and the host's services. */
+export type GateContext = Pick<ToolContext, 'user' | 'runKind' | 'host' | 'browser' | 'browserPolicy'>;
 
 export interface SubagentOutcome {
   status: 'done' | 'failed' | 'cancelled';
@@ -74,6 +100,13 @@ export interface Tool<Args extends Record<string, unknown> = Record<string, unkn
   parallelSafe?: boolean;
   /** Overrides limits.toolTimeoutMs for tools that legitimately take minutes (downloads, indexing). */
   timeoutMs?: number;
+  /**
+   * Per-call decision, for tools whose risk depends on the arguments or the
+   * current state (e.g. clicking on one site is fine, on another it needs the
+   * user): `run`, `approve` (wait for the user like an external tool) or
+   * `{ refuse }` (fails with that message). Runs before `sideEffect` is checked.
+   */
+  gate?(args: Args, ctx: GateContext): Promise<'run' | 'approve' | { refuse: string }>;
   /** For approvals: one line saying what will happen, plus the fields worth showing. */
   describe?(args: Args): { summary: string; details?: Record<string, string> };
   run(args: Args, ctx: ToolContext): Promise<unknown>;

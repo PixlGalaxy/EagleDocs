@@ -2,7 +2,8 @@
 
 A multi-user agent engine for Node.js: a tool-calling loop with live steering,
 approvals for irreversible actions, parallel subagents, cron jobs, memory,
-skills, a per-user file workspace and RAG over documents. It has no runtime dependencies and knows nothing about HTTP, databases
+skills, a per-user file workspace, RAG over documents, code execution, web search
+and a real browser. It has no runtime dependencies and knows nothing about HTTP, databases
 or any product: you plug those in through small interfaces ("ports").
 
 It powers [EagleDocs](../README.md), but the folder is self-contained: copy
@@ -16,6 +17,7 @@ It powers [EagleDocs](../README.md), but the folder is self-contained: copy
 | [Concepts](docs/concepts.md) | The run loop, system prompt, events, run kinds, steering, approvals, cancellation, limits |
 | [Ports](docs/ports.md) | The contract of every port, in-memory references, SQL guidance for several processes, writing a `ModelProvider` |
 | [Tools](docs/tools.md) | `defineTool`, `ToolContext`, built-in tool catalog, `disableBuiltins`, `toolFilter`, planned tool packs |
+| [Code, web and browser](docs/code-web-browser.md) | `code_run` over a `SandboxPort`, `web_search`/`web_fetch`/`web_download`, the browser pack and its approval policy, tool gates |
 | [Workspace, files and RAG](docs/workspace-and-rag.md) | The files and rag packs, `WorkspacePort`, `TextExtractor`, `EmbeddingPort`, `SharedRagSource`, storage format |
 
 ## Quick start
@@ -59,6 +61,9 @@ const result = await agent.run({
 | `TextExtractor` | Optional. PDF, DOCX, PPTX... to text, page by page. |
 | `EmbeddingPort` | Optional. Text embeddings; with a workspace it enables the rag pack. |
 | `SharedRagSource` | Optional. Read-only RAGs built by someone else (e.g. an instructor). |
+| `SandboxPort` | Optional. Runs code where the workspace is the working tree. Enables `code_run`. |
+| `SearchPort`, `FetchPort` | Optional. Web search and safe downloads. Enable the web pack. |
+| `BrowserPort`, `BrowserPolicy` | Optional. A real browser per user with cookie profiles, and which actions run, ask or are blocked. |
 | `Logger`, `Clock` | Optional. |
 
 `InMemory*Store` classes implement every store for tests and single-process hosts.
@@ -81,6 +86,7 @@ const sendEmail = defineTool<{ to: string; body: string }>({
 - `parallelSafe: true`: read-only; neighbouring safe calls run at the same time.
 - `mainAgentOnly: true`: never offered to subagents.
 - `timeoutMs`: overrides the default 60 s for tools that legitimately take minutes.
+- `gate(args, ctx)`: per-call decision (`run`, `approve` or `{ refuse }`) when the risk depends on the arguments or the state.
 
 Built-in tools: `time_now`, `memory_add`, `memory_search`, `memory_remove`, `skills_load`, `skills_note`,
 `plan_update`, `ask_user`, `notify`, `calc`, `cron_create`, `cron_list`, `cron_update`, `cron_delete`,
@@ -90,7 +96,9 @@ Built-in tools: `time_now`, `memory_add`, `memory_search`, `memory_remove`, `ski
 With a `workspace`, the files pack adds `files_list`, `files_read`, `files_write`, `files_mkdir`,
 `files_move`, `files_delete`, `files_search` and `files_usage`. With `embeddings` as well, the rag pack
 adds `rag_list`, `rag_create`, `rag_add`, `rag_search`, `rag_ask` and `rag_delete`
-(see [Workspace, files and RAG](docs/workspace-and-rag.md)).
+(see [Workspace, files and RAG](docs/workspace-and-rag.md)). A `sandbox` adds `code_run`; `search` and `fetcher`
+add `web_search`, `web_fetch` and `web_download`; a `browser` adds the `browser_*` tools
+(see [Code, web and browser](docs/code-web-browser.md)).
 
 ## How a run works
 

@@ -14,6 +14,9 @@ The engine knows nothing about databases, HTTP or model vendors. You plug those 
 | `TextExtractor` | Optional: documents to text, page by page | none (EagleDocs' is a reference) |
 | `EmbeddingPort` | Optional: embeddings (with a workspace, enables the rag pack) | none |
 | `SharedRagSource` | Optional: read-only RAGs from others | none |
+| `SandboxPort` | Optional: code execution (enables `code_run`) | none |
+| `SearchPort`, `FetchPort` | Optional: web search and downloads (web pack) | none |
+| `BrowserPort`, `BrowserPolicy` | Optional: a browser per user and its action policy | none |
 | `Logger`, `Clock` | Optional: logging and time | console logger, `new Date()` |
 
 The `InMemory*` classes keep state in the process and lose it on restart. They are for tests, demos and single-process hosts.
@@ -272,3 +275,7 @@ Other things a multi-process host owns: routing cancellation to the process that
 ## Workspace, extractor, embeddings and shared RAGs
 
 These four optional ports have their own page: [Workspace, files and RAG](workspace-and-rag.md).
+
+## Sandbox, web and browser
+
+See [Code, web and browser](code-web-browser.md).

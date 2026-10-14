@@ -159,3 +159,110 @@ export interface SharedRagSource {
   list(userId: string): Promise<SharedRagInfo[]>;
   readFile(userId: string, id: string, file: 'manifest.json' | 'chunks.jsonl' | 'vectors.f32'): Promise<Buffer | null>;
 }
+
+// ------------------------------------------------------------------ sandbox (code pack)
+
+export type CodeLanguage = 'python' | 'node' | 'shell';
+
+export interface ExecRequest {
+  language: CodeLanguage;
+  code: string;
+  /** Working directory relative to the user's workspace root ("" is the root). */
+  cwd: string;
+  timeoutMs: number;
+}
+
+export interface ExecResult {
+  /** null when the process was killed (timeout, memory limit). */
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  durationMs: number;
+  /** Workspace files the run created or changed, when the host can tell. */
+  files?: { path: string; size: number }[];
+}
+
+/**
+ * Runs code for a user in an isolated environment where their workspace is
+ * the working tree (the same files the WorkspacePort serves). Isolation,
+ * resource limits and network policy are the host's job.
+ */
+export interface SandboxPort {
+  /** One line for the system prompt: what is installed and what is not allowed (e.g. "no network"). */
+  describe(userId: string): Promise<string>;
+  exec(userId: string, request: ExecRequest, signal: AbortSignal): Promise<ExecResult>;
+}
+
+// ------------------------------------------------------------------ web (web pack)
+
+export interface SearchHit {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/** Web search. Any backend: a metasearch engine (SearXNG), an API (Brave, Google CSE), a scraper. */
+export interface SearchPort {
+  search(query: string, options: { limit: number; language?: string; signal: AbortSignal }): Promise<SearchHit[]>;
+}
+
+export interface FetchedPage {
+  /** Final URL after redirects. */
+  url: string;
+  status: number;
+  contentType: string;
+  body: Buffer;
+}
+
+/**
+ * Downloads a public URL. The host enforces the network policy: block private
+ * addresses (SSRF), cap the size, follow redirects safely.
+ */
+export interface FetchPort {
+  fetch(url: string, options: { maxBytes: number; signal: AbortSignal }): Promise<FetchedPage>;
+}
+
+// ------------------------------------------------------------------ browser (browser pack)
+
+export interface BrowserPage {
+  url: string;
+  title: string;
+  /**
+   * The page as text for the model: an accessibility-tree outline where every
+   * interactive element carries a ref like [@e12] for click/type.
+   */
+  snapshot: string;
+}
+
+export type BrowserAction =
+  | { kind: 'click'; ref: string }
+  | { kind: 'type'; ref: string; text: string; submit: boolean }
+  | { kind: 'press'; key: string }
+  | { kind: 'scroll'; direction: 'up' | 'down' }
+  | { kind: 'back' };
+
+/**
+ * A real browser per user. `profile` separates cookie jars (e.g. "default",
+ * "outlook"); profiles persist between runs so logins survive.
+ */
+export interface BrowserPort {
+  open(userId: string, profile: string, url: string, signal: AbortSignal): Promise<BrowserPage>;
+  snapshot(userId: string, profile: string, signal: AbortSignal): Promise<BrowserPage>;
+  act(userId: string, profile: string, action: BrowserAction, signal: AbortSignal): Promise<BrowserPage>;
+  /** Saves a PNG of the visible page into the workspace and returns its path. */
+  screenshot(userId: string, profile: string, signal: AbortSignal): Promise<{ path: string }>;
+  /** URL of the open page, or null when the profile has no page open. */
+  currentUrl(userId: string, profile: string): Promise<string | null>;
+  close(userId: string, profile: string): Promise<void>;
+}
+
+/**
+ * Decides, per action and page, whether the agent may act freely, must ask the
+ * user, or may not act at all (e.g. a site that must stay read-only).
+ */
+export type BrowserPolicy = (
+  userId: string,
+  url: string,
+  action: BrowserAction['kind'],
+) => Promise<'allow' | 'approve' | { block: string }>;

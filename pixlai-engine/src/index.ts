@@ -1,12 +1,16 @@
 export { createEngine, type Engine, type EngineOptions, type RunOptions, type UserAgent } from './engine.js';
 export * from './types.js';
 export type * from './ports.js';
-export { defineTool, ToolRegistry, type Tool, type ToolContext, type RunKind, type SubagentOutcome } from './tools/tool.js';
+export { defineTool, ToolRegistry, type Tool, type ToolContext, type GateContext, type RunKind, type SubagentOutcome } from './tools/tool.js';
 export { BUILTIN_TOOLS } from './tools/builtin.js';
 export { CORE_TOOLS, askUser, calc, notify, planUpdate } from './tools/core.js';
 export { evaluate } from './tools/calc.js';
 export { FILES_TOOLS, RAG_DIR, cleanPath } from './tools/files.js';
 export { RAG_TOOLS } from './rag/tools.js';
+export { CODE_TOOLS, codeRun, clipMiddle } from './tools/code.js';
+export { WEB_TOOLS, webDownload, webFetch, webSearch } from './web/tools.js';
+export { htmlToText, decodeEntities } from './web/html.js';
+export { BROWSER_TOOLS } from './browser/tools.js';
 export { chunkPages, ragId, UserRags, type RagManifest, type RagSource, type Chunk } from './rag/store.js';
 export { CRON_TOOLS, SCHEDULED_RUN_NOTE } from './cron/tools.js';
 export { isValidTimezone, nextRun, parseSchedule, planSchedule, MIN_INTERVAL_MS, type ParsedSchedule } from './cron/schedule.js';

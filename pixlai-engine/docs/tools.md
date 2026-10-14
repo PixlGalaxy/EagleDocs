@@ -35,6 +35,7 @@ const sendEmail = defineTool<{ to: string; body: string }>({
 | `untrusted` | `boolean` (optional) | The result comes from a third party. It is wrapped in `<untrusted_content>` and the model is told to treat it as data. |
 | `parallelSafe` | `boolean` (optional) | Read-only and independent of other calls: may run at the same time as neighbouring safe calls |
 | `mainAgentOnly` | `boolean` (optional) | Never offered to subagents |
+| `gate` | `(args, ctx) => Promise<'run' | 'approve' | { refuse: string }>` (optional) | Per-call decision before running: `approve` waits for the user like an external tool, `refuse` fails with the message. `ctx` has `user`, `runKind`, `host`, `browser`, `browserPolicy`. The browser pack uses it ([Code, web and browser](code-web-browser.md)). |
 | `timeoutMs` | `number` (optional) | Overrides `limits.toolTimeoutMs` for this tool, for work that legitimately takes minutes (downloads, indexing) |
 | `describe` | `(args) => { summary: string; details?: Record<string, string> }` (optional) | For approvals: one line saying what will happen, plus fields worth showing. Without it the summary is the tool name. |
 | `run` | `(args, ctx) => Promise<unknown>` | Does the work and returns any JSON-serializable value |
@@ -58,6 +59,7 @@ Return values: a string is sent as is, anything else with `JSON.stringify(value,
 | `limits` | The effective `Limits` |
 | `emit(event)` | Sends an `EngineEvent` to the sink (for example a `notice`). Fire and forget. |
 | `memory`, `skills`, `schedules` | The stores, for tools that need them |
+| `sandbox?`, `search?`, `fetcher?`, `browser?`, `browserPolicy?` | The code, web and browser ports (see [Code, web and browser](code-web-browser.md)) |
 | `workspace?`, `extractor?`, `embeddings?`, `sharedRags?` | The optional ports given to `createEngine` (see [Workspace, files and RAG](workspace-and-rag.md)) |
 | `complete(system, prompt)` | One extra model call with the run's model and no tools; returns the text. For tools that summarize or answer from data (`rag_ask` uses it). Counts toward the run's cancellation. |
 | `clock`, `logger` | The injected clock and logger |
@@ -178,12 +180,12 @@ await agent.run({
 | core | `plan_update`, `ask_user`, `notify`, `time_now`, `calc` | Notifications (optional) | Available now (see above) |
 | memory v2 | `memory_add/search/update/remove` with categories and per-category limits | `MemoryStore` | Planned |
 | skills v2 | `skills_list`, `skills_load`, `skills_read_file`, `skills_note`, `skills_create`, `skills_patch` (the agent writes and improves skills) | `SkillStore` | Planned |
-| web | `web_search`, `web_fetch` (HTML to clean text), `web_extract` (fields by schema) | `SearchPort`, fetch | Planned |
+| web | `web_search`, `web_fetch` (HTML to clean text), `web_download` | `SearchPort`, `FetchPort` | Available ([docs](code-web-browser.md)); `web_extract` planned |
 | files | `files_list/read/write/mkdir/move/delete/search/usage` in the user's workspace | `WorkspacePort` | Available ([docs](workspace-and-rag.md)); `files_patch` planned |
 | rag | `rag_list/create/add/search/ask/delete`, plus read-only shared RAGs | `EmbeddingPort`, `TextExtractor`, `SharedRagSource` | Available ([docs](workspace-and-rag.md)) |
 | documents | Read PDF, DOCX, PPTX into text (through `TextExtractor`); XLSX and CSV as tables; generate documents | `TextExtractor`, `WorkspacePort` | Reading available through the host's extractor; tables and generation planned |
-| code | `code_run` (Python, Node, shell in a sandbox, with timeout and bounded output) | `SandboxPort` | Planned |
-| browser | `browser_open/click/type/read/screenshot` for sites without an API | `BrowserPort` | Planned |
+| code | `code_run` (Python, Node, shell in a sandbox, with timeout and bounded output) | `SandboxPort` | Available ([docs](code-web-browser.md)) |
+| browser | `browser_open/snapshot/click/type/press/scroll/back/screenshot/close`, cookie profiles, approval policy | `BrowserPort`, `BrowserPolicy` | Available ([docs](code-web-browser.md)) |
 | data | Queries over CSV and JSON (filter, group, chart to image) | `SandboxPort` | Planned |
 | http | `http_request` to APIs the host allows (allowlist) | Host config | Planned |
 | mcp client | Connect external MCP servers and expose their tools | `McpPort` | Planned |
