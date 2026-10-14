@@ -168,6 +168,13 @@ check('collapsed requirement blocks were expanded', /ACG 2071 Managerial Account
 r = await user.req('GET', '/browser');
 check('separate cookie profiles for mail and Degree Works', ['school-outlook', 'school-degreeworks'].every((p) => r.json.profiles.includes(p)), JSON.stringify(r.json.profiles));
 
+// ---------------------------------------------------------------- expired session: a dead-end "Sign out" page
+await fetch(`${SCHOOL_HOST}/__expire`, { method: 'POST' });
+events = await user.ask(chat.id, '[inbox]', async (e) => {
+  if (e.type === 'mfa_required') await fetch(`${SCHOOL_HOST}/__approve`, { method: 'POST' });
+});
+check('an expired session that ends on a Sign out page signs in again', result(events, 'email_inbox')?.status === 'done', result(events, 'email_inbox')?.result_preview);
+
 // ---------------------------------------------------------------- Settings "Test" button (a real sign-in)
 const ssoRow = async () => {
   const res = await user.req('GET', '/connections');

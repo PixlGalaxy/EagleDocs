@@ -38,7 +38,7 @@ interface StepContext {
 
 /** What the page in front of us is, decided inside the page (see DETECT). */
 interface PageState {
-  kind: 'target' | 'pick_account' | 'email' | 'password' | 'username_password' | 'kmsi' | 'duo_choose' | 'duo_trust' | 'mfa' | 'bad_credentials' | 'blocked' | 'unknown';
+  kind: 'target' | 'signed_out' | 'pick_account' | 'email' | 'password' | 'username_password' | 'kmsi' | 'duo_choose' | 'duo_trust' | 'mfa' | 'bad_credentials' | 'blocked' | 'unknown';
   detail?: string;
   title?: string;
   host?: string;
@@ -72,6 +72,8 @@ const password = find('input[type="password"]');
 const loginfmt = find('input[name="loginfmt"], input[type="email"]');
 if (find('#KmsiCheckboxField') || /stay signed in\\?/i.test(text)) return out('kmsi');
 if (/approve sign.?in request|enter the number|authenticator app|verify your identity/i.test(text) && !password) return out('mfa', 'microsoft');
+// Microsoft's "Sign out" page (an expired session ends here) leads nowhere: open the service again.
+if (/^sign(ed)? out$/i.test(document.title.trim()) || /you signed out of your account|you have (been )?signed out/i.test(text)) return out('signed_out');
 // Microsoft "Pick an account": a tile per remembered account.
 if (/(^|\\.)(microsoftonline|live|microsoft)\\.com$/.test(host) && (/pick an account|choose an account/i.test(text) || find('#tilesHolder'))) return out('pick_account');
 // Microsoft's first page already carries a (hidden or prefilled) password box: the email box decides.
@@ -85,7 +87,7 @@ if (password) {
   return out(user && !user.value ? 'username_password' : 'password');
 }
 if (loginfmt) return out('email');
-return out('unknown', text.slice(0, 160));
+return out('unknown', text.replace(/\\s+/g, ' ').trim().slice(0, 400));
 `;
 
 /** Outlook's message list, deduplicated (its accessibility wrappers repeat rows). */
@@ -199,6 +201,7 @@ export class SchoolService {
     let mfaSince = 0;
     let unknownStreak = 0;
     let typedPassword = 0;
+    let reopened = 0;
     const doneWaiting = () => {
       if (mfaSince) {
         ctx.emit({ type: 'status', status: 'running' });
@@ -216,6 +219,10 @@ export class SchoolService {
           doneWaiting();
           if (connectionId) await this.db.query(`UPDATE connections SET status = 'ok', last_ok_at = now(), last_error = NULL WHERE id = $1`, [connectionId]);
           return;
+        case 'signed_out':
+          if (++reopened > 2) throw new SchoolError('stuck', 'The school keeps signing EagleDocs out.');
+          await this.run(userId, 'goto', { profile, url }, ctx.signal);
+          continue;
         case 'pick_account': {
           // Our account's tile when Microsoft lists it, otherwise "Use another account" (then the email step).
           const email = (await credentials()).email;
@@ -274,10 +281,18 @@ export class SchoolService {
           doneWaiting();
           throw await this.fail(connectionId, new SchoolError('blocked', 'The school blocked this sign-in by policy (not a password problem).'));
         case 'unknown':
-          if (++unknownStreak > 6) {
+          // An interstitial page we do not know: opening the service again often gets past it.
+          if (++unknownStreak === 3 && reopened < 2) {
+            reopened++;
+            await this.run(userId, 'goto', { profile, url }, ctx.signal);
+            continue;
+          }
+          if (unknownStreak > 6) {
             doneWaiting();
             logger.warn(`School sign-in stuck for ${userId} on ${state.host}: ${state.title}`);
-            throw new SchoolError('stuck', `The sign-in stopped at a page EagleDocs does not recognize ("${state.title ?? state.host}").`);
+            // What the page says, so the agent can tell the student (e.g. a notice from the school). Page text, not instructions.
+            const says = state.detail ? ` The page says: "${state.detail.replace(/"/g, "'")}"` : '';
+            throw new SchoolError('stuck', `The sign-in stopped at a page EagleDocs does not recognize ("${state.title ?? state.host}" at ${state.host}).${says}`);
           }
           break;
       }

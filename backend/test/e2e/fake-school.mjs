@@ -2,12 +2,14 @@
 // The sandbox browser reaches it at http://host.docker.internal:<port>.
 //   POST /__approve   approves the pending Duo push (the test plays the student's phone)
 //   GET  /__sent      what was "sent", as JSON
+//   POST /__expire    ends every session; the next mail visit lands on a dead-end "Sign out" page (like Microsoft)
 // Password: correct-horse. Anything else is rejected.
 import http from 'http';
 
 const port = Number(process.argv[2] || 4997);
 const PASSWORD = 'correct-horse';
 const sessions = new Set();
+let signOutNext = false;
 const pending = new Map(); // sid -> { approved, next }
 const sent = [];
 const inbox = [
@@ -45,6 +47,16 @@ http
       for (const p of pending.values()) p.approved = true;
       res.end('{"approved":true}');
       return;
+    }
+    if (url.pathname === '/__expire') {
+      sessions.clear();
+      signOutNext = true;
+      res.end('{"expired":true}');
+      return;
+    }
+    if (signOutNext && url.pathname.startsWith('/mail')) {
+      signOutNext = false;
+      return send(200, page('Sign out', '<p>You signed out of your account. It is a good idea to close all browser windows.</p>'));
     }
     if (url.pathname === '/__sent') {
       res.writeHead(200, { 'content-type': 'application/json' });
