@@ -286,6 +286,44 @@ export class SchoolService {
     throw new SchoolError('stuck', 'The sign-in took too many steps.');
   }
 
+  /**
+   * Settings "Test": opens the school email the way the agent does, signing in
+   * (with Duo when the school asks) only if the saved session expired. Runs in
+   * the background; the connection row shows progress (meta.testing,
+   * waiting_mfa) and ends as ok or error with the reason.
+   */
+  async testSignIn(userId: string): Promise<void> {
+    const { connectionId } = await this.account(userId);
+    const claimed = await this.db.query(
+      // A test left behind by a restart counts as over after a few minutes.
+      `UPDATE connections SET meta = meta || jsonb_build_object('testing', now()::text), last_error = NULL, updated_at = now()
+       WHERE id = $1 AND (NOT meta ? 'testing' OR (meta->>'testing')::timestamptz < now() - interval '6 minutes') RETURNING id`,
+      [connectionId],
+    );
+    if (!claimed.rowCount) return; // A test is already running.
+    const ctx: StepContext = {
+      signal: AbortSignal.timeout(MFA_WAIT_MS + 2 * 60_000),
+      emit: (event) => {
+        if (event.type === 'status' && (event.status === 'waiting_mfa' || event.status === 'running')) {
+          void this.db
+            .query(`UPDATE connections SET status = $2 WHERE id = $1`, [connectionId, event.status === 'waiting_mfa' ? 'waiting_mfa' : 'untested'])
+            .catch(() => undefined);
+        }
+      },
+    };
+    void (async () => {
+      try {
+        await this.open(userId, 'outlook', (await this.urls(userId)).outlook, ctx);
+        await this.db.query(`UPDATE connections SET status = 'ok', last_ok_at = now(), last_error = NULL WHERE id = $1`, [connectionId]);
+      } catch (err) {
+        const message = err instanceof SchoolError ? err.message : `The test could not finish: ${(err as Error).message}`;
+        await this.db.query(`UPDATE connections SET status = 'error', last_error = $2 WHERE id = $1`, [connectionId, message]).catch(() => undefined);
+      } finally {
+        await this.db.query(`UPDATE connections SET meta = meta - 'testing' WHERE id = $1`, [connectionId]).catch(() => undefined);
+      }
+    })();
+  }
+
   private async fail(connectionId: string | null, err: SchoolError): Promise<SchoolError> {
     if (connectionId) await this.db.query(`UPDATE connections SET status = 'error', last_error = $2 WHERE id = $1`, [connectionId, err.message]);
     return err;

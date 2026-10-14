@@ -878,5 +878,8 @@
   "chat.backgroundStop": "Detener",
   "chat.backgroundStopping": "Deteniendo…",
   "chat.backgroundDone": "Reportes de los agentes de ayuda ({count})",
-  "chat.backgroundFailed": "{count} no terminaron"
+  "chat.backgroundFailed": "{count} no terminaron",
+  "connections.testing": "Probando…",
+  "connections.ssoTestRunning": "Abriendo tu correo de la universidad para comprobar el acceso. Si la sesión venció, EagleDocs vuelve a iniciar sesión.",
+  "connections.ssoTestDuo": "Aprueba el inicio de sesión en tu teléfono (Duo)."
 }

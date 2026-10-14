@@ -6,6 +6,7 @@ const LLM = process.env.E2E_LLM ?? 'http://localhost:4999/v1';
 const SCHOOL_HOST = process.env.E2E_SCHOOL ?? 'http://localhost:4997';
 // What the sandbox browser (inside Docker) uses to reach the fake school on this machine.
 const SCHOOL = process.env.E2E_SCHOOL_FROM_SANDBOX ?? 'http://host.docker.internal:4997';
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let failures = 0;
 const check = (label, cond, extra = '') => {
   console.log(`${cond ? 'PASS' : 'FAIL'} ${label}${extra ? ` (${extra})` : ''}`);
@@ -166,6 +167,38 @@ r = await user.req('GET', `/files/download?path=${encodeURIComponent(auditFile?.
 check('collapsed requirement blocks were expanded', /ACG 2071 Managerial Accounting - STILL NEEDED/.test(r.raw) && /Choose 2 from/.test(r.raw), r.raw.slice(0, 200));
 r = await user.req('GET', '/browser');
 check('separate cookie profiles for mail and Degree Works', ['school-outlook', 'school-degreeworks'].every((p) => r.json.profiles.includes(p)), JSON.stringify(r.json.profiles));
+
+// ---------------------------------------------------------------- Settings "Test" button (a real sign-in)
+const ssoRow = async () => {
+  const res = await user.req('GET', '/connections');
+  return (res.json.connections ?? res.json).find((c) => c.kind === 'sso');
+};
+/** Starts a test and follows the row until it ends, approving Duo when asked if `approve`. */
+const testSso = async (approve) => {
+  const seen = new Set();
+  const started = await user.req('POST', `/connections/${(await ssoRow()).id}/test`);
+  seen.add(started.json.meta?.testing ? 'testing' : started.json.status);
+  for (let i = 0; i < 90; i++) {
+    const row = await ssoRow();
+    if (row.status === 'waiting_mfa') {
+      seen.add('waiting_mfa');
+      if (approve) await fetch(`${SCHOOL_HOST}/__approve`, { method: 'POST' });
+    }
+    if (!row.meta.testing) return { row, seen };
+    await sleep(1000);
+  }
+  return { row: await ssoRow(), seen };
+};
+let tested = await testSso(false);
+check('Test with a live session: ok without Duo', tested.row.status === 'ok' && tested.seen.has('testing') && !tested.seen.has('waiting_mfa'), [...tested.seen].join(','));
+await user.req('DELETE', '/browser/profiles/school-outlook');
+tested = await testSso(true);
+check('Test after signing out: signs in again with Duo', tested.row.status === 'ok' && tested.seen.has('waiting_mfa'), [...tested.seen].join(','));
+await user.req('PUT', '/connections/sso', { email: 'dev.student@uni.example', password: 'wrong-password' });
+await user.req('DELETE', '/browser/profiles/school-outlook');
+tested = await testSso(false);
+check('Test with a wrong password: error with the reason', tested.row.status === 'error' && /password/.test(tested.row.last_error ?? ''), tested.row.last_error);
+check('the test never shows the password', !JSON.stringify(tested.row).includes('wrong-password'));
 
 console.log(failures === 0 ? '\nALL PASSED' : `\n${failures} FAILED`);
 process.exit(failures ? 1 : 0);

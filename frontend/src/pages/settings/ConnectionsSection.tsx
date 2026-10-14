@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
-import { BookOpen, CircleAlert, ExternalLink, GraduationCap, Loader2, Lock, Mail, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react';
+import { BookOpen, CircleAlert, ExternalLink, GraduationCap, Loader2, Lock, Mail, RefreshCw, ShieldCheck, Smartphone, Trash2 } from 'lucide-react';
 import { connectionsApi } from '../../api/account';
 import { ApiError } from '../../api/client';
 import type { Connection, ConnectionsInfo } from '../../api/types';
@@ -13,6 +13,7 @@ import { PasswordInput } from '../auth/AuthShell';
 export function StatusBadge({ connection }: { connection: Connection | undefined }) {
   const { t, language } = useI18n();
   if (!connection) return <Badge>{t('connections.notConnected')}</Badge>;
+  if (connection.meta.testing && connection.status !== 'waiting_mfa') return <Badge tone="accent">{t('connections.testing')}</Badge>;
   if (connection.status === 'ok')
     return (
       <Badge tone="success">
@@ -96,6 +97,19 @@ const ConnectionsSection = () => {
       .then(setInfo)
       .catch((err) => setLoadError(err instanceof ApiError ? err.message : t('common.networkError')));
   }, [t]);
+
+  // A school sign-in test runs in the background (it may wait on Duo): follow it until it ends.
+  const testing = Boolean(info?.connections.some((c) => c.meta.testing));
+  useEffect(() => {
+    if (!testing) return;
+    const timer = setInterval(() => {
+      connectionsApi
+        .list()
+        .then(setInfo)
+        .catch(() => undefined);
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [testing]);
 
   const find = (kind: Connection['kind']) => info?.connections.find((c) => c.kind === kind);
   const upsert = (c: Connection) => setInfo((prev) => (prev ? { ...prev, connections: [...prev.connections.filter((x) => x.id !== c.id), c] } : prev));
@@ -218,6 +232,26 @@ const ConnectionsSection = () => {
           {ssoConn && (
             <div className="mt-5 flex flex-wrap gap-2">
               <ConnectionActions connection={ssoConn} onChange={upsert} onRemoved={() => drop(ssoConn.id)} />
+            </div>
+          )}
+          {ssoConn?.meta.testing && (
+            <div className="mt-4">
+              {ssoConn.status === 'waiting_mfa' ? (
+                <Notice tone="accent" icon={Smartphone}>
+                  <p className="font-medium">{t('connections.ssoTestDuo')}</p>
+                </Notice>
+              ) : (
+                <Notice tone="neutral" icon={Loader2}>
+                  {t('connections.ssoTestRunning')}
+                </Notice>
+              )}
+            </div>
+          )}
+          {ssoConn && !ssoConn.meta.testing && ssoConn.status === 'error' && ssoConn.last_error && (
+            <div className="mt-4">
+              <Notice tone="danger" icon={CircleAlert}>
+                {ssoConn.last_error}
+              </Notice>
             </div>
           )}
 

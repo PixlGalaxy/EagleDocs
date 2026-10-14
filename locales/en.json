@@ -878,5 +878,8 @@
   "chat.backgroundStop": "Stop",
   "chat.backgroundStopping": "Stopping…",
   "chat.backgroundDone": "Reports from the helper agents ({count})",
-  "chat.backgroundFailed": "{count} did not finish"
+  "chat.backgroundFailed": "{count} did not finish",
+  "connections.testing": "Testing…",
+  "connections.ssoTestRunning": "Opening your school email to check the sign-in. If the session expired, EagleDocs signs in again.",
+  "connections.ssoTestDuo": "Approve the sign-in on your phone (Duo)."
 }

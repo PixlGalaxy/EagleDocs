@@ -8,6 +8,7 @@ import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAdmin, requireAuth } from '../auth/session.middleware.js';
 import { toView, type ConnectionsService } from '../connections/connections.service.js';
+import { SchoolError, type SchoolService } from '../school/school.service.js';
 import type { ModelCatalog } from './catalog.js';
 import { discoverOllamaModels } from './providers/ollama.js';
 import { listOpenAIModels } from './providers/openai-compat.js';
@@ -16,7 +17,7 @@ import { TIERS, type ModelTier } from './router.js';
 const UUID = /^[0-9a-f-]{36}$/i;
 
 /** Settings -> Models and Connections, for every signed-in user. */
-export function createModelRoutes(db: Db, catalog: ModelCatalog, connections: ConnectionsService) {
+export function createModelRoutes(db: Db, catalog: ModelCatalog, connections: ConnectionsService, school: SchoolService) {
   const models = Router();
   const conns = Router();
   models.use(requireAuth);
@@ -67,6 +68,16 @@ export function createModelRoutes(db: Db, catalog: ModelCatalog, connections: Co
   conns.post('/:id/test', async (req: AppRequest, res) => {
     const id = routeParam(req.params.id);
     if (!UUID.test(id)) throw notFound();
+    const row = await connections.get(req.user!.id, id);
+    if (row.kind === 'sso') {
+      // A real sign-in, possibly waiting on Duo: it runs in the background and the row shows its progress.
+      await school.testSignIn(req.user!.id).catch(async (err: Error) => {
+        if (!(err instanceof SchoolError)) throw err;
+        await connections.markError(row.id, err.message);
+      });
+      res.json(toView(await connections.get(req.user!.id, id)));
+      return;
+    }
     res.json(toView(await connections.test(req.user!.id, id)));
   });
 

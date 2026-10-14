@@ -144,6 +144,7 @@ async function main() {
     embeddings,
     sandboxes,
     sandbox,
+    school,
   });
   const onListening = () => {
     logger.info(`Node ${config.NODE_ID} listening on ${config.HOST ?? 'all interfaces'}:${config.PORT} (${config.NODE_ENV})`);

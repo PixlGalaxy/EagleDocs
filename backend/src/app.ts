@@ -34,6 +34,7 @@ import type { AdminEmbeddings } from './engine/documents.js';
 import type { SandboxManager } from './modules/sandbox/manager.js';
 import { createBrowserRoutes, createSandboxAdminRoutes } from './modules/sandbox/sandbox.routes.js';
 import type { SandboxTools } from './engine/sandbox.js';
+import type { SchoolService } from './modules/school/school.service.js';
 
 export interface AppDeps {
   db: Db;
@@ -55,10 +56,11 @@ export interface AppDeps {
   embeddings: AdminEmbeddings;
   sandboxes: SandboxManager;
   sandbox: SandboxTools | undefined;
+  school: SchoolService;
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -105,7 +107,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/chats', chatsRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/approvals', approvalsRouter);
-  const { models, conns } = createModelRoutes(db, catalog, connections);
+  const { models, conns } = createModelRoutes(db, catalog, connections, school);
   const { canvasRouter, connectionRouter } = createCanvasRoutes(canvas, connections);
   app.use('/api/models', models);
   app.use('/api/canvas', canvasRouter);
