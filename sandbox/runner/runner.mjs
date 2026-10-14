@@ -282,6 +282,47 @@ const browserRoutes = {
     await s.page.screenshot({ path: join(WORKSPACE, rel), timeout: 20_000 });
     return { path: rel };
   },
+  // ---- Backend-only steps for scripted flows (school sign-in, mail, audits). The model never calls these;
+  // credentials typed with `fill` come straight from the backend and are never returned or logged.
+  async goto(body) {
+    const url = new URL(String(body.url));
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new HttpError(400, 'Only http and https URLs');
+    const s = await session(body.profile, true);
+    await s.page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 45_000 }).catch((err) => {
+      // A login redirect chain can abort the first navigation; what matters is where we end up.
+      if (!/ERR_ABORTED|frame was detached/i.test(err.message)) throw err;
+    });
+    await settle(s.page);
+    return { url: s.page.url(), title: await s.page.title().catch(() => '') };
+  },
+  /** Runs `script` (a function body receiving `arg`) in the page and returns its JSON result. */
+  async eval(body) {
+    const s = await session(body.profile, false);
+    const result = await s.page.evaluate(([source, arg]) => new Function('arg', source)(arg), [String(body.script), body.arg ?? null]);
+    return { url: s.page.url(), result: result ?? null };
+  },
+  /** Fills the first visible element matching `selector`; optionally presses Enter. */
+  async fill(body) {
+    const s = await session(body.profile, false);
+    const el = s.page.locator(String(body.selector)).filter({ visible: true }).first();
+    await el.fill(String(body.value ?? ''), { timeout: 10_000 });
+    if (body.submit) await el.press('Enter');
+    await s.page.waitForTimeout(400);
+    return { ok: true };
+  },
+  /** Clicks the first visible element matching `selector`. */
+  async tap(body) {
+    const s = await session(body.profile, false);
+    await s.page.locator(String(body.selector)).filter({ visible: true }).first().click({ timeout: 10_000 });
+    await s.page.waitForTimeout(400);
+    return { ok: true };
+  },
+  async wait(body) {
+    const s = await session(body.profile, false);
+    await s.page.waitForTimeout(Math.min(Math.max(Number(body.ms) || 1000, 100), 15_000));
+    await settle(s.page);
+    return { url: s.page.url(), title: await s.page.title().catch(() => '') };
+  },
   async url(body) {
     const s = sessions.get(body.profile);
     return { url: s ? s.page.url() : null };
