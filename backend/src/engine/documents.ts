@@ -15,11 +15,7 @@ export const documentExtractor: TextExtractor = {
       const { text } = await extractText(pdf, { mergePages: false });
       return { pages: (text as string[]).map((page) => page.replace(/[ \t]+\n/g, '\n').trim()) };
     }
-    if (ext === 'docx') {
-      const mammoth = await import('mammoth');
-      const { value } = await mammoth.extractRawText({ buffer: data });
-      return { pages: [value] };
-    }
+    if (ext === 'docx') return { pages: await docxPages(data) };
     if (ext === 'pptx') return { pages: await pptxSlides(data) };
     if (ext === 'html' || ext === 'htm') return { pages: [stripHtml(data.toString('utf8'))] };
     return null;
@@ -37,6 +33,47 @@ function drawingText(xml: string): string {
     .join('\n')
     .replace(/&(amp|lt|gt|quot|apos);/g, (_, e: string) => XML_ENTITIES[e]!)
     .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)));
+}
+
+const decodeXml = (text: string) =>
+  text
+    .replace(/&(amp|lt|gt|quot|apos);/g, (_, e: string) => XML_ENTITIES[e]!)
+    .replace(/&#x([0-9a-f]+);/gi, (_, n: string) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)));
+
+/**
+ * Word: the body's paragraphs in order (tables cell by cell, a row per line),
+ * split into pages at explicit page breaks so citations can point at a page.
+ */
+async function docxPages(data: Buffer): Promise<string[]> {
+  const { default: JSZip } = await import('jszip');
+  const zip = await JSZip.loadAsync(data);
+  const xml = await zip.file('word/document.xml')?.async('string');
+  if (!xml) return [];
+  const body = xml.replace(/<w:tc\b[^>]*>/g, '').replace(/<\/w:tc>/g, '\t').replace(/<\/w:tr>/g, '</w:p>');
+  const pages: string[] = [];
+  let lines: string[] = [];
+  for (const para of body.split(/<\/w:p>/)) {
+    // Paragraph text: runs, tabs and line breaks, in order.
+    const parts = [...para.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>|<w:(tab|br|cr)\b([^>]*)\/>|\t/g)];
+    let line = '';
+    let pageBreak = false;
+    for (const m of parts) {
+      if (m[1] !== undefined) line += m[1];
+      else if (m[2] === 'tab' || m[0] === '\t') line += '\t';
+      else if (/w:type="page"/.test(m[3] ?? '')) pageBreak = true;
+      else line += '\n';
+    }
+    // Indentation tabs are layout; tabs between words separate columns or table cells.
+    const text = decodeXml(line).replace(/^\t+|\t+$/g, '').replace(/\t+/g, ' | ');
+    if (text.trim()) lines.push(text);
+    if (pageBreak && lines.length) {
+      pages.push(lines.join('\n'));
+      lines = [];
+    }
+  }
+  if (lines.length) pages.push(lines.join('\n'));
+  return pages;
 }
 
 /** PowerPoint: one page per slide (in order), with the speaker notes after the slide text. */

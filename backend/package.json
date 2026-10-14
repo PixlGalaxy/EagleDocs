@@ -17,7 +17,6 @@
     "cookie-parser": "^1.4.7",
     "express": "^5.3.0",
     "jszip": "^3.10.2",
-    "mammoth": "^1.13.0",
     "nodemailer": "^10.1.0",
     "pg": "^8.23.1",
     "pixlai-engine": "file:../pixlai-engine",
