@@ -1,0 +1,11 @@
+{
+  "name": "eagledocs-sandbox-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Runs inside each user's sandbox container: code execution and a persistent browser over HTTP.",
+  "main": "runner.mjs",
+  "dependencies": {
+    "playwright-core": "1.63.0"
+  }
+}

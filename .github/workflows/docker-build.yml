@@ -63,3 +63,13 @@ jobs:
           build-args: |
             APP_IMAGE_REF=${{ env.IMAGE_TAG }}
             APP_IMAGE_REVISION=${{ github.sha }}
+
+      # The per-user sandbox (Chromium + Python + runner); the app pulls it on first use.
+      - name: 🧪 Build and Push Sandbox Image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sandbox
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ env.REPOSITORY_OWNER }}/eagledocs-sandbox:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ env.REPOSITORY_OWNER }}/eagledocs-sandbox:${{ github.sha }}
