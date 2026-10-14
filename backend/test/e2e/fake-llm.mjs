@@ -54,6 +54,18 @@ const server = http.createServer(async (req, res) => {
   if (lastUser.includes('[code]') && request.tools) {
     return call('code_run', { language: 'python', code: "open('e2e-out.txt','w').write('made in the sandbox')\nprint(6 * 7)" });
   }
+  // School accounts: [inbox], [mailsearch words], [mailread ID], [draft], [send ID], [audit].
+  if (lastUser.includes('[inbox]') && request.tools) return call('email_inbox', { limit: 10 });
+  const mailSearch = /\[mailsearch ([^\]]+)\]/.exec(lastUser);
+  if (mailSearch && request.tools) return call('email_search', { query: mailSearch[1] });
+  const mailRead = /\[mailread (\S+)\]/.exec(lastUser);
+  if (mailRead && request.tools) return call('email_read', { id: mailRead[1] });
+  if (lastUser.includes('[draft]') && request.tools) {
+    return call('email_draft', { to: ['prof.martinez@uni.example'], subject: 'E2E question about exam 2', body: 'Hello Professor, is exam 2 still on Thursday? Thank you.' });
+  }
+  const sendDraft = /\[send (\S+)\]/.exec(lastUser);
+  if (sendDraft && request.tools) return call('email_send', { draft_id: sendDraft[1] });
+  if (lastUser.includes('[audit]') && request.tools) return call('degreeworks_audit', {});
   // Web: [search words...] and [fetch URL].
   const search = /\[search ([^\]]+)\]/.exec(lastUser);
   if (search && request.tools) return call('web_search', { query: search[1] });

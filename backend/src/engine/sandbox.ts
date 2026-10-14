@@ -28,6 +28,11 @@ export class SandboxTools implements SandboxPort, BrowserPort {
     ].join(' ');
   }
 
+  /** A runner step for the backend's own scripted flows (school sign-in, mail, Degree Works). */
+  runner<T>(userId: string, path: string, body: unknown, signal: AbortSignal, timeoutMs = BROWSER_MS): Promise<T> {
+    return this.call<T>(userId, path, body, timeoutMs, signal);
+  }
+
   private async call<T>(userId: string, path: string, body: unknown, timeoutMs: number, signal: AbortSignal): Promise<T> {
     for (let attempt = 0; ; attempt++) {
       const handle = await this.manager.ensure(userId);

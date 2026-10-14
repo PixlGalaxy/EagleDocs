@@ -24,6 +24,8 @@ import { pruneNodes, startHeartbeat } from './nodes/nodes.js';
 import { createApp } from './app.js';
 import { setupEngine } from './engine/setup.js';
 import { SandboxManager } from './modules/sandbox/manager.js';
+import { SandboxTools } from './engine/sandbox.js';
+import { SchoolService } from './modules/school/school.service.js';
 import { DiskWorkspace, sweepTemp } from './engine/workspace.js';
 import { AdminEmbeddings } from './engine/documents.js';
 import { ChatService } from './modules/chat/chat.service.js';
@@ -100,8 +102,10 @@ async function main() {
   // Before the engine: code and browser tools are offered only when sandboxes work.
   const sandboxes = new SandboxManager(db, bus, settings, config);
   await sandboxes.start().catch((err) => logger.warn(`Sandboxes are off: ${(err as Error).message}`));
-  const engine = await setupEngine(db, bus, { workspace, embeddings, sandboxes, searxngUrl: config.SEARXNG_URL });
-  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, t, concurrency: config.JOB_WORKERS });
+  const sandbox = sandboxes.enabled ? new SandboxTools(sandboxes, workspace) : undefined;
+  const school = new SchoolService(db, connections, sandbox);
+  const engine = await setupEngine(db, bus, { workspace, embeddings, sandbox, searxngUrl: config.SEARXNG_URL });
+  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, school, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
   // Leader tasks: whichever replica gets the advisory lock runs each cycle.
@@ -139,6 +143,7 @@ async function main() {
     workspace,
     embeddings,
     sandboxes,
+    sandbox,
   });
   const onListening = () => {
     logger.info(`Node ${config.NODE_ID} listening on ${config.HOST ?? 'all interfaces'}:${config.PORT} (${config.NODE_ENV})`);

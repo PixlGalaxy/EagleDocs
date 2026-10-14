@@ -13,6 +13,7 @@ import { JobEventWriter } from './event-writer.js';
 import type { CanvasService } from '../canvas/canvas.service.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import type { AdminEmbeddings } from '../../engine/documents.js';
+import type { SchoolService } from '../school/school.service.js';
 
 const POLL_MS = 2000;
 const HEARTBEAT_MS = 15_000;
@@ -48,6 +49,7 @@ export interface WorkerDeps {
   canvas: CanvasService;
   workspace: DiskWorkspace;
   embeddings: AdminEmbeddings;
+  school: SchoolService;
   t: Translate;
   concurrency: number;
 }
@@ -186,7 +188,12 @@ export class JobWorker {
           ...(user.institution_name ? [`Studies at ${user.institution_name}`] : []),
           ...(user.major ? [`Major: ${user.major}`] : []),
         ],
-      }, { host: { canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace } } });
+      }, {
+        host: {
+          canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace },
+          school: { service: this.deps.school, userId: user.id, workspace: this.deps.workspace },
+        },
+      });
       // RAG tools compare this with each collection's model.
       await this.deps.embeddings.refresh();
 
@@ -202,6 +209,12 @@ export class JobWorker {
           emit: (event: EngineEvent) => {
             if (event.type === 'delta') liveText += event.text;
             if (event.type === 'tool_call' || event.type === 'interrupted') liveText = '';
+            // Waiting on the student's phone (Duo) or back to work: the job row shows it (Admin, Chats list).
+            if (event.type === 'status' && (event.status === 'waiting_mfa' || event.status === 'running')) {
+              void this.deps.db
+                .query(`UPDATE jobs SET status = $2 WHERE id = $1 AND status IN ('running', 'waiting_mfa')`, [job.id, event.status])
+                .catch(() => undefined);
+            }
             // The approval card also needs to know its job and state.
             if (event.type === 'approval_required') {
               events.emit({ type: 'approval_required', approval: { ...event.approval, job_id: job.id, status: 'pending' } });

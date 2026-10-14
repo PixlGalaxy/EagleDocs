@@ -6,8 +6,8 @@ import { PgMemoryStore, PgRunStore, PgScheduleStore, PgSkillStore } from './stor
 import { CANVAS_TOOLS } from './tools/canvas.js';
 import { AdminEmbeddings, documentExtractor } from './documents.js';
 import type { DiskWorkspace } from './workspace.js';
-import type { SandboxManager } from '../modules/sandbox/manager.js';
-import { SandboxTools } from './sandbox.js';
+import type { SandboxTools } from './sandbox.js';
+import { SCHOOL_TOOLS } from './tools/school.js';
 import { eagledocsBrowserPolicy } from './browser-policy.js';
 import { SafeFetch, WebSearch } from './web.js';
 
@@ -30,16 +30,16 @@ const engineLogger: Logger = {
 export async function setupEngine(
   db: Db,
   bus: Bus,
-  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandboxes: SandboxManager; searxngUrl: string | undefined },
+  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandbox: SandboxTools | undefined; searxngUrl: string | undefined },
 ): Promise<Engine> {
-  // Code and browser exist only when Docker and the sandbox image are there.
-  const sandbox = host.sandboxes.enabled ? new SandboxTools(host.sandboxes, host.workspace) : undefined;
+  // Code, browser and school accounts exist only when Docker and the sandbox image are there.
+  const sandbox = host.sandbox;
   const runs = new PgRunStore(db, bus);
   await runs.start();
   return createEngine({
     stores: { runs, memory: new PgMemoryStore(db), skills: new PgSkillStore(db), schedules: new PgScheduleStore(db) },
     basePrompt: EAGLEDOCS_PROMPT,
-    tools: [...CANVAS_TOOLS],
+    tools: [...CANVAS_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
     workspace: host.workspace,
     extractor: documentExtractor,
     embeddings: host.embeddings,
