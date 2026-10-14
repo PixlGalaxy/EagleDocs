@@ -1,4 +1,4 @@
-import type { ModelChunk, ModelProvider, ModelRequest, ResolvedModel } from 'pixlai-engine';
+import type { HelperModels, ModelChunk, ModelProvider, ModelRequest, ResolvedModel } from 'pixlai-engine';
 import type { Db } from '../../db/pool.js';
 import { many, maybe } from '../../db/pool.js';
 import type { SettingsService } from '../../db/settings.js';
@@ -181,6 +181,31 @@ export class ModelCatalog {
     const tagged = models.find((m) => m.tags.includes(tier)) ?? models.find((m) => TIER_FALLBACK[tier].some((t) => m.tags.includes(t)));
     const chosen = tagged ?? models[0];
     return chosen ? `eagledocs:${chosen.id}` : null;
+  }
+
+  /**
+   * The models the agent may give its helpers: the user's models that can use
+   * tools. A tag ("fast") picks the user's Auto choice for it, else a model
+   * with that tag from the same source as the main one, else any.
+   */
+  async helperModels(userId: string, parentRef: string): Promise<HelperModels> {
+    const options = (await this.options(userId)).filter((o) => o.supports_tools);
+    const prefs = await this.prefs(userId);
+    const parentProvider = parseRef(parentRef)?.provider;
+    const pick = (tier: ModelTier): string | undefined => {
+      const mapped = prefs.auto_map[tier];
+      if (mapped && options.some((o) => o.ref === mapped)) return mapped;
+      const tagged = options.filter((o) => o.tags.includes(tier));
+      return (tagged.find((o) => o.provider === parentProvider) ?? tagged[0])?.ref;
+    };
+    return {
+      list: options.map((o) => ({ ref: o.ref, label: `${o.source_label} ${o.label}`, tags: o.tags })),
+      resolve: async (choice) => {
+        const ref = (TIERS as readonly string[]).includes(choice) ? pick(choice as ModelTier) : choice;
+        if (!ref || !options.some((o) => o.ref === ref)) return null;
+        return (await this.build(userId, ref, null)).model;
+      },
+    };
   }
 
   /** Picks and builds the model for a run. `auto` routes by heuristics. */

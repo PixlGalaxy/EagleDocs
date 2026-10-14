@@ -223,12 +223,15 @@ export class JobWorker {
       });
       // RAG tools compare this with each collection's model.
       await this.deps.embeddings.refresh();
+      // The agent can match each helper to a model the user has (fast for lookups, smart for analysis).
+      const helperModels = await catalog.helperModels(user.id, resolution.model.ref);
 
       if (job.kind === 'delegate') {
         const { reports, usage } = await agent.runSubagents({
           runId: job.id,
           model: resolution.model,
           tasks,
+          helperModels,
           signal: controller.signal,
           sink: {
             emit: (event: EngineEvent) => {
@@ -256,6 +259,7 @@ export class JobWorker {
         history,
         signal: controller.signal,
         kind: job.kind === 'scheduled' ? 'scheduled' : 'chat',
+        helperModels,
         ...(job.kind === 'chat' && { startBackground: (list: DelegateTask[]) => this.queueBackground(job, chatId, user.id, list) }),
         sink: {
           emit: (event: EngineEvent) => {

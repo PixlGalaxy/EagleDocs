@@ -20,7 +20,7 @@ Against Docker (`docker-compose.dev.yml` with `NODE_ENV=development` on both nod
 `E2E_A=http://localhost:8080/api E2E_B=http://localhost:8080/api E2E_LLM=http://host.docker.internal:4999/v1 node test/e2e/chat.e2e.mjs`
 
 The fake model reacts to keywords in the last user message: `[time]` and `[memory]` call tools, `[delegate]` and `[delegatebg]`
-send two helper agents (waiting, or in the background), `[slow]` streams
+send two helper agents on the fast and smart models (waiting, or in the background), `[slow]` streams
 slowly (add `[veryslow]` for ~40 s), `[SILENT]` answers `[SILENT]`, a steer gets `corrected: <text>`.
 
 ## Canvas (`canvas.e2e.mjs`)

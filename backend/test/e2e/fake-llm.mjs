@@ -54,7 +54,7 @@ const server = http.createServer(async (req, res) => {
   }
   const delegate = /\[delegate(bg)?\]/.exec(lastUser);
   if (delegate && request.tools) {
-    return call('agent_delegate', { tasks: [{ goal: 'helper one [time]' }, { goal: 'helper two' }], background: Boolean(delegate[1]) });
+    return call('agent_delegate', { tasks: [{ goal: 'helper one [time]', model: 'fast' }, { goal: 'helper two', model: 'smart' }], background: Boolean(delegate[1]) });
   }
   if (lastUser.includes('[time]') && request.tools) return call('time_now', {});
   if (lastUser.includes('[canvas]') && request.tools) return call('canvas_briefing', { days: 7 });

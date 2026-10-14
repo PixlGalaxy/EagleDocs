@@ -164,6 +164,8 @@ r = await user.req(A, 'POST', `/chats/${delegateChat}/messages`, { content: 'spl
 events = await user.stream(B, delegateChat, r.json.job_id);
 const helperSteps = events.filter((e) => e.type === 'subagent' && e.event.type === 'tool_result');
 check('helpers report their steps live', helperSteps.some((e) => e.index === 0 && e.event.call.name === 'time_now'), events.map((e) => e.type).join(','));
+const helperModelOf = (i) => events.find((e) => e.type === 'subagent' && e.index === i)?.model_label;
+check('each helper runs on the model the agent picked', helperModelOf(0) === 'EagleDocs Mini' && helperModelOf(1) === 'EagleDocs Smart', `${helperModelOf(0)} / ${helperModelOf(1)}`);
 check("helpers' tokens are not stored as events", !events.some((e) => e.type === 'subagent' && e.event.type === 'delta'));
 check('waiting delegation answers with the reports', /tool said/.test(events.at(-1).message?.content ?? ''), events.at(-1).message?.content);
 
