@@ -19,14 +19,23 @@ import { BROWSER_TOOLS } from './browser/tools.js';
 import { CODE_TOOLS } from './tools/code.js';
 import { webDownload, webFetch, webSearch } from './web/tools.js';
 import { agentDelegate, taskBrief, toReport, type DelegateReport, type DelegateTask } from './agent/delegate.js';
-import { runLoop, subagentTools } from './agent/loop.js';
+import { helperModel, runLoop, subagentTools } from './agent/loop.js';
 import { CRON_TOOLS, SCHEDULED_RUN_NOTE } from './cron/tools.js';
 import { BUILTIN_TOOLS } from './tools/builtin.js';
 import { CORE_TOOLS } from './tools/core.js';
 import { FILES_TOOLS } from './tools/files.js';
 import { RAG_TOOLS } from './rag/tools.js';
 import { ToolRegistry, type RunKind, type Tool } from './tools/tool.js';
-import { DEFAULT_LIMITS, type ChatMessage, type EventSink, type Limits, type ResolvedModel, type RunResult, type UserProfile } from './types.js';
+import {
+  DEFAULT_LIMITS,
+  type ChatMessage,
+  type EventSink,
+  type HelperModels,
+  type Limits,
+  type ResolvedModel,
+  type RunResult,
+  type UserProfile,
+} from './types.js';
 
 export interface EngineOptions {
   stores: { runs: RunStore; memory: MemoryStore; skills: SkillStore; schedules: ScheduleStore };
@@ -80,6 +89,11 @@ export interface RunOptions {
    * (see `backgroundReportMessage`). Without it, delegation always waits.
    */
   startBackground?: (tasks: DelegateTask[]) => Promise<void>;
+  /**
+   * Models the agent may give its helpers (agent_delegate `model`): listed in its
+   * prompt with guidance to match the model to the work. Without it, helpers use the run's model.
+   */
+  helperModels?: HelperModels;
 }
 
 export interface SubagentRunOptions {
@@ -90,6 +104,8 @@ export interface SubagentRunOptions {
   sink: EventSink;
   signal?: AbortSignal;
   toolFilter?: (tool: Tool) => boolean;
+  /** Resolves each task's `model`; tasks without one use `model`. */
+  helperModels?: HelperModels;
 }
 
 /** One user's agent: isolated memory, skills, schedules and limits. Cheap to create per request. */
@@ -184,6 +200,7 @@ export function createEngine(options: EngineOptions): Engine {
             signal: run.signal ?? new AbortController().signal,
             extraInstructions: kind === 'scheduled' ? SCHEDULED_RUN_NOTE : undefined,
             startBackground: run.startBackground,
+            helperModels: run.helperModels,
           });
         },
         async runSubagents(run) {
@@ -194,6 +211,7 @@ export function createEngine(options: EngineOptions): Engine {
           const reports = await Promise.all(
             run.tasks.slice(0, limits.maxParallelSubagents).map(async (task, index) => {
               const goal = String(task.goal ?? '').trim();
+              const childModel = await helperModel(run.helperModels, task.model, run.model, services.logger);
               const child = await runLoop({
                 services,
                 basePrompt: options.basePrompt,
@@ -204,9 +222,13 @@ export function createEngine(options: EngineOptions): Engine {
                 runId: run.runId,
                 kind: 'subagent',
                 depth: 1,
-                model: run.model,
+                model: childModel,
                 history: [{ role: 'user', content: taskBrief(task) }],
-                sink: { emit: (event) => run.sink.emit({ type: 'subagent', parent_call_id: run.runId, index, task: goal.slice(0, 200), event }) },
+                helperModels: run.helperModels,
+                sink: {
+                  emit: (event) =>
+                    run.sink.emit({ type: 'subagent', parent_call_id: run.runId, index, task: goal.slice(0, 200), model_label: childModel.label, event }),
+                },
                 signal,
                 extraInstructions: 'You are a helper at depth 1, working in the background.',
                 budget,
@@ -214,6 +236,7 @@ export function createEngine(options: EngineOptions): Engine {
               return toReport(goal, {
                 status: child.status === 'done' ? 'done' : child.status === 'cancelled' ? 'cancelled' : 'failed',
                 summary: child.status === 'done' ? child.content : `The helper ${child.status}: ${child.error ?? 'no answer'}`,
+                model: childModel.label,
               });
             }),
           );

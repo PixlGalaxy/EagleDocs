@@ -65,12 +65,13 @@ export interface ToolContext {
    */
   askUser?: (question: string) => void;
   /** Starts a subagent (only set when delegation is allowed at this depth). */
-  spawnSubagent?: (goal: string, index: number) => Promise<SubagentOutcome>;
+  /** `model`: a ref or tag from the host's helper models; the parent's model when absent or unknown. */
+  spawnSubagent?: (goal: string, index: number, model?: string) => Promise<SubagentOutcome>;
   /**
    * Hands tasks to the host to run in the background (agent_delegate with
    * `background`). Only for the main agent, and only when the host supports it.
    */
-  startBackground?: (tasks: { goal: string; context?: string }[]) => Promise<void>;
+  startBackground?: (tasks: { goal: string; context?: string; model?: string }[]) => Promise<void>;
 }
 
 export type RunKind = 'chat' | 'scheduled' | 'subagent';
@@ -87,6 +88,8 @@ export interface ApprovalText {
 export interface SubagentOutcome {
   status: 'done' | 'failed' | 'cancelled';
   summary: string;
+  /** Label of the model the helper ran on. */
+  model?: string;
 }
 
 export interface Tool<Args extends Record<string, unknown> = Record<string, unknown>> {

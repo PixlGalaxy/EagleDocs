@@ -21,6 +21,7 @@ import type {
   ChatMessage,
   EngineEvent,
   EventSink,
+  HelperModels,
   Limits,
   ResolvedModel,
   RunResult,
@@ -29,7 +30,7 @@ import type {
   UserProfile,
 } from '../types.js';
 import { compactIfNeeded } from './compact.js';
-import { SUBAGENT_PROMPT } from './delegate.js';
+import { helperModelsNote, SUBAGENT_PROMPT } from './delegate.js';
 import { buildSystemPrompt, toProviderMessages, wrapUntrusted } from './prompt.js';
 
 /** Characters of one tool result kept in the context. */
@@ -98,7 +99,25 @@ export interface LoopInput {
   signal: AbortSignal;
   extraInstructions?: string;
   budget?: Budget;
-  startBackground?: (tasks: { goal: string; context?: string }[]) => Promise<void>;
+  startBackground?: (tasks: { goal: string; context?: string; model?: string }[]) => Promise<void>;
+  /** Models the agent may give its helpers. */
+  helperModels?: HelperModels;
+}
+
+/** The model a helper runs on: the one chosen when the host knows it, else its parent's. */
+export async function helperModel(
+  models: HelperModels | undefined,
+  choice: string | undefined,
+  parent: ResolvedModel,
+  logger: Logger,
+): Promise<ResolvedModel> {
+  if (!choice || !models) return parent;
+  const chosen = await models.resolve(choice).catch((err: Error) => {
+    logger.warn(`Helper model "${choice}" failed to load: ${err.message}`);
+    return null;
+  });
+  if (!chosen) logger.warn(`Helper model "${choice}" is not available; using ${parent.label}`);
+  return chosen ?? parent;
 }
 
 /** What a subagent at `depth` may use: read-only tools, and delegation only while depth allows it. */
@@ -219,7 +238,12 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       skills,
       canUseTools,
       extra:
-        [workspaceNote && `## Workspace\n${workspaceNote}`, sandboxNote && `## Code sandbox\n${sandboxNote}`, input.extraInstructions]
+        [
+          workspaceNote && `## Workspace\n${workspaceNote}`,
+          sandboxNote && `## Code sandbox\n${sandboxNote}`,
+          canUseTools && tools.get('agent_delegate') && input.helperModels?.list.length && helperModelsNote(input.helperModels.list),
+          input.extraInstructions,
+        ]
           .filter(Boolean)
           .join('\n\n') || undefined,
       today: services.clock.now(),
@@ -463,7 +487,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         },
       }),
       ...(depth < limits.maxSubagentDepth && {
-        spawnSubagent: (goal: string, index: number) => spawn(goal, index, call.id),
+        spawnSubagent: (goal: string, index: number, choice?: string) => spawn(goal, index, call.id, choice),
       }),
       ...(depth === 0 && input.startBackground && { startBackground: input.startBackground }),
     };
@@ -501,22 +525,28 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
   }
 
   /** A child run with a fresh context, read-only tools and its events tagged for the parent. */
-  async function spawn(goal: string, index: number, parentCallId: string): Promise<SubagentOutcome> {
+  async function spawn(goal: string, index: number, parentCallId: string, choice?: string): Promise<SubagentOutcome> {
     const childDepth = depth + 1;
     const childTools = subagentTools(tools, childDepth, limits);
+    const childModel = await helperModel(input.helperModels, choice, model, services.logger);
     const child = await runLoop({
       ...input,
+      model: childModel,
       tools: childTools,
       kind: 'subagent',
       depth: childDepth,
       history: [{ role: 'user', content: goal }],
       extraInstructions: `You are a helper at depth ${childDepth}.`,
       budget,
-      sink: { emit: (event) => sink.emit({ type: 'subagent', parent_call_id: parentCallId, index, task: goal.slice(0, 200), event }) },
+      sink: {
+        emit: (event) =>
+          sink.emit({ type: 'subagent', parent_call_id: parentCallId, index, task: goal.slice(0, 200), model_label: childModel.label, event }),
+      },
     });
     return {
       status: child.status,
       summary: child.status === 'done' ? child.content : `The helper ${child.status}: ${child.error ?? 'no answer'}`,
+      model: childModel.label,
     };
   }
 }

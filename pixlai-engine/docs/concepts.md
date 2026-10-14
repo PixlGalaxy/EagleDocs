@@ -182,6 +182,12 @@ engine.forUser(user, { limits: { maxSteps: 30, toolTimeoutMs: 120_000 } });
 
 `agent_delegate` takes up to `maxParallelSubagents` tasks (`{ goal, context? }`) and runs each as a child loop with a fresh context, read-only tools and the fixed helper prompt. Children report back with a short text (cut to 8,000 characters). Their events reach the sink wrapped in `subagent` events. They cannot ask the user, cannot trigger approvals and cannot write memory or schedules. They can delegate further until `maxSubagentDepth`.
 
+### Choosing a model per helper
+
+Pass `helperModels` to `run` (and to `runSubagents`) to let the agent match each helper to the work. It is a list of `{ ref, label, tags }` plus `resolve(choice)`, which turns a ref or a tag such as `fast` into a `ResolvedModel`, or returns `null` when it is not available. The list goes into the system prompt (exported as `helperModelsNote`) with guidance: `fast` for simple lookups and short summaries, `smart` for reasoning, analysis and careful writing, `code` for code, and `smart` when unsure. Each task can then set `model`. A helper without one, or with an unknown one, runs on its parent's model.
+
+Each `subagent` event carries `model_label`, and each report says which model wrote it. Tokens from every helper count against the run's shared `maxTokens` budget, whatever model they ran on.
+
 ### Background delegation
 
 By default the main agent waits for its helpers. When the host passes `startBackground` to `run`, the model may call `agent_delegate` with `background: true` for long work. The tool hands the tasks to the host and returns at once, and the agent tells the user it will report back. Without `startBackground`, `background` is ignored and the run waits as usual.

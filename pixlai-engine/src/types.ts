@@ -75,6 +75,22 @@ export interface ResolvedModel {
   contextWindow: number;
 }
 
+/** A model the main agent may give a helper (agent_delegate `model`). */
+export interface HelperModel {
+  /** What the agent passes as `model`. */
+  ref: string;
+  label: string;
+  /** e.g. "fast", "smart", "code": the agent can also pass a tag instead of a ref. */
+  tags: string[];
+}
+
+/** The models a host offers for helpers, and how it turns a choice into a model. */
+export interface HelperModels {
+  list: HelperModel[];
+  /** A ref from `list` or a tag. null when it is not available: the helper then uses its parent's model. */
+  resolve(choice: string): Promise<ResolvedModel | null>;
+}
+
 // ------------------------------------------------------------------ events
 
 /** `waiting_mfa`: a tool waits for the user to approve a sign-in on another device (Duo, Authenticator). Hosts emit it. */
@@ -110,7 +126,7 @@ export type EngineEvent =
   /** A steer arrived while the model was writing: that answer was cut short and the model starts again with the correction. */
   | { type: 'interrupted' }
   /** An event from a subagent, tagged with the delegate call that started it. */
-  | { type: 'subagent'; parent_call_id: string; index: number; task: string; event: EngineEvent }
+  | { type: 'subagent'; parent_call_id: string; index: number; task: string; model_label: string; event: EngineEvent }
   | { type: 'usage'; input_tokens: number; output_tokens: number }
   | { type: 'notice'; message: string }
   /** The agent's visible plan for this task (plan_update). Each event replaces the previous plan. */

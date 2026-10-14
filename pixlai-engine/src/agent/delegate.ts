@@ -1,4 +1,5 @@
 import { defineTool, type SubagentOutcome } from '../tools/tool.js';
+import type { HelperModel } from '../types.js';
 
 /** Characters of each subagent's answer handed back to the parent. */
 export const SUBAGENT_SUMMARY_CHARS = 8000;
@@ -7,6 +8,8 @@ export const SUBAGENT_SUMMARY_CHARS = 8000;
 export interface DelegateTask {
   goal: string;
   context?: string;
+  /** A ref or tag from the host's helper models (see `helperModelsNote`). */
+  model?: string;
 }
 
 /** A helper's report, as the parent agent reads it. */
@@ -14,6 +17,8 @@ export interface DelegateReport {
   goal: string;
   status: SubagentOutcome['status'];
   summary: string;
+  /** The model it ran on. */
+  model?: string;
 }
 
 /** What a helper is told: the goal, plus the facts it needs from the conversation. */
@@ -25,7 +30,20 @@ export function taskBrief(task: DelegateTask): string {
 export function toReport(goal: string, outcome: SubagentOutcome): DelegateReport {
   const summary =
     outcome.summary.length > SUBAGENT_SUMMARY_CHARS ? `${outcome.summary.slice(0, SUBAGENT_SUMMARY_CHARS)}\n[report truncated]` : outcome.summary;
-  return { goal, status: outcome.status, summary };
+  return { goal, status: outcome.status, summary, ...(outcome.model && { model: outcome.model }) };
+}
+
+/** The prompt section that lets the main agent pick a model per helper. */
+export function helperModelsNote(models: HelperModel[]): string {
+  const list = models.slice(0, 30).map((m) => `- \`${m.ref}\`: ${m.label}${m.tags.length ? ` [${m.tags.join(', ')}]` : ''}`);
+  return (
+    '## Models for helpers\n' +
+    'Each agent_delegate task can set `model` to a ref below or to a tag (`fast`, `smart`, `code`). Match the model to ' +
+    'the work: `fast` for simple lookups, reading a few items or short summaries; `smart` for multi-step reasoning, ' +
+    'analysis, planning or careful writing; `code` for writing or fixing code. When unsure, or when a mistake would ' +
+    'be costly, use `smart`. Leave it out to use your own model.\n' +
+    list.join('\n')
+  );
 }
 
 /**
@@ -67,6 +85,7 @@ export const agentDelegate = defineTool<{ tasks: DelegateTask[]; background?: bo
           properties: {
             goal: { type: 'string', description: 'What to find out or produce, and what to report' },
             context: { type: 'string', description: 'Facts from this conversation the helper needs' },
+            model: { type: 'string', description: 'Model for this helper: a ref or tag from "Models for helpers" (omit for your own)' },
           },
           required: ['goal'],
         },
@@ -91,7 +110,13 @@ export const agentDelegate = defineTool<{ tasks: DelegateTask[]; background?: bo
     if (tasks.some((task) => !String(task?.goal ?? '').trim())) throw new Error('Every task needs a goal');
 
     if (args.background === true && ctx.startBackground) {
-      await ctx.startBackground(tasks.map((task) => ({ goal: String(task.goal).trim(), ...(task.context && { context: String(task.context) }) })));
+      await ctx.startBackground(
+        tasks.map((task) => ({
+          goal: String(task.goal).trim(),
+          ...(task.context && { context: String(task.context) }),
+          ...(task.model && { model: String(task.model) }),
+        })),
+      );
       return {
         started: tasks.length,
         note:
@@ -103,7 +128,7 @@ export const agentDelegate = defineTool<{ tasks: DelegateTask[]; background?: bo
     return Promise.all(
       tasks.map(async (task, index) => {
         const goal = String(task.goal).trim();
-        return toReport(goal, await ctx.spawnSubagent!(taskBrief(task), index));
+        return toReport(goal, await ctx.spawnSubagent!(taskBrief(task), index, task.model ? String(task.model) : undefined));
       }),
     );
   },
