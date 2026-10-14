@@ -17,6 +17,8 @@ const MB = 1024 * 1024;
 const RUNNER_PORT = 7070;
 const HEALTH_TIMEOUT_MS = 30_000;
 const SLOT_WAIT_MS = 120_000;
+/** With someone waiting for a slot, a sandbox unused this long (and whose owner has no agent working) makes room. */
+const ROOM_IDLE_MS = 30_000;
 const MIGRATE_WAIT_MS = 30_000;
 const REAP_EVERY_MS = 60_000;
 /** last_active_at is written at most this often per sandbox. */
@@ -205,18 +207,30 @@ export class SandboxManager {
       }
       logger.warn(`Replica ${row.node_id} did not release the sandbox of ${userId}; taking it over`);
     }
-    // Owner offline (or not answering): its replica removes the container when it comes back.
+    // Owner offline (or not answering). Replicas sharing a Docker host can remove its container now, so its
+    // browser lets go of the profiles; otherwise its replica removes it when it comes back.
+    await this.docker.remove(row.container_id).catch(() => undefined);
     await this.db.query('DELETE FROM sandboxes WHERE user_id = $1', [userId]);
+  }
+
+  private async ownerWorking(userId: string): Promise<boolean> {
+    const { rowCount } = await this.db.query(
+      `SELECT 1 FROM jobs WHERE user_id = $1 AND status IN ('running', 'waiting_approval', 'waiting_mfa') LIMIT 1`,
+      [userId],
+    );
+    return Boolean(rowCount);
   }
 
   private async waitForSlot(): Promise<void> {
     const deadline = Date.now() + SLOT_WAIT_MS;
     while (this.local.size >= this.limits().maxActive) {
       if (Date.now() > deadline) throw new SandboxBusyError('All sandboxes on this server are busy. Try again in a minute.');
-      // Free the longest-idle one if it has been quiet for a while, otherwise wait.
+      // Free the longest-idle one whose owner has no agent working (its files and cookies stay on disk),
+      // otherwise wait: someone mid-answer keeps their sandbox.
       const idlest = [...this.local.values()].sort((a, b) => a.lastUsed - b.lastUsed)[0];
-      if (idlest && Date.now() - idlest.lastUsed > 2 * 60_000) await this.stop(idlest.userId, 'making room');
-      else await new Promise((r) => setTimeout(r, 1000));
+      if (idlest && Date.now() - idlest.lastUsed > ROOM_IDLE_MS && !(await this.ownerWorking(idlest.userId))) {
+        await this.stop(idlest.userId, 'making room');
+      } else await new Promise((r) => setTimeout(r, 1000));
     }
   }
 

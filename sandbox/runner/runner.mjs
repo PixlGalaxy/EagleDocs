@@ -202,6 +202,9 @@ async function session(profile, create) {
     chromium ??= (await import('playwright-core')).chromium;
     const dir = join(WORKSPACE, '.browser', profile);
     await fs.mkdir(dir, { recursive: true });
+    // Locks left by a container that is gone (a crash, a node that died) would make Chromium refuse the
+    // profile as "in use on another computer". Only one container per user runs, so they are stale.
+    for (const lock of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) await fs.rm(join(dir, lock), { force: true }).catch(() => {});
     const context = await chromium.launchPersistentContext(dir, {
       headless: true,
       // The container already isolates the browser; Chromium's own sandbox needs privileges we drop.
