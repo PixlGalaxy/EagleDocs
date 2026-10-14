@@ -354,10 +354,11 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     }
     if (signal.aborted) return finish('error', stringify({ error: 'Skipped: the run was cancelled' }));
 
+    const gateCtx = { user, runKind: input.kind, host: input.host, browser: services.browser, browserPolicy: services.browserPolicy, workspace: services.workspace };
     let gate: 'run' | 'approve' | { refuse: string } = 'run';
     if (tool.gate) {
       try {
-        gate = await tool.gate(call.args, { user, runKind: input.kind, host: input.host, browser: services.browser, browserPolicy: services.browserPolicy });
+        gate = await tool.gate(call.args, gateCtx);
       } catch (err) {
         await emit({ type: 'tool_call', call: { ...view } });
         return finish('error', stringify({ error: errorText(err) }));
@@ -369,7 +370,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     }
 
     if (tool.sideEffect === 'external' || gate === 'approve') {
-      const described = tool.describe?.(call.args) ?? { summary: tool.name };
+      const described = (tool.describe ? await Promise.resolve(tool.describe(call.args, gateCtx)).catch(() => null) : null) ?? { summary: tool.name };
       const approval = await services.runs.createApproval({
         runId,
         userId: user.id,

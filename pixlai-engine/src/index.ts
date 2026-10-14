@@ -1,7 +1,7 @@
 export { createEngine, type Engine, type EngineOptions, type RunOptions, type UserAgent } from './engine.js';
 export * from './types.js';
 export type * from './ports.js';
-export { defineTool, ToolRegistry, type Tool, type ToolContext, type GateContext, type RunKind, type SubagentOutcome } from './tools/tool.js';
+export { defineTool, ToolRegistry, type Tool, type ToolContext, type GateContext, type ApprovalText, type RunKind, type SubagentOutcome } from './tools/tool.js';
 export { BUILTIN_TOOLS } from './tools/builtin.js';
 export { CORE_TOOLS, askUser, calc, notify, planUpdate } from './tools/core.js';
 export { evaluate } from './tools/calc.js';

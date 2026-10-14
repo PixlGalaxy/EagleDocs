@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { model, readPage, ScriptedProvider, setup, slowText, text, toolCall } from './helpers.js';
+import { defineTool } from '../src/index.js';
 
 const user = (content: string) => ({ role: 'user' as const, content });
 
@@ -199,4 +200,31 @@ test('an empty model reply is retried once with a nudge, then accepted', async (
   const blank = await agent.run({ runId: 'r2', model: model(always), history: [user('x')], sink });
   assert.equal(always.requests.length, 2, 'only one retry');
   assert.equal(blank.status, 'done');
+});
+
+test('approval text can be async and read host data', async () => {
+  const { engine, user: profile, stores, sink } = setup({
+    tools: [
+      defineTool<{ id: string }>({
+        name: 'mail_send',
+        description: 'Send a saved draft',
+        parameters: { type: 'object', properties: { id: { type: 'string' } } },
+        sideEffect: 'external',
+        describe: async (args, ctx) => {
+          const drafts = ctx.host.drafts as Record<string, string>;
+          return { summary: `Send "${drafts[args.id]}"`, details: { subject: drafts[args.id]! } };
+        },
+        async run() {
+          return 'sent';
+        },
+      }),
+    ],
+  });
+  const agent = engine.forUser(profile, { host: { drafts: { d1: 'Exam question' } } });
+  const p = new ScriptedProvider([() => toolCall('mail_send', { id: 'd1' }), () => text('ok')]);
+  const run = agent.run({ runId: 'r1', model: model(p), history: [user('send')], sink });
+  while (stores.runs.created.length === 0) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(stores.runs.created[0]!.summary, 'Send "Exam question"');
+  stores.runs.decide(stores.runs.created[0]!.id, 'approved');
+  await run;
 });

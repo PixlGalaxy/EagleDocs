@@ -71,7 +71,13 @@ export interface ToolContext {
 export type RunKind = 'chat' | 'scheduled' | 'subagent';
 
 /** What a gate can look at: who runs, which kind of run, and the host's services. */
-export type GateContext = Pick<ToolContext, 'user' | 'runKind' | 'host' | 'browser' | 'browserPolicy'>;
+export type GateContext = Pick<ToolContext, 'user' | 'runKind' | 'host' | 'browser' | 'browserPolicy' | 'workspace'>;
+
+/** What an approval card shows: one line, plus the fields worth reading before approving. */
+export interface ApprovalText {
+  summary: string;
+  details?: Record<string, string>;
+}
 
 export interface SubagentOutcome {
   status: 'done' | 'failed' | 'cancelled';
@@ -108,7 +114,11 @@ export interface Tool<Args extends Record<string, unknown> = Record<string, unkn
    */
   gate?(args: Args, ctx: GateContext): Promise<'run' | 'approve' | { refuse: string }>;
   /** For approvals: one line saying what will happen, plus the fields worth showing. */
-  describe?(args: Args): { summary: string; details?: Record<string, string> };
+  /**
+   * May be async and read host data (e.g. show the saved email the approval would send instead of its id).
+   * Falls back to the tool name if it throws.
+   */
+  describe?(args: Args, ctx: GateContext): ApprovalText | Promise<ApprovalText>;
   run(args: Args, ctx: ToolContext): Promise<unknown>;
 }
 
