@@ -169,9 +169,23 @@ async function exec(body) {
 
 // ------------------------------------------------------------------ browser
 
-/** profile -> { context, page, lastUsed } */
+/** profile -> { context, page, lastUsed, savedAt } */
 const sessions = new Map();
 let chromium = null;
+/**
+ * Chromium drops session cookies (no expiry) when it closes, and many sign-ins
+ * (Microsoft without "stay signed in") rely on them. They are kept here so a
+ * login survives the browser closing when idle, until the site expires it.
+ */
+const SESSION_COOKIES = 'eagledocs-session-cookies.json';
+
+async function saveSessionCookies(profile, force = false) {
+  const s = sessions.get(profile);
+  if (!s || (!force && Date.now() - (s.savedAt ?? 0) < 5000)) return;
+  s.savedAt = Date.now();
+  const cookies = (await s.context.cookies().catch(() => [])).filter((c) => c.expires === -1);
+  await fs.writeFile(join(WORKSPACE, '.browser', profile, SESSION_COOKIES), JSON.stringify(cookies), { mode: 0o600 }).catch(() => {});
+}
 
 async function session(profile, create) {
   if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(String(profile))) throw new HttpError(400, 'Invalid profile');
@@ -190,14 +204,24 @@ async function session(profile, create) {
       acceptDownloads: false,
       locale: 'en-US',
     });
+    const saved = await fs.readFile(join(dir, SESSION_COOKIES), 'utf8').then(JSON.parse, () => []);
+    if (Array.isArray(saved) && saved.length) await context.addCookies(saved).catch(() => {});
     const page = context.pages()[0] ?? (await context.newPage());
-    s = { context, page, lastUsed: Date.now() };
+    s = { context, page, lastUsed: Date.now(), savedAt: 0, crashed: false };
+    page.on('crash', () => (s.crashed = true));
     sessions.set(profile, s);
     context.on('close', () => sessions.delete(profile));
     // Sites that open a new tab: follow it.
     context.on('page', (p) => {
       s.page = p;
+      p.on('crash', () => (s.crashed = true));
     });
+  }
+  // A crashed tab (often out of memory on heavy apps) is replaced, so the profile keeps working.
+  if (s.page.isClosed() || s.crashed) {
+    s.crashed = false;
+    s.page = s.context.pages().find((p) => !p.isClosed()) ?? (await s.context.newPage());
+    s.page.on('crash', () => (s.crashed = true));
   }
   s.lastUsed = Date.now();
   return s;
@@ -310,6 +334,19 @@ const browserRoutes = {
     await s.page.waitForTimeout(400);
     return { ok: true };
   },
+  /**
+   * Types key by key into the first visible match, like a person: recipient pickers and search boxes
+   * often ignore text that is pasted in at once. `key` (e.g. Enter, Tab) is pressed after typing.
+   */
+  async type(body) {
+    const s = await session(body.profile, false);
+    const el = s.page.locator(String(body.selector)).filter({ visible: true }).first();
+    await el.click({ timeout: 10_000 });
+    await el.pressSequentially(String(body.value ?? ''), { delay: 20, timeout: 30_000 });
+    if (body.key) await el.press(String(body.key));
+    await s.page.waitForTimeout(800);
+    return { ok: true };
+  },
   /** Clicks the first visible element matching `selector`. */
   async tap(body) {
     const s = await session(body.profile, false);
@@ -330,6 +367,7 @@ const browserRoutes = {
   async close(body) {
     const s = sessions.get(body.profile);
     if (s) {
+      await saveSessionCookies(body.profile, true);
       sessions.delete(body.profile);
       await s.context.close().catch(() => {});
     }
@@ -385,7 +423,11 @@ const server = http.createServer(async (req, res) => {
     const body = await readJson(req);
     if (url.pathname === '/exec') return send(200, await exec(body));
     const action = /^\/browser\/([a-z]+)$/.exec(url.pathname)?.[1];
-    if (action && Object.hasOwn(browserRoutes, action)) return send(200, await browserRoutes[action](body));
+    if (action && Object.hasOwn(browserRoutes, action)) {
+      const out = await browserRoutes[action](body);
+      if (action !== 'close' && action !== 'url') await saveSessionCookies(body.profile);
+      return send(200, out);
+    }
     throw new HttpError(404, 'Not found');
   } catch (err) {
     send(err instanceof HttpError ? err.status : 500, { error: err.message });
