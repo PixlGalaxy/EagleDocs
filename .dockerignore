@@ -1,0 +1,11 @@
+# Build inputs only: dependencies and outputs are rebuilt inside the image.
+**/node_modules
+**/dist
+data
+.env
+.git
+# Reference material, never shipped.
+WebinCloud
+hermes-agent
+Skills
+plans

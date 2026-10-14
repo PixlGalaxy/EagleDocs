@@ -1,0 +1,86 @@
+# Local development only: Postgres + two EagleDocs replicas + a round-robin
+# balancer, to exercise the multi-replica paths (shared sessions, NOTIFY,
+# advisory locks). Production uses an external Postgres and one `docker run`
+# per machine; see README.
+#
+#   MASTER_KEY=$(openssl rand -base64 32) docker compose -f docker-compose.dev.yml up --build
+#   open http://localhost:8080  (admin / change-me-now)
+#
+# Runs in production mode, so the dev seed (admin/admin, user/user) is off here.
+# For that, run the backend with `npm run dev` (NODE_ENV unset).
+
+x-eagledocs: &eagledocs
+  build: .
+  image: eagledocs:dev
+  environment: &env
+    DATABASE_URL: postgres://eagledocs:eagledocs@postgres:5432/eagledocs
+    MASTER_KEY: ${MASTER_KEY:?set MASTER_KEY (openssl rand -base64 32)}
+    ADMIN_USERNAME: admin
+    ADMIN_EMAIL: admin@eagledocs.test
+    ADMIN_PASSWORD: change-me-now
+    PUBLIC_URL: http://localhost:8080
+    TRUST_PROXY: uniquelocal
+  volumes:
+    - shared-data:/data
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: eagledocs
+      POSTGRES_PASSWORD: eagledocs
+      POSTGRES_DB: eagledocs
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eagledocs"]
+      interval: 2s
+      retries: 30
+
+  node-a:
+    <<: *eagledocs
+    environment:
+      <<: *env
+      NODE_ID: node-a
+
+  node-b:
+    <<: *eagledocs
+    environment:
+      <<: *env
+      NODE_ID: node-b
+
+  balancer:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    depends_on: [node-a, node-b]
+    configs:
+      - source: balancer
+        target: /etc/nginx/conf.d/default.conf
+
+configs:
+  balancer:
+    content: |
+      upstream eagledocs { server node-a:80; server node-b:80; }
+      server {
+        listen 80;
+        location / {
+          proxy_pass http://eagledocs;
+          proxy_http_version 1.1;
+          proxy_set_header Host $$host;
+          proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $$scheme;
+          proxy_set_header Connection "";
+          proxy_buffering off;
+          proxy_read_timeout 3600s;
+        }
+      }
+
+volumes:
+  pg-data:
+  shared-data:

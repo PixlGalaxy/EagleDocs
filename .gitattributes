@@ -1,0 +1,5 @@
+# Files copied into the Linux image must keep LF endings even on a Windows
+# checkout (core.autocrlf=true), or /bin/sh fails on the stray \r.
+*.sh text eol=lf
+nginx.conf text eol=lf
+Dockerfile text eol=lf

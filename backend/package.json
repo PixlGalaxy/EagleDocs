@@ -1,12 +1,37 @@
 {
   "name": "eagledocs-backend",
-  "version": "1.0.0",
-  "main": "server.js",
+  "version": "2.0.0",
+  "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "dev": "tsx watch --env-file-if-exists=../.env --include ../locales/*.json --include ../.env src/index.ts",
+    "build": "tsc && node scripts/copy-assets.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts",
+    "predev": "npm --prefix ../pixlai-engine run build",
+    "prebuild": "npm --prefix ../pixlai-engine run build"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "argon2": "^0.45.1",
+    "busboy": "^1.6.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.3.0",
+    "jszip": "^3.10.2",
+    "mammoth": "^1.13.0",
+    "nodemailer": "^10.1.0",
+    "pg": "^8.23.1",
+    "pixlai-engine": "file:../pixlai-engine",
+    "unpdf": "^1.8.1"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
+    "embedded-postgres": "18.4.0-beta.17",
+    "tsx": "^4.23.15",
+    "typescript": "~7.0.2"
   }
 }
