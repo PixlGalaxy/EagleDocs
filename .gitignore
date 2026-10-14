@@ -1,5 +1,5 @@
 # Logs
-logs
+/logs
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -12,9 +12,7 @@ dist
 dist-ssr
 *.local
 .env
-WebinCloud 
-Skills
-plans
+/plans/
 
 
 # Editor directories and files
@@ -28,7 +26,7 @@ plans
 *.sln
 *.sw?
 
-Skills/
-hermes-agent/
-data/
-WebinCloud/
+/Skills/
+/hermes-agent/
+/data/
+/WebinCloud/
