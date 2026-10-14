@@ -8,14 +8,17 @@ import type { ConnectionsService } from '../connections/connections.service.js';
 export type SchoolApp = 'outlook' | 'degreeworks';
 
 const DEFAULT_OUTLOOK = 'https://outlook.office.com/mail/';
+const OUTLOOK_HOSTS = ['outlook.office.com', 'outlook.office365.com', 'outlook.cloud.microsoft', 'outlook.live.com'];
 /** How long a Duo push may wait for the student. */
 const MFA_WAIT_MS = 3 * 60_000;
 const MAX_STEPS = 40;
+/** The page changed while we were reading it (a redirect in the middle of a sign-in). */
+const NAVIGATING = /execution context was destroyed|navigation|frame was detached|target closed/i;
 
 /** A sign-in that cannot go on, with a message the model can relay. */
 export class SchoolError extends Error {
   constructor(
-    public reason: 'not_connected' | 'not_configured' | 'bad_credentials' | 'blocked' | 'mfa_timeout' | 'stuck' | 'unavailable',
+    public reason: 'not_connected' | 'not_configured' | 'bad_credentials' | 'blocked' | 'mfa_timeout' | 'stuck' | 'unavailable' | 'compose',
     message: string,
   ) {
     super(message);
@@ -35,7 +38,7 @@ interface StepContext {
 
 /** What the page in front of us is, decided inside the page (see DETECT). */
 interface PageState {
-  kind: 'target' | 'email' | 'password' | 'username_password' | 'kmsi' | 'duo_choose' | 'duo_trust' | 'mfa' | 'bad_credentials' | 'blocked' | 'unknown';
+  kind: 'target' | 'pick_account' | 'email' | 'password' | 'username_password' | 'kmsi' | 'duo_choose' | 'duo_trust' | 'mfa' | 'bad_credentials' | 'blocked' | 'unknown';
   detail?: string;
   title?: string;
   host?: string;
@@ -69,7 +72,13 @@ const password = find('input[type="password"]');
 const loginfmt = find('input[name="loginfmt"], input[type="email"]');
 if (find('#KmsiCheckboxField') || /stay signed in\\?/i.test(text)) return out('kmsi');
 if (/approve sign.?in request|enter the number|authenticator app|verify your identity/i.test(text) && !password) return out('mfa', 'microsoft');
-const onTarget = arg && (host === arg || host.endsWith('.' + arg));
+// Microsoft "Pick an account": a tile per remembered account.
+if (/(^|\\.)(microsoftonline|live|microsoft)\\.com$/.test(host) && (/pick an account|choose an account/i.test(text) || find('#tilesHolder'))) return out('pick_account');
+// Microsoft's first page already carries a (hidden or prefilled) password box: the email box decides.
+if (/(^|\\.)(microsoftonline|live|microsoft)\\.com$/.test(host) && find('input[name="loginfmt"]') && !(find('input[name="passwd"]') || {}).value && /sign in|enter your email|email, phone/i.test(text) && !/enter password/i.test(text)) {
+  return out('email');
+}
+const onTarget = (Array.isArray(arg) ? arg : [arg]).some((t) => t && (host === t || host.endsWith('.' + t)));
 if (onTarget && !password && !loginfmt) return out('target');
 if (password) {
   const user = find('input[type="email"], input[type="text"][name*="user" i], input[name="username"], input[name="j_username"], input[id*="user" i]');
@@ -98,6 +107,11 @@ return rows;
 const OUTLOOK_READING_PANE = `
 const pane = document.querySelector('[aria-label="Reading Pane"]') || document.querySelector('[role="main"]') || document.body;
 return (pane.innerText || '').replace(/\\n{3,}/g, '\\n\\n').slice(0, 30000);
+`;
+
+const SEND_READY = `
+const b = document.querySelector('[data-testid="ComposeSendButton"] button') || document.querySelector('button[aria-label="Send"]');
+return b ? b.getAttribute('aria-disabled') !== 'true' && !b.disabled : null;
 `;
 
 const PAGE_TEXT = `
@@ -147,12 +161,21 @@ export class SchoolService {
     return { outlook: row?.outlook_url || DEFAULT_OUTLOOK, degreeworks: row?.degreeworks_url ?? null };
   }
 
-  private run<T>(userId: string, step: string, body: Record<string, unknown>, signal: AbortSignal): Promise<T> {
-    return this.tools().runner<T>(userId, `/browser/${step}`, body, signal);
+  private async run<T>(userId: string, step: string, body: Record<string, unknown>, signal: AbortSignal): Promise<T> {
+    // Reading a page that is redirecting fails ("execution context was destroyed"): wait for it and read again.
+    // Only reads are retried; a click or a fill is never repeated.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.tools().runner<T>(userId, `/browser/${step}`, body, signal);
+      } catch (err) {
+        if (step !== 'eval' || attempt >= 4 || !NAVIGATING.test((err as Error).message)) throw err;
+        await this.tools().runner(userId, '/browser/wait', { profile: body.profile, ms: 1500 }, signal);
+      }
+    }
   }
 
-  private async detect(userId: string, profile: string, targetHost: string, signal: AbortSignal): Promise<PageState> {
-    const res = await this.run<{ result: PageState }>(userId, 'eval', { profile, script: DETECT, arg: targetHost }, signal);
+  private async detect(userId: string, profile: string, targetHosts: string[], signal: AbortSignal): Promise<PageState> {
+    const res = await this.run<{ result: PageState }>(userId, 'eval', { profile, script: DETECT, arg: targetHosts }, signal);
     return res.result ?? { kind: 'unknown' };
   }
 
@@ -162,7 +185,9 @@ export class SchoolService {
    */
   async open(userId: string, service: SchoolApp, url: string, ctx: StepContext): Promise<void> {
     const profile = `school-${service}`;
-    const targetHost = new URL(url).hostname.toLowerCase();
+    const host = new URL(url).hostname.toLowerCase();
+    // Microsoft moves Outlook Web between domains (outlook.office.com, outlook.cloud.microsoft...).
+    const targetHosts = OUTLOOK_HOSTS.includes(host) ? OUTLOOK_HOSTS : [host];
     await this.run(userId, 'goto', { profile, url }, ctx.signal);
 
     let account: Account | null = null;
@@ -182,13 +207,23 @@ export class SchoolService {
     };
 
     for (let step = 0; step < MAX_STEPS; step++) {
-      const state = await this.detect(userId, profile, targetHost, ctx.signal);
+      const state = await this.detect(userId, profile, targetHosts, ctx.signal);
+      // Step trail for diagnosing real sign-in pages (page kind and host only, never values).
+      logger.info(`School sign-in (${service}) step ${step}: ${state.kind} at ${state.host ?? "?"} "${(state.title ?? "").slice(0, 60)}"`);
       if (state.kind !== 'unknown') unknownStreak = 0;
       switch (state.kind) {
         case 'target':
           doneWaiting();
           if (connectionId) await this.db.query(`UPDATE connections SET status = 'ok', last_ok_at = now(), last_error = NULL WHERE id = $1`, [connectionId]);
           return;
+        case 'pick_account': {
+          // Our account's tile when Microsoft lists it, otherwise "Use another account" (then the email step).
+          const email = (await credentials()).email;
+          await this.run(userId, 'tap', { profile, selector: `[data-test-id="${email}"], div[role="button"]:has-text("${email}"), div[role="listitem"]:has-text("${email}")` }, ctx.signal).catch(() =>
+            this.run(userId, 'tap', { profile, selector: '#otherTile, div[role="button"]:has-text("Use another account")' }, ctx.signal),
+          );
+          break;
+        }
         case 'email':
           await this.run(userId, 'fill', { profile, selector: 'input[name="loginfmt"], input[type="email"]', value: (await credentials()).email, submit: true }, ctx.signal);
           break;
@@ -299,14 +334,24 @@ export class SchoolService {
   async send(userId: string, draft: { to: string[]; subject: string; body: string }, ctx: StepContext): Promise<{ verified: boolean }> {
     const base = await this.outlook(userId, ctx);
     const p = 'school-outlook';
-    await this.run(userId, 'tap', { profile: p, selector: 'button[aria-label="New mail"], button:has-text("New mail"), button[aria-label="New"], button:has-text("New")' }, ctx.signal);
+    await this.run(userId, 'tap', { profile: p, selector: 'button[aria-label="New mail"], button[aria-label="New"]' }, ctx.signal);
     await this.run(userId, 'wait', { profile: p, ms: 2000 }, ctx.signal);
+    // Outlook's recipient picker only turns typed addresses into recipients (pasting is ignored).
     for (const address of draft.to) {
-      await this.run(userId, 'fill', { profile: p, selector: 'div[aria-label="To"], input[aria-label="To"]', value: address, submit: true }, ctx.signal);
+      await this.run(userId, 'type', { profile: p, selector: 'div[aria-label="To"], input[aria-label="To"]', value: address }, ctx.signal);
+      // Outlook looks the address up in the directory first; Enter before that leaves plain text, not a recipient.
+      await this.run(userId, 'wait', { profile: p, ms: 2500 }, ctx.signal);
+      await this.run(userId, 'act', { profile: p, action: { kind: 'press', key: 'Enter' } }, ctx.signal);
+      await this.run(userId, 'wait', { profile: p, ms: 1000 }, ctx.signal);
     }
-    await this.run(userId, 'fill', { profile: p, selector: 'input[aria-label="Add a subject"], input[placeholder="Add a subject"], input[aria-label="Subject"]', value: draft.subject }, ctx.signal);
+    await this.run(userId, 'fill', { profile: p, selector: 'input[aria-label="Subject"], input[placeholder="Add a subject"], input[aria-label="Add a subject"]', value: draft.subject }, ctx.signal);
     await this.run(userId, 'fill', { profile: p, selector: 'div[aria-label="Message body"][contenteditable="true"], div[role="textbox"][contenteditable="true"]', value: draft.body }, ctx.signal);
-    await this.run(userId, 'tap', { profile: p, selector: 'button[aria-label="Send"], button[title="Send"], button:has-text("Send")' }, ctx.signal);
+    // Send stays disabled until Outlook accepted every recipient: say so instead of waiting on a dead button.
+    const ready = (await this.run<{ result: boolean | null }>(userId, 'eval', { profile: p, script: SEND_READY }, ctx.signal)).result;
+    if (ready === false) {
+      throw new SchoolError('compose', `Outlook did not accept the recipient (${draft.to.join(', ')}), so Send stayed disabled. Nothing was sent; the unsent message may be in Outlook's Drafts.`);
+    }
+    await this.run(userId, 'tap', { profile: p, selector: '[data-testid="ComposeSendButton"] button, button[aria-label="Send"]' }, ctx.signal);
     await this.run(userId, 'wait', { profile: p, ms: 5000 }, ctx.signal);
     // Verify in Sent Items.
     await this.run(userId, 'goto', { profile: p, url: `${base}/sentitems` }, ctx.signal);

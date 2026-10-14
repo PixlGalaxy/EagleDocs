@@ -76,7 +76,7 @@ export class SandboxManager {
     return {
       image: this.settings.getString(K.sandboxImage, this.config.SANDBOX_IMAGE),
       cpu: Math.min(8, Math.max(0.1, this.settings.getNumber(K.sandboxCpu, 1))),
-      memMb: Math.min(16384, Math.max(256, this.settings.getNumber(K.sandboxMemMb, 1024))),
+      memMb: Math.min(16384, Math.max(256, this.settings.getNumber(K.sandboxMemMb, 2048))),
       maxActive: Math.max(1, this.settings.getNumber(K.sandboxMaxActive, 4)),
       idleMinutes: Math.max(1, this.settings.getNumber(K.sandboxIdleMinutes, 15)),
     };

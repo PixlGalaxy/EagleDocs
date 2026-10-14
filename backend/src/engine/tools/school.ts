@@ -26,7 +26,12 @@ async function call<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } catch (err) {
-    if (!(err instanceof SchoolError)) throw err;
+    if (!(err instanceof SchoolError)) {
+      // A page that changed or a control that did not respond: say plainly that it is not a sign-in problem,
+      // so the model does not send the student to approve a Duo push that never came.
+      const detail = (err as Error).message.split('\n')[0]!.slice(0, 200);
+      throw new Error(`The school website did not respond as expected (${detail}). This is not a sign-in or Duo problem: do not ask the student to approve anything. Tell them it failed and that they can do it on the website.`);
+    }
     const next: Record<SchoolError['reason'], string> = {
       not_connected: '',
       not_configured: '',
@@ -35,6 +40,7 @@ async function call<T>(fn: () => Promise<T>): Promise<T> {
       blocked: ' Tell the student their school blocked this sign-in; they can use the website themselves.',
       mfa_timeout: ' Ask the student whether they want to try again (they will get a new Duo push).',
       stuck: ' Tell the student; do not keep retrying.',
+      compose: ' Tell the student; do not send it again.',
     };
     throw new Error(`${err.message}${next[err.reason]}`);
   }
@@ -145,7 +151,17 @@ export const emailSend = defineTool<{ draft_id: string }>({
   sideEffect: 'external',
   mainAgentOnly: true,
   timeoutMs: SCHOOL_TIMEOUT_MS,
-  describe: (a) => ({ summary: `Send the email draft ${a.draft_id} from your school account`, details: { draft: String(a.draft_id) } }),
+  /** The approval card shows the actual email, not its id. */
+  describe: async (a, ctx) => {
+    const host = ctx.host.school as SchoolHost | undefined;
+    const raw = host ? await host.workspace.read(host.userId, `${DRAFTS}/${String(a.draft_id)}.json`).catch(() => null) : null;
+    const draft = raw ? (JSON.parse(raw.toString('utf8')) as Draft) : null;
+    if (!draft) return { summary: `Send the email draft ${a.draft_id} from your school account` };
+    return {
+      summary: `Send "${draft.subject}" to ${draft.to.join(', ')} from your school email`,
+      details: { to: draft.to.join(', '), subject: draft.subject, message: draft.body.length > 1500 ? `${draft.body.slice(0, 1500)}…` : draft.body },
+    };
+  },
   async run(args, ctx) {
     const { service, userId, workspace } = schoolOf(ctx);
     const id = String(args.draft_id ?? '');
