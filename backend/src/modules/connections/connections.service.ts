@@ -224,7 +224,13 @@ export class ConnectionsService {
     const login = await startDeviceLogin();
     const id = randomUUID();
     const expiresAt = new Date(Date.now() + DEVICE_LOGIN_TTL_MS);
-    await this.db.query('DELETE FROM codex_device_logins WHERE user_id = $1 OR expires_at < now()', [userId]);
+    // Keep the user's other pending logins: two starts can overlap (a double click, React dev mode), and deleting
+    // the first made the screen that shows it report "expired" at once. Only expired ones and extras go.
+    await this.db.query(
+      `DELETE FROM codex_device_logins WHERE expires_at < now()
+          OR id IN (SELECT id FROM codex_device_logins WHERE user_id = $1 ORDER BY expires_at DESC OFFSET 2)`,
+      [userId],
+    );
     await this.db.query('INSERT INTO codex_device_logins (id, user_id, state_enc, expires_at) VALUES ($1, $2, $3, $4)', [
       id,
       userId,
