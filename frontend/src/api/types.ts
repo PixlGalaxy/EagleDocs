@@ -257,6 +257,15 @@ export interface TempUsage extends WorkspaceUsage {
   ttl_hours: number;
 }
 
+/** Settings → Browser. */
+export interface BrowserInfo {
+  /** The server has sandboxes (Docker); without them the agent has no browser. */
+  available: boolean;
+  trusted: { domain: string; created_at: string }[];
+  /** Cookie profiles the agent’s browser has saved ("default", "outlook"...). */
+  profiles: string[];
+}
+
 /** Settings -> RAGs: a searchable index the agent built from the user's files. */
 export interface RagSummary {
   id: string;

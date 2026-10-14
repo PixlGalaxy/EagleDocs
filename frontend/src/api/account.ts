@@ -8,6 +8,7 @@ import type {
   McpInfo,
   McpScope,
   Memory,
+  BrowserInfo,
   RagSummary,
   OAuthConsent,
   PlanInfo,
@@ -45,6 +46,13 @@ export const filesApi = {
     return api.upload<WorkspaceEntry>(`/files/upload?path=${encodeURIComponent(dir)}`, form);
   },
   downloadUrl: (path: string) => apiUrl(`/files/download?path=${encodeURIComponent(path)}`),
+};
+
+export const browserApi = {
+  get: () => api.get<BrowserInfo>('/browser'),
+  trust: (domain: string) => api.post<{ domain: string }>('/browser/trusted', { domain }),
+  untrust: (domain: string) => api.del<void>(`/browser/trusted/${encodeURIComponent(domain)}`),
+  clearProfile: (profile: string) => api.del<void>(`/browser/profiles/${encodeURIComponent(profile)}`),
 };
 
 export const ragsApi = {

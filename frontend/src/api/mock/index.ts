@@ -177,6 +177,18 @@ const routes: [string, RegExp, Handler][] = [
     }
   }],
 
+  ['GET', /^\/browser$/, () => db.browser],
+  ['POST', /^\/browser\/trusted$/, ({ body }) => {
+    const domain = String(body.domain).replace(/^https?:\/\//, '').split('/')[0]!.replace(/^www\./, '').toLowerCase();
+    if (!db.browser.trusted.some((t) => t.domain === domain)) db.browser.trusted.push({ domain, created_at: iso() });
+    return { domain };
+  }],
+  ['DELETE', /^\/browser\/trusted\/([^/]+)$/, ({ params }) => {
+    db.browser.trusted = db.browser.trusted.filter((t) => t.domain !== decodeURIComponent(params[0]!));
+  }],
+  ['DELETE', /^\/browser\/profiles\/([^/]+)$/, ({ params }) => {
+    db.browser.profiles = db.browser.profiles.filter((p) => p !== params[0]);
+  }],
   ['GET', /^\/rags$/, () => db.rags],
   ['DELETE', /^\/rags\/([^/]+)$/, ({ params }) => {
     const i = db.rags.findIndex((r) => r.id === params[0]);

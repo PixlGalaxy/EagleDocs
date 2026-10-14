@@ -4,7 +4,8 @@ import { adminApi, type NodeRow, type SandboxRow, type SandboxSettings } from '.
 import { useConfirm } from '../../components/ui/confirm';
 import { useI18n } from '../../i18n/I18nContext';
 import Toast from '../../components/ui/Toast';
-import { Badge, EmptyState, Field, Panel, Skeleton } from '../../components/ui/kit';
+import { Badge, EmptyState, Field, Notice, Panel, Skeleton } from '../../components/ui/kit';
+import SandboxDot from '../../components/ui/SandboxDot';
 import { btn, input } from '../../components/ui/styles';
 
 function ago(iso: string, language: string): string {
@@ -79,6 +80,11 @@ const SandboxSection = () => {
           <Skeleton className="h-40" />
         ) : (
           <div className="space-y-5">
+            {settings.enabled === false && (
+              <Notice tone="warning" icon={Box}>
+                {t('admin.sandboxUnavailable')}
+              </Notice>
+            )}
             <div className="grid gap-5 sm:grid-cols-3">
               <Field label={t('admin.cpu')} hint={t('admin.cpuHint')}>
                 {(id, d) => <input id={id} aria-describedby={d} type="number" step={0.25} min={0.25} value={settings.default_cpu} onChange={num('default_cpu')} className={`${input} font-mono`} />}
@@ -95,9 +101,9 @@ const SandboxSection = () => {
               <Field label={t('admin.idle')}>
                 {(id) => <input id={id} type="number" min={1} value={settings.idle_timeout_minutes} onChange={num('idle_timeout_minutes')} className={`${input} font-mono`} />}
               </Field>
-              <Field label={t('admin.network')}>
+              <Field label={t('admin.network')} hint={t('admin.networkSoon')}>
                 {(id) => (
-                  <select id={id} value={settings.network} onChange={(e) => setSettings({ ...settings, network: e.target.value as SandboxSettings['network'] })} className={input}>
+                  <select id={id} disabled value={settings.network} onChange={(e) => setSettings({ ...settings, network: e.target.value as SandboxSettings['network'] })} className={input}>
                     <option value="open">{t('admin.netOpen')}</option>
                     <option value="blocklist">{t('admin.netBlock')}</option>
                     <option value="allowlist">{t('admin.netAllow')}</option>
@@ -153,7 +159,12 @@ const SandboxSection = () => {
               <tbody className="divide-y divide-slate-100 font-mono text-xs dark:divide-slate-800">
                 {sandboxes.map((s) => (
                   <tr key={s.user_id}>
-                    <td className="px-5 py-2.5 font-sans text-sm sm:px-6">{s.username}</td>
+                    <td className="px-5 py-2.5 font-sans text-sm sm:px-6">
+                      <span className="flex items-center gap-2">
+                        <SandboxDot status={s.activity ?? 'idle'} />
+                        {s.username}
+                      </span>
+                    </td>
                     <td className="px-3 py-2.5">{s.node_id}</td>
                     <td className="px-3 py-2.5">{s.cpu_percent !== null ? `${s.cpu_percent.toFixed(0)}%` : '-'}</td>
                     <td className="px-3 py-2.5">{s.mem_mb !== null ? `${s.mem_mb} / ${s.mem_limit_mb} MB` : '-'}</td>
@@ -161,7 +172,7 @@ const SandboxSection = () => {
                       {s.disk_used_mb} / {s.disk_limit_mb} MB
                     </td>
                     <td className="px-5 py-2.5 text-right sm:px-6">
-                      <button type="button" onClick={() => ask(() => void adminApi.stopSandbox(s.user_id))} className={btn.iconDanger} aria-label={t('admin.stop')}>
+                      <button type="button" onClick={() => ask(() => void adminApi.stopSandbox(s.user_id).then(() => setSandboxes((prev) => prev?.filter((x) => x.user_id !== s.user_id) ?? null)), { confirmLabel: t('admin.stop') })} className={btn.iconDanger} aria-label={t('admin.stop')}>
                         <Square size={15} />
                       </button>
                     </td>

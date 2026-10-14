@@ -22,9 +22,13 @@ export interface SystemInfo {
   database: { version: string; size_mb: number; migrations: number };
 }
 
+/** Admin → Users dot: no container, container waiting, or the agent working for this user. */
+export type SandboxStatus = 'off' | 'idle' | 'working';
+
 export interface AdminUserRow extends User {
   last_seen_at: string | null;
   verification_expires_at: string | null;
+  sandbox_status?: SandboxStatus;
 }
 
 export interface SmtpSettings {
@@ -59,6 +63,8 @@ export interface AdminModel {
 }
 
 export interface SandboxSettings {
+  /** False when this server cannot reach Docker or the image: code and browser tools are off. */
+  enabled?: boolean;
   image: string;
   default_cpu: number;
   default_mem_mb: number;
@@ -85,6 +91,7 @@ export interface SandboxRow {
   username: string;
   node_id: string;
   status: 'starting' | 'running' | 'stopping' | 'stopped';
+  activity?: Exclude<SandboxStatus, 'off'>;
   cpu_percent: number | null;
   mem_mb: number | null;
   mem_limit_mb: number;

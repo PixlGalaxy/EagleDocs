@@ -8,6 +8,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import Avatar from '../../components/ui/Avatar';
 import Modal from '../../components/ui/Modal';
 import { Badge, Field, Notice, Panel, Skeleton } from '../../components/ui/kit';
+import SandboxDot from '../../components/ui/SandboxDot';
 import { btn, input } from '../../components/ui/styles';
 import { PasswordInput } from '../auth/AuthShell';
 
@@ -118,7 +119,10 @@ const UsersSection = () => {
                 <tr key={row.id}>
                   <td className="px-5 py-3 sm:px-6">
                     <div className="flex items-center gap-3">
-                      <Avatar user={row} size={32} />
+                      <span className="relative shrink-0">
+                        <Avatar user={row} size={32} />
+                        <SandboxDot status={row.sandbox_status ?? 'off'} className="absolute -bottom-0.5 -right-0.5" />
+                      </span>
                       <div className="min-w-0">
                         <p className="flex items-center gap-2 truncate font-medium text-slate-900 dark:text-slate-100">
                           {row.display_name || row.username}

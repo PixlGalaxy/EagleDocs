@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { AppWindow, Bell, BookMarked, Brain, CalendarClock, CreditCard, Cpu, Library, Palette, Plug, UserRound } from 'lucide-react';
+import { AppWindow, Bell, BookMarked, Brain, CalendarClock, CreditCard, Cpu, Globe, Library, Palette, Plug, UserRound } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import { Page, SectionLayout } from '../../components/layout/routes';
 import AccountSection from './AccountSection';
@@ -10,8 +10,9 @@ import NotificationsSection from './NotificationsSection';
 import { MemorySection, RagsSection, SchedulesSection, SkillsSection } from './AgentSections';
 import PlanSection from './PlanSection';
 import AppsSection from './AppsSection';
+import BrowserSection from './BrowserSection';
 
-const SECTIONS = ['account', 'appearance', 'connections', 'models', 'apps', 'notifications', 'schedules', 'memory', 'rags', 'skills', 'plan'] as const;
+const SECTIONS = ['account', 'appearance', 'connections', 'models', 'apps', 'notifications', 'schedules', 'memory', 'rags', 'browser', 'skills', 'plan'] as const;
 type Section = (typeof SECTIONS)[number];
 
 const isSection = (value: string | null): value is Section => SECTIONS.includes(value as Section);
@@ -32,6 +33,7 @@ const SettingsPage = () => {
     { key: 'schedules' as const, label: t('schedules.title'), icon: CalendarClock },
     { key: 'memory' as const, label: t('memory.title'), icon: Brain },
     { key: 'rags' as const, label: t('rags.title'), icon: Library },
+    { key: 'browser' as const, label: t('browser.title'), icon: Globe },
     { key: 'skills' as const, label: t('settings.skills'), icon: BookMarked },
     { key: 'plan' as const, label: t('settings.plan'), icon: CreditCard },
   ];
@@ -48,6 +50,7 @@ const SettingsPage = () => {
         {active === 'schedules' && <SchedulesSection />}
         {active === 'memory' && <MemorySection />}
         {active === 'rags' && <RagsSection />}
+        {active === 'browser' && <BrowserSection />}
         {active === 'skills' && <SkillsSection />}
         {active === 'plan' && <PlanSection />}
       </SectionLayout>

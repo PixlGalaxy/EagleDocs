@@ -8,6 +8,7 @@ import type {
   Institution,
   Memory,
   RagSummary,
+  BrowserInfo,
   Message,
   ModelOption,
   Schedule,
@@ -55,9 +56,9 @@ const baseUser = {
 };
 
 export const users: AdminUserRow[] = [
-  { ...baseUser, id: 'u-admin', email: 'admin@eagledocs.org', username: 'pixl', display_name: 'Pixl Galaxy', role: 'admin', major: 'Software Engineering', last_seen_at: iso(-0.2), verification_expires_at: null },
-  { ...baseUser, id: 'u-1', email: 'mrodriguez4521@eagle.fgcu.edu', username: 'mrodriguez', display_name: 'Mariana Rodríguez', role: 'user', major: 'Accounting', last_seen_at: iso(-5), verification_expires_at: null },
-  { ...baseUser, id: 'u-2', email: 'tbeckett@eagle.fgcu.edu', username: 'tbeckett', display_name: 'Theo Beckett', role: 'user', major: 'Biology', last_seen_at: iso(-30), verification_expires_at: null },
+  { ...baseUser, id: 'u-admin', email: 'admin@eagledocs.org', username: 'pixl', display_name: 'Pixl Galaxy', role: 'admin', major: 'Software Engineering', last_seen_at: iso(-0.2), verification_expires_at: null, sandbox_status: 'idle' },
+  { ...baseUser, id: 'u-1', email: 'mrodriguez4521@eagle.fgcu.edu', username: 'mrodriguez', display_name: 'Mariana Rodríguez', role: 'user', major: 'Accounting', last_seen_at: iso(-5), verification_expires_at: null, sandbox_status: 'working' },
+  { ...baseUser, id: 'u-2', email: 'tbeckett@eagle.fgcu.edu', username: 'tbeckett', display_name: 'Theo Beckett', role: 'user', major: 'Biology', last_seen_at: iso(-30), verification_expires_at: null, sandbox_status: 'idle' },
   {
     ...baseUser,
     id: 'u-3',
@@ -69,6 +70,7 @@ export const users: AdminUserRow[] = [
     major: null,
     last_seen_at: null,
     verification_expires_at: iso(51),
+    sandbox_status: 'off',
   },
 ];
 
@@ -157,6 +159,12 @@ export const files: Record<string, WorkspaceEntry[]> = {
   degreeworks: [{ name: 'audit-2026-10-01.json', path: 'degreeworks/audit-2026-10-01.json', type: 'file', size: 18233, modified_at: iso(-24 * 12) }],
 };
 
+export const browser: BrowserInfo = {
+  available: true,
+  trusted: [{ domain: 'library.fgcu.edu', created_at: iso(-24 * 6) }],
+  profiles: ['default', 'outlook'],
+};
+
 export const rags: RagSummary[] = [
   {
     id: 'acg-2021',
@@ -240,7 +248,7 @@ export const nodes: NodeRow[] = [
 ];
 
 export const sandboxes: SandboxRow[] = [
-  { user_id: 'u-1', username: 'mrodriguez', node_id: 'node-1', status: 'running', cpu_percent: 12, mem_mb: 287, mem_limit_mb: 512, disk_used_mb: 214, disk_limit_mb: 5120, last_active_at: iso(-0.1) },
-  { user_id: 'u-2', username: 'tbeckett', node_id: 'node-1', status: 'running', cpu_percent: 44, mem_mb: 461, mem_limit_mb: 512, disk_used_mb: 802, disk_limit_mb: 5120, last_active_at: iso(-0.05) },
-  { user_id: 'u-admin', username: 'pixl', node_id: 'node-2', status: 'running', cpu_percent: 3, mem_mb: 120, mem_limit_mb: 2048, disk_used_mb: 1400, disk_limit_mb: 10240, last_active_at: iso(-0.3) },
+  { user_id: 'u-1', username: 'mrodriguez', node_id: 'node-1', status: 'running', activity: 'working', cpu_percent: 12, mem_mb: 287, mem_limit_mb: 512, disk_used_mb: 214, disk_limit_mb: 5120, last_active_at: iso(-0.1) },
+  { user_id: 'u-2', username: 'tbeckett', node_id: 'node-1', status: 'running', activity: 'idle', cpu_percent: 44, mem_mb: 461, mem_limit_mb: 512, disk_used_mb: 802, disk_limit_mb: 5120, last_active_at: iso(-0.05) },
+  { user_id: 'u-admin', username: 'pixl', node_id: 'node-2', status: 'running', activity: 'idle', cpu_percent: 3, mem_mb: 120, mem_limit_mb: 2048, disk_used_mb: 1400, disk_limit_mb: 10240, last_active_at: iso(-0.3) },
 ];
