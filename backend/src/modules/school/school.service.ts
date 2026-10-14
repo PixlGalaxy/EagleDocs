@@ -139,6 +139,8 @@ export class SchoolService {
     private db: Db,
     private connections: ConnectionsService,
     private browser: SandboxTools | undefined,
+    /** Tells the student (web push) that the Settings test waits on Duo. */
+    private onTestMfa?: (userId: string, message: string) => Promise<void>,
   ) {}
 
   private tools(): SandboxTools {
@@ -319,6 +321,7 @@ export class SchoolService {
     const ctx: StepContext = {
       signal: AbortSignal.timeout(MFA_WAIT_MS + 2 * 60_000),
       emit: (event) => {
+        if (event.type === 'mfa_required') void this.onTestMfa?.(userId, event.message).catch(() => undefined);
         if (event.type === 'status' && (event.status === 'waiting_mfa' || event.status === 'running')) {
           void this.db
             .query(`UPDATE connections SET status = $2 WHERE id = $1`, [connectionId, event.status === 'waiting_mfa' ? 'waiting_mfa' : 'untested'])

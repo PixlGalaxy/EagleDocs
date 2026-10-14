@@ -31,6 +31,8 @@ export const LOCKS = {
   tempSweep: 7_301_007,
   /** Two-key lock (sandboxUser, hash of the user id): one replica at a time starts a user's sandbox. */
   sandboxUser: 7_301_008,
+  /** One replica creates the VAPID keys on first start. */
+  pushKeys: 7_301_009,
 } as const;
 
 /**

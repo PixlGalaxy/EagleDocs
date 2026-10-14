@@ -881,5 +881,15 @@
   "chat.backgroundFailed": "{count} did not finish",
   "connections.testing": "Testing…",
   "connections.ssoTestRunning": "Opening your school email to check the sign-in. If the session expired, EagleDocs signs in again.",
-  "connections.ssoTestDuo": "Approve the sign-in on your phone (Duo)."
+  "connections.ssoTestDuo": "Approve the sign-in on your phone (Duo).",
+  "push.invalidSubscription": "This device could not turn notifications on. Try again, or use another browser.",
+  "push.invalidEmail": "Enter a valid contact email.",
+  "push.titleRequired": "The announcement needs a title.",
+  "push.invalidUrl": "Use a link inside EagleDocs (starting with /) or a web address.",
+  "pushMsg.testTitle": "EagleDocs notifications work",
+  "pushMsg.testBody": "You will be told here when EagleDocs needs you.",
+  "pushMsg.mfaTitle": "Approve the sign-in on your phone",
+  "pushMsg.approvalTitle": "EagleDocs needs your OK",
+  "pushMsg.doneTitle": "EagleDocs finished",
+  "pushMsg.failedTitle": "EagleDocs could not finish"
 }

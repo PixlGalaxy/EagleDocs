@@ -170,7 +170,13 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
     });
     // Covers a notification lost while the bus reconnected.
     const poll = setInterval(() => void pump(), 5000);
-    const heartbeat = setInterval(() => res.write(': ping\n\n'), 20_000);
+    // While someone follows the job, finishing it needs no push (the worker checks watched_at).
+    const watch = () => void db.query('UPDATE jobs SET watched_at = now() WHERE id = $1', [jobId]).catch(() => undefined);
+    watch();
+    const heartbeat = setInterval(() => {
+      res.write(': ping\n\n');
+      watch();
+    }, 20_000);
     const cleanup = () => {
       closed = true;
       unsubscribe();

@@ -26,6 +26,7 @@ import { setupEngine } from './engine/setup.js';
 import { SandboxManager } from './modules/sandbox/manager.js';
 import { SandboxTools } from './engine/sandbox.js';
 import { SchoolService } from './modules/school/school.service.js';
+import { PushService } from './modules/push/push.service.js';
 import { DiskWorkspace, sweepTemp } from './engine/workspace.js';
 import { AdminEmbeddings } from './engine/documents.js';
 import { ChatService } from './modules/chat/chat.service.js';
@@ -103,9 +104,15 @@ async function main() {
   const sandboxes = new SandboxManager(db, bus, settings, config);
   await sandboxes.start().catch((err) => logger.warn(`Sandboxes are off: ${(err as Error).message}`));
   const sandbox = sandboxes.enabled ? new SandboxTools(sandboxes, workspace) : undefined;
-  const school = new SchoolService(db, connections, sandbox);
+  const push = new PushService(db, settings, config.NODE_ENV !== 'production');
+  await push.ensureKeys().catch((err) => logger.warn(`Web push is off: ${(err as Error).message}`));
+  // The Settings test of a school account can wait on Duo too: tell the phone.
+  const school = new SchoolService(db, connections, sandbox, async (userId, message) => {
+    const { rows } = await db.query<{ language: string }>('SELECT language FROM users WHERE id = $1', [userId]);
+    await push.notify(userId, { kind: 'mfa_required', title: t('pushMsg.mfaTitle', rows[0]?.language), body: message, url: '/settings?section=connections', tag: `mfa-test-${userId}` });
+  });
   const engine = await setupEngine(db, bus, { workspace, embeddings, sandbox, searxngUrl: config.SEARXNG_URL });
-  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, school, t, concurrency: config.JOB_WORKERS });
+  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, school, push, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
   // Leader tasks: whichever replica gets the advisory lock runs each cycle.
@@ -145,6 +152,7 @@ async function main() {
     sandboxes,
     sandbox,
     school,
+    push,
   });
   const onListening = () => {
     logger.info(`Node ${config.NODE_ID} listening on ${config.HOST ?? 'all interfaces'}:${config.PORT} (${config.NODE_ENV})`);

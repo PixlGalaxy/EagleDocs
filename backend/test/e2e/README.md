@@ -53,6 +53,19 @@ E2E_DATABASE_URL=postgres://eagledocs:eagledocs@localhost:55433/eagledocs E2E_DA
   node test/e2e/sandbox-nodes.e2e.mjs
 ```
 
+## Web push (`push.e2e.mjs`)
+
+The script runs a fake push service on port 4996 that plays the browser vendor: it decrypts each push (RFC 8291) and checks
+the VAPID signature. Covers the Settings test, a finished turn pushed only when no browser follows the chat, the kinds a
+device picked, a gone device (410) being removed, broadcasts and their banner, and new VAPID keys dropping subscriptions.
+Development accepts local endpoints; production only real push services.
+
+```bash
+node test/e2e/fake-llm.mjs 4999 &
+PORT=4000 npx tsx src/index.ts &
+node test/e2e/push.e2e.mjs
+```
+
 ## Accounts and admin (`auth-admin.e2e.mjs`)
 
 Production-mode replicas (no dev seed) with `ADMIN_USERNAME=pixl` (or set `E2E_ADMIN`) and password `change-me-now`.

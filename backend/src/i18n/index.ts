@@ -87,6 +87,16 @@ const BACKEND_KEYS = [
   'files.invalidPath',
   'browser.invalidDomain',
   'browser.canvasReadOnly',
+  'push.invalidSubscription',
+  'push.invalidEmail',
+  'push.titleRequired',
+  'push.invalidUrl',
+  'pushMsg.testTitle',
+  'pushMsg.testBody',
+  'pushMsg.mfaTitle',
+  'pushMsg.approvalTitle',
+  'pushMsg.doneTitle',
+  'pushMsg.failedTitle',
 ] as const;
 
 export type TranslationKey = (typeof BACKEND_KEYS)[number];

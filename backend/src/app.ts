@@ -35,6 +35,9 @@ import type { SandboxManager } from './modules/sandbox/manager.js';
 import { createBrowserRoutes, createSandboxAdminRoutes } from './modules/sandbox/sandbox.routes.js';
 import type { SandboxTools } from './engine/sandbox.js';
 import type { SchoolService } from './modules/school/school.service.js';
+import type { AppRequest } from './types/index.js';
+import { createPushRoutes, latestBroadcast } from './modules/push/push.routes.js';
+import type { PushService } from './modules/push/push.service.js';
 
 export interface AppDeps {
   db: Db;
@@ -57,10 +60,11 @@ export interface AppDeps {
   sandboxes: SandboxManager;
   sandbox: SandboxTools | undefined;
   school: SchoolService;
+  push: PushService;
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -85,7 +89,7 @@ export function createApp(deps: AppDeps): express.Application {
 
   // Runtime settings for the static frontend (frontend/src/api/config.ts), read
   // fresh so an admin panel edit shows on the next request without a rebuild.
-  app.get('/api/config', async (_req, res) => {
+  app.get('/api/config', async (req: AppRequest, res) => {
     res.json({
       language: settings.getString(K.defaultLanguage, config.LANGUAGE),
       defaultThemeMode: settings.getString(K.defaultThemeMode, 'system'),
@@ -96,8 +100,8 @@ export function createApp(deps: AppDeps): express.Application {
       billingEnabled: false,
       codexEnabled: catalog.codexAvailable(),
       mcpEnabled: settings.getBoolean(K.mcpEnabled, false),
-      vapidPublicKey: null,
-      broadcast: null,
+      vapidPublicKey: push.publicKey(),
+      broadcast: await latestBroadcast(db, req.user?.institution_id ?? null),
     });
   });
 
@@ -123,6 +127,9 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/skills', agentData.skills);
   app.use('/api/browser', createBrowserRoutes({ db, config, sandboxes, tools: sandbox }));
 
+  const pushRoutes = createPushRoutes({ db, push, settings, t });
+  app.use('/api/push', pushRoutes.user);
+  app.use('/api/admin', pushRoutes.admin);
   app.use('/api/admin/logs', createLogsRoutes(db));
   app.use('/api/admin/models', createAdminModelRoutes(db, secrets));
   app.use('/api/admin', createSandboxAdminRoutes({ db, bus, config, settings, sandboxes, workspace }));

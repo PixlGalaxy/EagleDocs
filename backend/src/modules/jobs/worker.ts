@@ -14,6 +14,7 @@ import type { CanvasService } from '../canvas/canvas.service.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import type { AdminEmbeddings } from '../../engine/documents.js';
 import type { SchoolService } from '../school/school.service.js';
+import type { PushService } from '../push/push.service.js';
 
 const POLL_MS = 2000;
 const HEARTBEAT_MS = 15_000;
@@ -21,6 +22,19 @@ const HEARTBEAT_MS = 15_000;
 const AFFINITY_SECONDS = 5;
 /** Background helper jobs per chat at once. */
 const MAX_BACKGROUND_PER_CHAT = 2;
+
+/** A helper's event as the student would see it (helpers can hit Duo too). */
+function innermost(event: EngineEvent): EngineEvent {
+  let inner = event;
+  while (inner.type === 'subagent') inner = inner.event;
+  return inner;
+}
+
+/** Markdown reduced to a notification line. */
+function preview(text: string, max = 140): string {
+  const plain = text.replace(/[#*_`>|]/g, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
+  return plain.length > max ? `${plain.slice(0, max - 1)}…` : plain;
+}
 
 /** Helper agents' tokens and usage would be one stored event each: only their steps are worth showing. */
 function isNoise(event: EngineEvent): boolean {
@@ -68,6 +82,7 @@ export interface WorkerDeps {
   workspace: DiskWorkspace;
   embeddings: AdminEmbeddings;
   school: SchoolService;
+  push: PushService;
   t: Translate;
   concurrency: number;
 }
@@ -150,6 +165,30 @@ export class JobWorker {
     await this.deps.db
       .query('UPDATE jobs SET heartbeat_at = now() WHERE id = ANY($1::uuid[])', [[...this.running.keys()]])
       .catch((err: Error) => logger.warn(`Job heartbeat failed: ${err.message}`));
+  }
+
+  /** A browser follows this job's stream right now (its SSE heartbeat keeps watched_at fresh). */
+  private async watched(jobId: string): Promise<boolean> {
+    const { rowCount } = await this.deps.db.query("SELECT 1 FROM jobs WHERE id = $1 AND watched_at > now() - interval '45 seconds'", [jobId]);
+    return Boolean(rowCount);
+  }
+
+  /**
+   * Push for what needs the student: Duo always (the phone is needed anyway),
+   * approvals only when nobody is looking at the chat.
+   */
+  private pushFor(event: EngineEvent, job: JobRow, chatId: string, user: UserRow): void {
+    const { push, t } = this.deps;
+    const inner = innermost(event);
+    const url = `/chat/${chatId}`;
+    if (inner.type === 'mfa_required') {
+      void push.notify(user.id, { kind: 'mfa_required', title: t('pushMsg.mfaTitle', user.language), body: inner.message, url, tag: `mfa-${job.id}` });
+    } else if (inner.type === 'approval_required') {
+      void this.watched(job.id).then(async (seen) => {
+        if (!seen)
+          await push.notify(user.id, { kind: 'approval_required', title: t('pushMsg.approvalTitle', user.language), body: inner.approval.summary, url, tag: `approval-${inner.approval.id}` });
+      });
+    }
   }
 
   private async finish(jobId: string, status: 'done' | 'failed' | 'cancelled', error?: string): Promise<void> {
@@ -235,7 +274,9 @@ export class JobWorker {
           signal: controller.signal,
           sink: {
             emit: (event: EngineEvent) => {
-              if (!isNoise(event)) events.emit(event as unknown as { type: string });
+              if (isNoise(event)) return;
+              this.pushFor(event, job, chatId, user);
+              events.emit(event as unknown as { type: string });
             },
           },
         });
@@ -264,6 +305,7 @@ export class JobWorker {
         sink: {
           emit: (event: EngineEvent) => {
             if (isNoise(event)) return;
+            this.pushFor(event, job, chatId, user);
             if (event.type === 'delta') liveText += event.text;
             if (event.type === 'tool_call' || event.type === 'interrupted') liveText = '';
             // Waiting on the student's phone (Duo) or back to work: the job row shows it (Admin, Chats list).
@@ -312,6 +354,17 @@ export class JobWorker {
       }
       await events.flush();
       await this.finish(job.id, status, result.error);
+      // Done while the student was away (app closed, another chat): tell them.
+      if ((status === 'done' || status === 'failed') && !silent && !(await this.watched(job.id))) {
+        const chat = await maybe<{ title: string }>(db, 'SELECT title FROM chats WHERE id = $1', [chatId]);
+        void this.deps.push.notify(user.id, {
+          kind: 'job_done',
+          title: status === 'done' ? chat?.title || t('pushMsg.doneTitle', user.language) : t('pushMsg.failedTitle', user.language),
+          body: preview(status === 'done' ? finalContent : (result.error ?? '')),
+          url: `/chat/${chatId}`,
+          tag: `chat-${chatId}`,
+        });
+      }
       await this.followUpSteers(job, user.id);
     } catch (err) {
       logger.error(`Job ${job.id} crashed`, err);

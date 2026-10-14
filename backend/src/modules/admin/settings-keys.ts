@@ -7,6 +7,10 @@ export const SETTINGS_KEYS = {
   sessionTtlHours: 'session.ttl_hours',
   eagledocsDailyMessages: 'models.eagledocs_daily_messages',
   mcpEnabled: 'mcp.enabled',
+  /** Web push (VAPID). The private key is a secret (secret_enc). */
+  pushVapidPublic: 'push.vapid_public',
+  pushVapidPrivate: 'push.vapid_private',
+  pushContactEmail: 'push.contact_email',
   codexEnabled: 'codex.enabled',
   /** ISO date set by the Codex circuit breaker; absent when healthy. */
   codexDisabledUntil: 'codex.disabled_until',

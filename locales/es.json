@@ -881,5 +881,15 @@
   "chat.backgroundFailed": "{count} no terminaron",
   "connections.testing": "Probando…",
   "connections.ssoTestRunning": "Abriendo tu correo de la universidad para comprobar el acceso. Si la sesión venció, EagleDocs vuelve a iniciar sesión.",
-  "connections.ssoTestDuo": "Aprueba el inicio de sesión en tu teléfono (Duo)."
+  "connections.ssoTestDuo": "Aprueba el inicio de sesión en tu teléfono (Duo).",
+  "push.invalidSubscription": "Este dispositivo no pudo activar las notificaciones. Inténtalo de nuevo o usa otro navegador.",
+  "push.invalidEmail": "Escribe un correo de contacto válido.",
+  "push.titleRequired": "El anuncio necesita un título.",
+  "push.invalidUrl": "Usa un enlace dentro de EagleDocs (que empiece con /) o una dirección web.",
+  "pushMsg.testTitle": "Las notificaciones de EagleDocs funcionan",
+  "pushMsg.testBody": "Aquí te avisaremos cuando EagleDocs te necesite.",
+  "pushMsg.mfaTitle": "Aprueba el inicio de sesión en tu teléfono",
+  "pushMsg.approvalTitle": "EagleDocs necesita tu aprobación",
+  "pushMsg.doneTitle": "EagleDocs terminó",
+  "pushMsg.failedTitle": "EagleDocs no pudo terminar"
 }
