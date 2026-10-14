@@ -35,18 +35,19 @@ export const codeRun = defineTool<{ language: CodeLanguage; code: string; cwd?: 
   parameters: {
     type: 'object',
     properties: {
-      language: { type: 'string', enum: LANGUAGES },
+      language: { type: 'string', enum: LANGUAGES, description: 'Default: python' },
       code: { type: 'string', description: 'The whole program' },
       cwd: { type: 'string', description: 'Folder inside the workspace to run in (default: the root)' },
       timeout_s: { type: 'integer', description: `Seconds before it is stopped, 1-${MAX_TIMEOUT_S} (default ${DEFAULT_TIMEOUT_S})` },
     },
-    required: ['language', 'code'],
+    required: ['code'],
   },
   sideEffect: 'none',
   timeoutMs: (MAX_TIMEOUT_S + 30) * 1000,
   async run(args, ctx) {
     const sandbox = sandboxOf(ctx);
-    const language = String(args.language) as CodeLanguage;
+    // Models often leave it out for Python, the common case.
+    const language = String(args.language ?? 'python') as CodeLanguage;
     if (!LANGUAGES.includes(language)) throw new Error(`language must be one of: ${LANGUAGES.join(', ')}`);
     const code = String(args.code ?? '');
     if (!code.trim()) throw new Error('code is empty');

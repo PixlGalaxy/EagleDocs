@@ -61,6 +61,14 @@ test('code_run refuses paths outside the workspace and unknown languages', async
   assert.match(results[1]!, /language must be one of/);
 });
 
+test('code_run defaults to Python when the language is left out', async () => {
+  const sandbox = new FakeSandbox();
+  const { agent, sink } = setup({ sandbox });
+  const p = new ScriptedProvider([() => toolCall('code_run', { code: 'print(1)' }, 'a'), () => text('ok')]);
+  await agent.run({ runId: 'r1', model: model(p), history: [user('x')], sink });
+  assert.equal(sandbox.requests[0]!.language, 'python');
+});
+
 // ------------------------------------------------------------------ web
 
 test('htmlToText keeps the content and drops the chrome', () => {
