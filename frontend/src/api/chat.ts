@@ -1,10 +1,11 @@
 import { api, apiUrl } from './client';
-import type { Approval, Chat, CodexDeviceStart, Connection, Job, Message, ModelOption, Steer, StreamEvent, UserModelPrefs } from './types';
+import type { Approval, BackgroundJob, Chat, CodexDeviceStart, Connection, Job, Message, ModelOption, Steer, StreamEvent, UserModelPrefs } from './types';
 
 export const chatApi = {
   list: () => api.get<Chat[]>('/chats'),
   create: (body: { title?: string; model_ref?: string | null }) => api.post<Chat>('/chats', body),
-  get: (id: string) => api.get<{ chat: Chat; messages: Message[]; pending_approvals: Approval[] }>(`/chats/${id}`),
+  get: (id: string) =>
+    api.get<{ chat: Chat; messages: Message[]; pending_approvals: Approval[]; background_jobs: BackgroundJob[] }>(`/chats/${id}`),
   rename: (id: string, title: string) => api.patch<Chat>(`/chats/${id}`, { title }),
   remove: (id: string) => api.del<void>(`/chats/${id}`),
   /** Queues a job and returns its id; the answer arrives through `stream`. */

@@ -871,5 +871,12 @@
   "browser.clearTitle": "¿Cerrar la sesión de este perfil?",
   "browser.clearBody": "EagleDocs olvidará las cookies de \"{profile}\" y tendrá que volver a iniciar sesión en esos sitios.",
   "apps.notAvailable": "Próximamente: podrás usar EagleDocs desde ChatGPT o Claude. Para usar tu cuenta de ChatGPT dentro de EagleDocs, ve a Ajustes > Modelos.",
-  "chat.typing": "EagleDocs está trabajando…"
+  "chat.typing": "EagleDocs está trabajando…",
+  "tools.agentDelegate": "Envió agentes de ayuda",
+  "tools.subagentSteps": "Pasos: {count}",
+  "chat.backgroundTitle": "Agentes de ayuda trabajando en segundo plano ({count})",
+  "chat.backgroundStop": "Detener",
+  "chat.backgroundStopping": "Deteniendo…",
+  "chat.backgroundDone": "Reportes de los agentes de ayuda ({count})",
+  "chat.backgroundFailed": "{count} no terminaron"
 }

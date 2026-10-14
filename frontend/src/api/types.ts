@@ -109,6 +109,23 @@ export interface ToolCall {
   args: Record<string, unknown>;
   status: 'running' | 'done' | 'error' | 'waiting_approval' | 'rejected';
   result_preview?: string;
+  /** agent_delegate while it runs: what each helper agent is doing. */
+  subagents?: SubagentProgress[];
+}
+
+/** One helper agent, followed through its `subagent` events. */
+export interface SubagentProgress {
+  index: number;
+  task: string;
+  status: 'running' | 'done' | 'failed' | 'cancelled';
+  steps: ToolCall[];
+}
+
+/** Helper agents working in the background for a chat (agent_delegate with background). */
+export interface BackgroundJob {
+  id: string;
+  status: JobStatus;
+  tasks: { goal: string }[];
 }
 
 export interface Message {
@@ -121,6 +138,8 @@ export interface Message {
   tool_calls?: ToolCall[];
   /** A correction sent while the agent was working. */
   steer?: boolean;
+  /** Reports of helper agents that worked in the background: shown as a card, not as the user's words. */
+  background?: { job_id: string; tasks: { goal: string; status: string }[] };
   created_at: string;
 }
 
@@ -160,6 +179,9 @@ export type StreamEvent =
   | { type: 'notice'; message: string }
   /** Progress of a helper agent started by the agent_delegate tool. */
   | { type: 'subagent'; parent_call_id: string; index: number; task: string; event: StreamEvent }
+  /** The reports of background helpers entered the chat, right before the answer that uses them. */
+  | { type: 'background_results'; message: Message }
+  /** A background helper job ends with `done` and no message. */
   | { type: 'done'; message: Message }
   | { type: 'error'; error: string };
 

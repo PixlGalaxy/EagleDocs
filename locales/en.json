@@ -871,5 +871,12 @@
   "browser.clearTitle": "Sign out of this profile?",
   "browser.clearBody": "EagleDocs will forget the cookies of \"{profile}\" and will need to log in again on those sites.",
   "apps.notAvailable": "Coming soon: you will be able to use EagleDocs from ChatGPT or Claude. To use your ChatGPT account inside EagleDocs, go to Settings > Models.",
-  "chat.typing": "EagleDocs is working…"
+  "chat.typing": "EagleDocs is working…",
+  "tools.agentDelegate": "Sent helper agents",
+  "tools.subagentSteps": "Steps: {count}",
+  "chat.backgroundTitle": "Helper agents working in the background ({count})",
+  "chat.backgroundStop": "Stop",
+  "chat.backgroundStopping": "Stopping…",
+  "chat.backgroundDone": "Reports from the helper agents ({count})",
+  "chat.backgroundFailed": "{count} did not finish"
 }

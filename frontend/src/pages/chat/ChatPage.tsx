@@ -3,13 +3,16 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { BookOpen, CalendarClock, GraduationCap, Map as MapIcon, Menu, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError } from '../../api/client';
-import type { Approval, Chat, Message, ModelOption, StreamEvent, ToolCall } from '../../api/types';
+import type { Approval, BackgroundJob, Chat, Message, ModelOption, StreamEvent, ToolCall } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
 import ChatSidebar from './ChatSidebar';
 import MessageView from '../../components/chat/MessageView';
 import ApprovalCard from '../../components/chat/ApprovalCard';
+import BackgroundReport from '../../components/chat/BackgroundReport';
+import BackgroundTasks from '../../components/chat/BackgroundTasks';
+import { applySubagentEvent, mergeCall } from '../../components/chat/subagents';
 import Composer from '../../components/chat/Composer';
 import ModelPicker from '../../components/chat/ModelPicker';
 import Modal from '../../components/ui/Modal';
@@ -47,6 +50,8 @@ const ChatPage = () => {
   const [loadingChats, setLoadingChats] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
+  /** Helper agents working in the background for this chat. */
+  const [background, setBackground] = useState<BackgroundJob[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(!!chatId);
   const [live, setLive] = useState<LiveAnswer | null>(null);
   const [options, setOptions] = useState<ModelOption[] | null>(null);
@@ -59,6 +64,10 @@ const ChatPage = () => {
   const [deleting, setDeleting] = useState<Chat | null>(null);
 
   const closeStream = useRef<(() => void) | null>(null);
+  /** The job the live answer follows, and jobs already finished (their row can still read as running for a moment). */
+  const liveJob = useRef<string | null>(null);
+  const finishedJobs = useRef(new Set<string>());
+  const attachRef = useRef<(chatId: string, jobId: string) => void>(() => undefined);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const refreshChats = useCallback(() => {
@@ -81,8 +90,23 @@ const ChatPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Reloads the saved conversation and the background helpers, and follows a
+   * job that started on its own (the turn that answers with background reports).
+   */
+  const reload = useCallback((id: string) => {
+    chatApi
+      .get(id)
+      .then(({ chat, messages: saved, background_jobs }) => {
+        setMessages(saved);
+        setBackground(background_jobs);
+        if (chat.active_job_id && !liveJob.current && !finishedJobs.current.has(chat.active_job_id)) attachRef.current(id, chat.active_job_id);
+      })
+      .catch(() => undefined);
+  }, []);
+
   const onEvent = useCallback(
-    (event: StreamEvent, streamChatId: string) => {
+    (event: StreamEvent, streamChatId: string, jobId: string) => {
       setLive((prev) => {
         if (!prev) return prev;
         switch (event.type) {
@@ -97,11 +121,19 @@ const ChatPage = () => {
             return { ...prev, content: prev.content + event.text, status: 'running' };
           case 'tool_call':
           case 'tool_result': {
+            const before = prev.toolCalls.find((call) => call.id === event.call.id);
             const others = prev.toolCalls.filter((call) => call.id !== event.call.id);
             // Text written before a tool and text written after it are separate paragraphs.
             const content = event.type === 'tool_call' && prev.content && !/\n\s*$/.test(prev.content) ? `${prev.content}\n\n` : prev.content;
-            return { ...prev, content, toolCalls: [...others, event.call] };
+            return { ...prev, content, toolCalls: [...others, mergeCall(before, event.call)] };
           }
+          case 'subagent':
+            return {
+              ...prev,
+              toolCalls: prev.toolCalls.map((call) =>
+                call.id === event.parent_call_id ? { ...call, subagents: applySubagentEvent(call.subagents ?? [], event) } : call,
+              ),
+            };
           case 'mfa_required':
             return { ...prev, status: 'waiting_mfa', mfa: event.message };
           case 'interrupted':
@@ -125,34 +157,52 @@ const ChatPage = () => {
 
       if (event.type === 'approval_required') {
         setApprovals((prev) => [...prev.filter((a) => a.id !== event.approval.id), event.approval]);
+      } else if (event.type === 'background_results') {
+        setMessages((prev) => [...prev, event.message]);
+      } else if (event.type === 'tool_result' && event.call.name === 'agent_delegate' && event.call.args.background === true) {
+        // Helpers went to the background: show them now, not when this answer ends.
+        chatApi
+          .get(streamChatId)
+          .then(({ background_jobs }) => setBackground(background_jobs))
+          .catch(() => undefined);
       } else if (event.type === 'done') {
+        finishedJobs.current.add(jobId);
+        liveJob.current = null;
         setMessages((prev) => [...prev, event.message]);
         // Decided approvals were only context for the running turn; the tool list keeps the record.
         setApprovals((prev) => prev.filter((a) => a.status === 'pending'));
         setLive(null);
         refreshChats();
         // Reload so corrections sit exactly where the agent took them.
-        chatApi
-          .get(streamChatId)
-          .then(({ messages: saved }) => setMessages(saved))
-          .catch(() => undefined);
+        reload(streamChatId);
       } else if (event.type === 'error') {
+        finishedJobs.current.add(jobId);
+        liveJob.current = null;
         setError(event.error);
         setLive(null);
         refreshChats();
       }
     },
-    [refreshChats],
+    [refreshChats, reload],
   );
 
   const attach = useCallback(
     (id: string, jobId: string) => {
       closeStream.current?.();
+      liveJob.current = jobId;
       setLive({ jobId, content: '', toolCalls: [], modelLabel: null, status: 'queued', queuePosition: null, mfa: null, steers: [], notice: null });
-      closeStream.current = chatApi.stream(id, jobId, (event) => onEvent(event, id));
+      closeStream.current = chatApi.stream(id, jobId, (event) => onEvent(event, id, jobId));
     },
     [onEvent],
   );
+  useEffect(() => {
+    attachRef.current = attach;
+  }, [attach]);
+
+  // Background helpers finished: their reports and the answer that uses them come next.
+  const onBackgroundFinished = useCallback(() => {
+    if (chatId) reload(chatId);
+  }, [chatId, reload]);
 
   // Switching chats resets the view during render (not in an effect), so the
   // old conversation never flashes under the new title.
@@ -162,6 +212,7 @@ const ChatPage = () => {
     setLive(null);
     setError('');
     setApprovals([]);
+    setBackground([]);
     setMessages([]);
     setLoadingMessages(!!chatId);
   }
@@ -170,14 +221,16 @@ const ChatPage = () => {
   useEffect(() => {
     closeStream.current?.();
     closeStream.current = null;
+    liveJob.current = null;
     if (!chatId) return;
     let cancelled = false;
     chatApi
       .get(chatId)
-      .then(({ chat, messages, pending_approvals }) => {
+      .then(({ chat, messages, pending_approvals, background_jobs }) => {
         if (cancelled) return;
         setMessages(messages);
         setApprovals(pending_approvals);
+        setBackground(background_jobs);
         if (chat.model_ref) setModelRef(chat.model_ref);
         if (chat.active_job_id) attach(chat.id, chat.active_job_id);
       })
@@ -371,9 +424,13 @@ const ChatPage = () => {
               </div>
             )}
 
-            {messages.map((m) => (
-              <MessageView key={m.id} role={m.role} content={m.content} modelLabel={m.model_label} toolCalls={m.tool_calls} steer={m.steer ? 'applied' : undefined} />
-            ))}
+            {messages.map((m) =>
+              m.background ? (
+                <BackgroundReport key={m.id} message={m} />
+              ) : (
+                <MessageView key={m.id} role={m.role} content={m.content} modelLabel={m.model_label} toolCalls={m.tool_calls} steer={m.steer ? 'applied' : undefined} />
+              ),
+            )}
 
             {/* Decided approvals shrink to one line above the answer in progress. */}
             {approvals.some((a) => a.status !== 'pending') && (
@@ -456,6 +513,7 @@ const ChatPage = () => {
         </div>
 
         <div className="shrink-0 px-4 pb-4 pt-2">
+          {chatId && <BackgroundTasks chatId={chatId} jobs={background} onFinished={onBackgroundFinished} />}
           {/* Corrections the agent has not read yet wait here, next to where they were written. */}
           {live && live.steers.some((st) => !st.applied) && (
             <div className="mx-auto mb-2 w-full max-w-3xl space-y-2">
