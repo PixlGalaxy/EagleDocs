@@ -31,6 +31,9 @@ import type { CanvasService } from './modules/canvas/canvas.service.js';
 import { createFilesRoutes } from './modules/files/files.routes.js';
 import type { DiskWorkspace } from './engine/workspace.js';
 import type { AdminEmbeddings } from './engine/documents.js';
+import type { SandboxManager } from './modules/sandbox/manager.js';
+import { createBrowserRoutes, createSandboxAdminRoutes } from './modules/sandbox/sandbox.routes.js';
+import { SandboxTools } from './engine/sandbox.js';
 
 export interface AppDeps {
   db: Db;
@@ -50,10 +53,11 @@ export interface AppDeps {
   canvas: CanvasService;
   workspace: DiskWorkspace;
   embeddings: AdminEmbeddings;
+  sandboxes: SandboxManager;
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -114,9 +118,11 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/memories', agentData.memories);
   app.use('/api/schedules', agentData.schedules);
   app.use('/api/skills', agentData.skills);
+  app.use('/api/browser', createBrowserRoutes({ db, config, sandboxes, tools: sandboxes.enabled ? new SandboxTools(sandboxes) : undefined }));
 
   app.use('/api/admin/logs', createLogsRoutes(db));
   app.use('/api/admin/models', createAdminModelRoutes(db, secrets));
+  app.use('/api/admin', createSandboxAdminRoutes({ db, bus, config, settings, sandboxes, workspace }));
   app.use(
     '/api/admin',
     createAdminRoutes({ db, config, settings, mail, institutions, users: new UsersAdminService(db, institutions), t }),

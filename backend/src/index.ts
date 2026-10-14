@@ -23,6 +23,7 @@ import { MailService } from './modules/mail/mail.service.js';
 import { pruneNodes, startHeartbeat } from './nodes/nodes.js';
 import { createApp } from './app.js';
 import { setupEngine } from './engine/setup.js';
+import { SandboxManager } from './modules/sandbox/manager.js';
 import { DiskWorkspace, sweepTemp } from './engine/workspace.js';
 import { AdminEmbeddings } from './engine/documents.js';
 import { ChatService } from './modules/chat/chat.service.js';
@@ -96,7 +97,10 @@ async function main() {
   const canvas = new CanvasService(db, connections);
   const workspace = new DiskWorkspace(config.DATA_ROOT, settings);
   const embeddings = new AdminEmbeddings(db, secrets);
-  const engine = await setupEngine(db, bus, { workspace, embeddings });
+  // Before the engine: code and browser tools are offered only when sandboxes work.
+  const sandboxes = new SandboxManager(db, bus, settings, config);
+  await sandboxes.start().catch((err) => logger.warn(`Sandboxes are off: ${(err as Error).message}`));
+  const engine = await setupEngine(db, bus, { workspace, embeddings, sandboxes, searxngUrl: config.SEARXNG_URL });
   const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
@@ -134,6 +138,7 @@ async function main() {
     canvas,
     workspace,
     embeddings,
+    sandboxes,
   });
   const onListening = () => {
     logger.info(`Node ${config.NODE_ID} listening on ${config.HOST ?? 'all interfaces'}:${config.PORT} (${config.NODE_ENV})`);
@@ -150,8 +155,10 @@ async function main() {
     logger.info(`${signal} received, shutting down`);
     server.close();
     worker.stop();
-    void bus
-      .stop()
+    void sandboxes
+      .stopAll()
+      .catch(() => undefined)
+      .then(() => bus.stop())
       .then(flushLogs)
       .finally(() =>
         db

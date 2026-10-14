@@ -6,6 +6,10 @@ import { PgMemoryStore, PgRunStore, PgScheduleStore, PgSkillStore } from './stor
 import { CANVAS_TOOLS } from './tools/canvas.js';
 import { AdminEmbeddings, documentExtractor } from './documents.js';
 import type { DiskWorkspace } from './workspace.js';
+import type { SandboxManager } from '../modules/sandbox/manager.js';
+import { SandboxTools } from './sandbox.js';
+import { eagledocsBrowserPolicy } from './browser-policy.js';
+import { SafeFetch, WebSearch } from './web.js';
 
 /** Who the agent is. The engine adds the user, memory, skills and its rules after this. */
 export const EAGLEDOCS_PROMPT = `You are EagleDocs, an AI assistant for university students, built on PixlAI-Engine.
@@ -21,12 +25,14 @@ const engineLogger: Logger = {
   error: (m, d) => logger.error(`[engine] ${m}`, d),
 };
 
-/** PixlAI-Engine wired to Postgres, with EagleDocs' own tools (Canvas now; files and browser in phase 4). */
+/** PixlAI-Engine wired to Postgres, with EagleDocs' own tools: Canvas, files and RAG, web, and the sandbox (code and browser). */
 export async function setupEngine(
   db: Db,
   bus: Bus,
-  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings },
+  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandboxes: SandboxManager; searxngUrl: string | undefined },
 ): Promise<Engine> {
+  // Code and browser exist only when Docker and the sandbox image are there.
+  const sandbox = host.sandboxes.enabled ? new SandboxTools(host.sandboxes) : undefined;
   const runs = new PgRunStore(db, bus);
   await runs.start();
   return createEngine({
@@ -37,6 +43,11 @@ export async function setupEngine(
     extractor: documentExtractor,
     embeddings: host.embeddings,
     // sharedRags: instructor/course RAGs plug in here later (SharedRagSource).
+    sandbox,
+    search: new WebSearch(host.searxngUrl),
+    fetcher: new SafeFetch(),
+    browser: sandbox,
+    browserPolicy: eagledocsBrowserPolicy(db),
     logger: engineLogger,
   });
 }

@@ -1,0 +1,91 @@
+import type { BrowserAction, BrowserPage, BrowserPort, ExecRequest, ExecResult, SandboxPort } from 'pixlai-engine';
+import type { SandboxHandle, SandboxManager } from '../modules/sandbox/manager.js';
+
+/** Request timeout on top of what the call itself is allowed to take. */
+const MARGIN_MS = 15_000;
+const BROWSER_MS = 75_000;
+
+class RunnerError extends Error {}
+
+/**
+ * The engine's SandboxPort and BrowserPort over the user's sandbox runner.
+ * The sandbox is started on the first call and kept alive by use; a call that
+ * finds it dead (memory limit, Docker restart) starts a new one and retries once.
+ */
+export class SandboxTools implements SandboxPort, BrowserPort {
+  constructor(private manager: SandboxManager) {}
+
+  async describe(): Promise<string> {
+    const { cpu, memMb } = this.manager.limits();
+    return [
+      `Ubuntu with Python 3 (pandas, numpy, matplotlib, openpyxl, python-docx, python-pptx, pymupdf, pypdf, reportlab, requests),`,
+      `Node.js and bash. Limits: ${cpu} CPU, ${memMb} MB of memory, 256 processes. Files written under the workspace persist;`,
+      'everything else is reset when the sandbox stops after a few idle minutes. Only workspace files survive between runs.',
+    ].join(' ');
+  }
+
+  private async call<T>(userId: string, path: string, body: unknown, timeoutMs: number, signal: AbortSignal): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      const handle = await this.manager.ensure(userId);
+      try {
+        return await this.post<T>(handle, path, body, timeoutMs, signal);
+      } catch (err) {
+        if (err instanceof RunnerError || signal.aborted || attempt > 0) throw err;
+        // Connection-level failure: the container is gone. Start a fresh one and try again.
+        this.manager.forget(userId);
+      }
+    }
+  }
+
+  private async post<T>(handle: SandboxHandle, path: string, body: unknown, timeoutMs: number, signal: AbortSignal): Promise<T> {
+    this.manager.touch(handle);
+    const res = await fetch(`${handle.baseUrl}${path}`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${handle.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs + MARGIN_MS)]),
+    });
+    this.manager.touch(handle);
+    const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+    if (!res.ok) throw new RunnerError(data.error ?? `The sandbox answered ${res.status}`);
+    return data;
+  }
+
+  // ---------------------------------------------------------------- SandboxPort
+
+  exec(userId: string, request: ExecRequest, signal: AbortSignal): Promise<ExecResult> {
+    return this.call(userId, '/exec', request, request.timeoutMs, signal);
+  }
+
+  // ---------------------------------------------------------------- BrowserPort
+
+  open(userId: string, profile: string, url: string, signal: AbortSignal): Promise<BrowserPage> {
+    return this.call(userId, '/browser/open', { profile, url }, BROWSER_MS, signal);
+  }
+
+  snapshot(userId: string, profile: string, signal: AbortSignal): Promise<BrowserPage> {
+    return this.call(userId, '/browser/snapshot', { profile }, BROWSER_MS, signal);
+  }
+
+  act(userId: string, profile: string, action: BrowserAction, signal: AbortSignal): Promise<BrowserPage> {
+    return this.call(userId, '/browser/act', { profile, action }, BROWSER_MS, signal);
+  }
+
+  screenshot(userId: string, profile: string, signal: AbortSignal): Promise<{ path: string }> {
+    return this.call(userId, '/browser/screenshot', { profile }, BROWSER_MS, signal);
+  }
+
+  /** Never starts a sandbox: no sandbox means no open page. */
+  async currentUrl(userId: string, profile: string): Promise<string | null> {
+    if (!this.manager.isRunning(userId)) return null;
+    const handle = await this.manager.ensure(userId);
+    const res = await this.post<{ url: string | null }>(handle, '/browser/url', { profile }, 10_000, AbortSignal.timeout(15_000)).catch(() => ({ url: null }));
+    return res.url;
+  }
+
+  async close(userId: string, profile: string): Promise<void> {
+    if (!this.manager.isRunning(userId)) return;
+    const handle = await this.manager.ensure(userId);
+    await this.post(handle, '/browser/close', { profile }, 10_000, AbortSignal.timeout(15_000)).catch(() => undefined);
+  }
+}

@@ -96,7 +96,7 @@ export function createAdminRoutes(deps: {
       users: counts,
       chats_today: jobs.today,
       jobs_running: jobs.running,
-      sandboxes_active: 0,
+      sandboxes_active: (await one<{ n: number }>(db, 'SELECT COUNT(*)::int AS n FROM sandboxes')).n,
       nodes_online: nodes.online,
       alerts,
     });
@@ -131,7 +131,8 @@ export function createAdminRoutes(deps: {
       db,
       "SELECT node_id, COUNT(*) AS n FROM jobs WHERE status IN ('running', 'waiting_approval', 'waiting_mfa') GROUP BY node_id",
     );
-    res.json(rows.map((row) => ({ ...row, sandboxes_active: 0, jobs_running: running.find((r) => r.node_id === row.id)?.n ?? 0 })));
+    const boxes = await many<{ node_id: string; n: number }>(db, 'SELECT node_id, COUNT(*)::int AS n FROM sandboxes GROUP BY node_id');
+    res.json(rows.map((row) => ({ ...row, sandboxes_active: boxes.find((b) => b.node_id === row.id)?.n ?? 0, jobs_running: running.find((r) => r.node_id === row.id)?.n ?? 0 })));
   });
 
   // ------------------------------------------------------------ users

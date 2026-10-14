@@ -25,7 +25,15 @@ const UUID = /^[0-9a-f-]{36}$/i;
 const ADMIN_ROW_SELECT = `SELECT * FROM (
   ${USER_SELECT.replace('SELECT u.*,', `SELECT u.*,
     (SELECT MAX(s.last_seen_at) FROM sessions s WHERE s.user_id = u.id) AS last_seen_at,
-    (SELECT v.expires_at FROM email_verifications v WHERE v.user_id = u.id) AS verification_expires_at,`)}
+    (SELECT v.expires_at FROM email_verifications v WHERE v.user_id = u.id) AS verification_expires_at,
+    -- Admin → Users dot: the agent is running a job or the container is starting (working),
+    -- the container is up and waiting (idle), nothing (off).
+    CASE
+      WHEN EXISTS (SELECT 1 FROM jobs j WHERE j.user_id = u.id AND j.status IN ('running', 'waiting_approval', 'waiting_mfa'))
+        OR EXISTS (SELECT 1 FROM sandboxes sb WHERE sb.user_id = u.id AND sb.status = 'starting') THEN 'working'
+      WHEN EXISTS (SELECT 1 FROM sandboxes sb WHERE sb.user_id = u.id) THEN 'idle'
+      ELSE 'off'
+    END AS sandbox_status,`)}
 ) AS x`;
 
 function uuidOrNull(value: unknown): string | null {

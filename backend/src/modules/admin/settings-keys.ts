@@ -11,6 +11,15 @@ export const SETTINGS_KEYS = {
   /** ISO date set by the Codex circuit breaker; absent when healthy. */
   codexDisabledUntil: 'codex.disabled_until',
 
+  sandboxImage: 'sandbox.image',
+  sandboxCpu: 'sandbox.default_cpu',
+  sandboxMemMb: 'sandbox.default_mem_mb',
+  sandboxDiskMb: 'sandbox.default_disk_mb',
+  sandboxMaxActive: 'sandbox.max_active_per_node',
+  sandboxIdleMinutes: 'sandbox.idle_timeout_minutes',
+  sandboxNetwork: 'sandbox.network',
+  sandboxNetworkList: 'sandbox.network_list',
+
   smtpHost: 'smtp.host',
   smtpPort: 'smtp.port',
   smtpSecure: 'smtp.secure',

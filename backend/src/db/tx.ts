@@ -29,6 +29,8 @@ export const LOCKS = {
   scheduler: 7_301_005,
   jobReaper: 7_301_006,
   tempSweep: 7_301_007,
+  /** Two-key lock (sandboxUser, hash of the user id): one replica at a time starts a user's sandbox. */
+  sandboxUser: 7_301_008,
 } as const;
 
 /**

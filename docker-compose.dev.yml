@@ -8,6 +8,11 @@
 #
 # Runs in production mode, so the dev seed (admin/admin, user/user) is off here.
 # For that, run the backend with `npm run dev` (NODE_ENV unset).
+#
+# Sandboxes: the replicas create one container per user through the host's Docker
+# (docker.sock). Build the image first: docker build -t eagledocs-sandbox:dev sandbox
+
+name: eagledocs
 
 x-eagledocs: &eagledocs
   build: .
@@ -20,8 +25,14 @@ x-eagledocs: &eagledocs
     ADMIN_PASSWORD: change-me-now
     PUBLIC_URL: http://localhost:8080
     TRUST_PROXY: uniquelocal
+    SANDBOX_IMAGE: eagledocs-sandbox:dev
+    # The sandboxes mount the users' folders from the same volume (with a subpath).
+    SANDBOX_DATA_VOLUME: eagledocs_shared-data
+    # web_search: metasearch without API keys (DuckDuckGo is the fallback when it is down).
+    SEARXNG_URL: http://searxng:8080
   volumes:
     - shared-data:/data
+    - /var/run/docker.sock:/var/run/docker.sock
   depends_on:
     postgres:
       condition: service_healthy
@@ -54,6 +65,14 @@ services:
       <<: *env
       NODE_ID: node-b
 
+  searxng:
+    image: searxng/searxng:2026.9.21-df67eb6c2
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-dev-only-searxng-secret}
+    configs:
+      - source: searxng
+        target: /etc/searxng/settings.yml
+
   balancer:
     image: nginx:alpine
     ports:
@@ -64,6 +83,15 @@ services:
         target: /etc/nginx/conf.d/default.conf
 
 configs:
+  searxng:
+    content: |
+      use_default_settings: true
+      server:
+        limiter: false
+        image_proxy: false
+      search:
+        safe_search: 1
+        formats: [html, json]
   balancer:
     content: |
       upstream eagledocs { server node-a:80; server node-b:80; }

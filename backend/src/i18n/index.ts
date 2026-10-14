@@ -85,6 +85,8 @@ const BACKEND_KEYS = [
   'canvas.tokenFormat',
   'files.quota',
   'files.invalidPath',
+  'browser.invalidDomain',
+  'browser.canvasReadOnly',
 ] as const;
 
 export type TranslationKey = (typeof BACKEND_KEYS)[number];

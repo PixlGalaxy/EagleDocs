@@ -50,6 +50,19 @@ const server = http.createServer(async (req, res) => {
   if (lastUser.includes('[canvas]') && request.tools) return call('canvas_briefing', { days: 7 });
   if (lastUser.includes('[pages]') && request.tools) return call('canvas_save_pages', { course_id: 101 });
   if (lastUser.includes('[memory]') && request.tools) return call('memory_add', { content: 'Likes end-to-end tests' });
+  // Sandbox: [code] runs Python that prints and writes a file; [browse URL] opens it; [click REF] / [type REF] act on it.
+  if (lastUser.includes('[code]') && request.tools) {
+    return call('code_run', { language: 'python', code: "open('e2e-out.txt','w').write('made in the sandbox')\nprint(6 * 7)" });
+  }
+  // Web: [search words...] and [fetch URL].
+  const search = /\[search ([^\]]+)\]/.exec(lastUser);
+  if (search && request.tools) return call('web_search', { query: search[1] });
+  const fetchUrl = /\[fetch (\S+)\]/.exec(lastUser);
+  if (fetchUrl && request.tools) return call('web_fetch', { url: fetchUrl[1] });
+  const browse = /\[browse (\S+)\]/.exec(lastUser);
+  if (browse && request.tools) return call('browser_open', { url: browse[1] });
+  const click = /\[click (@e\d+)\]/.exec(lastUser);
+  if (click && request.tools) return call('browser_click', { ref: click[1] });
   if (lastUser.includes('[slow]')) {
     let closed = false;
     req.on('close', () => (closed = true));

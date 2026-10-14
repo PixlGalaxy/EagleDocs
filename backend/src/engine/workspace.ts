@@ -8,6 +8,8 @@ import { logger } from '../logger.js';
 
 export const TEMP = 'TEMP';
 export const TEMP_TTL_MS = 24 * 60 * 60 * 1000;
+/** The sandbox browser's profiles (cookies): only the browser itself touches them, never the file tools. */
+export const BROWSER_DIR = '.browser';
 const USAGE_TTL_MS = 30_000;
 const MB = 1024 * 1024;
 
@@ -54,6 +56,7 @@ export class DiskWorkspace implements WorkspacePort {
   resolve(userId: string, path: string): Resolved {
     const clean = path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
     if (clean.split('/').some((p) => p === '..' || p === '.')) throw new Error('Invalid path');
+    if (clean === BROWSER_DIR || clean.startsWith(`${BROWSER_DIR}/`)) throw new Error('Invalid path');
     const isTemp = clean === TEMP || clean.startsWith(`${TEMP}/`);
     const area: Area = isTemp ? 'temp' : 'workspace';
     const rel = isTemp ? clean.slice(TEMP.length).replace(/^\//, '') : clean;
@@ -110,6 +113,8 @@ export class DiskWorkspace implements WorkspacePort {
     const out: FileEntry[] = [];
     for (const d of dirents) {
       if (d.isSymbolicLink()) continue;
+      // The real TEMP area is shown below; the empty folder here is only the sandbox's mount point.
+      if (r.area === 'workspace' && r.rel === '' && (d.name === TEMP || d.name === BROWSER_DIR)) continue;
       const abs = join(r.abs, d.name);
       const stat = await fs.stat(abs).catch(() => null);
       if (!stat) continue;

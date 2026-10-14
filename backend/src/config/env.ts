@@ -48,6 +48,24 @@ export interface EnvConfig {
   /** Agent jobs this replica runs at the same time. */
   JOB_WORKERS: number;
 
+  /**
+   * Per-user sandboxes. `SANDBOX_ENABLED=false` turns code, browser and their tools off.
+   * The image default can be changed by the admin (Admin → Sandbox).
+   */
+  SANDBOX_ENABLED: boolean;
+  SANDBOX_IMAGE: string;
+  /** Docker network the sandboxes join (created when missing). */
+  SANDBOX_NETWORK: string;
+  /**
+   * Where DATA_ROOT lives for the Docker daemon, which mounts the user's folders into the sandbox:
+   * a host path (SANDBOX_DATA_HOST_PATH) or a named volume (SANDBOX_DATA_VOLUME, mounted with a subpath).
+   * Without either, DATA_ROOT itself is used (the backend runs on the host, as in development).
+   */
+  SANDBOX_DATA_HOST_PATH: string | undefined;
+  SANDBOX_DATA_VOLUME: string | undefined;
+  /** SearXNG base URL for web_search; without it the agent searches through DuckDuckGo's HTML page. */
+  SEARXNG_URL: string | undefined;
+
   LANGUAGE: Language;
 
   BACKEND_VERSION: string;
@@ -131,6 +149,13 @@ export function loadEnv(): EnvConfig {
     LOGIN_RATE_LIMIT_WINDOW_MINUTES: parseInt(env.LOGIN_RATE_LIMIT_WINDOW_MINUTES || '15', 10),
     VERIFICATION_TTL_HOURS: Number(env.VERIFICATION_TTL_HOURS || '72') || 72,
     JOB_WORKERS: Math.max(1, parseInt(env.JOB_WORKERS || '4', 10) || 4),
+
+    SANDBOX_ENABLED: env.SANDBOX_ENABLED !== 'false',
+    SANDBOX_IMAGE: env.SANDBOX_IMAGE || (isProd ? 'ghcr.io/pixlgalaxy/eagledocs-sandbox:latest' : 'eagledocs-sandbox:dev'),
+    SANDBOX_NETWORK: env.SANDBOX_NETWORK || 'eagledocs-sandbox',
+    SANDBOX_DATA_HOST_PATH: env.SANDBOX_DATA_HOST_PATH || undefined,
+    SANDBOX_DATA_VOLUME: env.SANDBOX_DATA_VOLUME || undefined,
+    SEARXNG_URL: env.SEARXNG_URL || undefined,
 
     LANGUAGE: isLanguage(env.LANGUAGE) ? env.LANGUAGE : 'en',
 
