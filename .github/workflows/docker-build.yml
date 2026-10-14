@@ -23,10 +23,10 @@ jobs:
         run: echo "🚀 Hello from Galaxy! | Building unified EagleDocs container (Frontend + Backend) with Node 26..."
 
       - name: 📂 Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🔧 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: 🔍 Prepare Repository Owner and Tags
         id: vars
@@ -41,14 +41,14 @@ jobs:
 
       - name: 🔑 Log in to GitHub Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🏗 Build and Push Docker Image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         env:
           REPOSITORY_OWNER: ${{ env.REPOSITORY_OWNER }}
           IMAGE_NAME: ${{ env.IMAGE_NAME }}
