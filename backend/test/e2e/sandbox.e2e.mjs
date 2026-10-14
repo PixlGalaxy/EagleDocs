@@ -82,7 +82,8 @@ r = await admin.req('PUT', '/admin/sandbox', { ...r.json, default_mem_mb: 1 });
 check('invalid limits refused', r.status === 400);
 r = await user.req('GET', '/admin/sandbox');
 check('students cannot read sandbox settings', r.status === 403);
-check('status dot starts red (off)', (await dotOf(admin, 'user')) === 'off');
+const firstDot = await dotOf(admin, 'user');
+check('status dot starts red (off)', firstDot === 'off', firstDot);
 
 // ---------------------------------------------------------------- code_run
 const chat = (await user.req('POST', '/chats', {})).json;

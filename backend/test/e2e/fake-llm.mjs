@@ -61,6 +61,9 @@ const server = http.createServer(async (req, res) => {
   if (lastUser.includes('[pages]') && request.tools) return call('canvas_save_pages', { course_id: 101 });
   if (lastUser.includes('[memory]') && request.tools) return call('memory_add', { content: 'Likes end-to-end tests' });
   // Sandbox: [code] runs Python that prints and writes a file; [browse URL] opens it; [click REF] / [type REF] act on it.
+  // [py] <code>: runs the rest of the message as Python.
+  const py = /\[py\]\s*([\s\S]+)$/.exec(lastUser);
+  if (py && request.tools) return call('code_run', { language: 'python', code: py[1] });
   if (lastUser.includes('[code]') && request.tools) {
     return call('code_run', { language: 'python', code: "open('e2e-out.txt','w').write('made in the sandbox')\nprint(6 * 7)" });
   }

@@ -37,6 +37,22 @@ PORT=4000 npx tsx src/index.ts &
 node test/e2e/canvas.e2e.mjs
 ```
 
+## Sandboxes and replicas (`sandbox-nodes.e2e.mjs`)
+
+Phase 4 acceptance on sandboxes: two users cannot see each other's files, the 512 MB limit kills a process that goes over,
+with `max_active_per_node=1` the second user waits and then runs, a sandbox moves to replica B (files and the Outlook
+session kept, no new Duo), and a job on a replica that dies becomes `interrupted` in under 60 s and can be retried on B.
+The script starts replicas A and B itself (one job worker each) on a shared Postgres and data root, and kills A.
+`[py] <code>` makes the fake model run that Python.
+
+```bash
+docker run -d --name eagledocs-e2e-pg -e POSTGRES_USER=eagledocs -e POSTGRES_PASSWORD=eagledocs -e POSTGRES_DB=eagledocs \
+  -p 55433:5432 postgres:17-alpine
+node test/e2e/fake-llm.mjs 4999 & node test/e2e/fake-school.mjs 4997 &
+E2E_DATABASE_URL=postgres://eagledocs:eagledocs@localhost:55433/eagledocs E2E_DATA_ROOT=/tmp/e2e-nodes \
+  node test/e2e/sandbox-nodes.e2e.mjs
+```
+
 ## Accounts and admin (`auth-admin.e2e.mjs`)
 
 Production-mode replicas (no dev seed) with `ADMIN_USERNAME=pixl` (or set `E2E_ADMIN`) and password `change-me-now`.
