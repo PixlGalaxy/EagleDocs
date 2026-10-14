@@ -25,7 +25,8 @@ interface LiveAnswer {
   queuePosition: number | null;
   mfa: string | null;
   /** Corrections sent while this answer runs. */
-  steers: { id: string; content: string; applied: boolean }[];
+  /** `at`: how many tool calls had run when the agent read it, to show it at that point of the answer. */
+  steers: { id: string; content: string; applied: boolean; at?: number }[];
   notice: string | null;
 }
 
@@ -113,8 +114,8 @@ const ChatPage = () => {
             return {
               ...prev,
               steers: known
-                ? prev.steers.map((s) => (s.id === event.id ? { ...s, applied: true } : s))
-                : [...prev.steers, { id: event.id, content: event.content, applied: true }],
+                ? prev.steers.map((s) => (s.id === event.id ? { ...s, applied: true, at: prev.toolCalls.length } : s))
+                : [...prev.steers, { id: event.id, content: event.content, applied: true, at: prev.toolCalls.length }],
             };
           }
           default:
@@ -192,6 +193,17 @@ const ChatPage = () => {
   }, [chatId, attach, navigate, t]);
 
   useEffect(() => () => closeStream.current?.(), []);
+
+  // "Thinking" dots come back when no new text arrived for a moment (a tool is running, the model is working).
+  // The text that last went quiet; any new text makes it stale, so the dots hide until the next pause.
+  const [quietAt, setQuietAt] = useState<string | null>(null);
+  const liveContent = live?.content ?? null;
+  const quiet = liveContent !== null && quietAt === liveContent;
+  useEffect(() => {
+    if (liveContent === null) return;
+    const timer = setTimeout(() => setQuietAt(liveContent), 900);
+    return () => clearTimeout(timer);
+  }, [liveContent]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' });
@@ -397,14 +409,34 @@ const ChatPage = () => {
                     </Notice>
                   </div>
                 )}
-                {live.steers.length > 0 && (
-                  <div className="mb-6 space-y-3">
-                    {live.steers.map((s) => (
-                      <MessageView key={s.id} role="user" content={s.content} steer={s.applied ? 'applied' : 'pending'} />
-                    ))}
-                  </div>
-                )}
-                <MessageView role="assistant" content={live.content} modelLabel={live.modelLabel} toolCalls={live.toolCalls} streaming={live.status === 'running'} />
+                {/* The answer in progress, cut where the agent read each correction. */}
+                {(() => {
+                  const applied = live.steers.filter((st) => st.applied).sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+                  let from = 0;
+                  const parts = applied.map((st, i) => {
+                    const calls = live.toolCalls.slice(from, st.at ?? from);
+                    from = st.at ?? from;
+                    return (
+                      <div key={st.id} className="space-y-6">
+                        {(calls.length > 0 || i === 0) && <MessageView role="assistant" content="" modelLabel={i === 0 ? live.modelLabel : null} toolCalls={calls} />}
+                        <MessageView role="user" content={st.content} steer="applied" />
+                      </div>
+                    );
+                  });
+                  return (
+                    <div className="space-y-6">
+                      {parts}
+                      <MessageView
+                        role="assistant"
+                        content={live.content}
+                        modelLabel={applied.length ? null : live.modelLabel}
+                        toolCalls={live.toolCalls.slice(from)}
+                        streaming={live.status === 'running'}
+                        typing={live.status === 'running' && (!live.content || quiet)}
+                      />
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -424,6 +456,16 @@ const ChatPage = () => {
         </div>
 
         <div className="shrink-0 px-4 pb-4 pt-2">
+          {/* Corrections the agent has not read yet wait here, next to where they were written. */}
+          {live && live.steers.some((st) => !st.applied) && (
+            <div className="mx-auto mb-2 w-full max-w-3xl space-y-2">
+              {live.steers
+                .filter((st) => !st.applied)
+                .map((st) => (
+                  <MessageView key={st.id} role="user" content={st.content} steer="pending" />
+                ))}
+            </div>
+          )}
           <Composer
             value={draft}
             onChange={setDraft}

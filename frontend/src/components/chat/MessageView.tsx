@@ -6,13 +6,17 @@ import { useI18n } from '../../i18n/I18nContext';
 import type { ToolCall } from '../../api/types';
 import ToolCallList from './ToolCallList';
 import { LOGO_SRC } from '../brand';
+import { useSmoothText } from './useSmoothText';
 
 interface Props {
   role: 'user' | 'assistant';
   content: string;
   modelLabel?: string | null;
   toolCalls?: ToolCall[];
+  /** Text still arriving: revealed at an even pace. */
   streaming?: boolean;
+  /** The agent is thinking or working (no new text for a moment): show the typing bubble. */
+  typing?: boolean;
   /** A correction sent while the agent worked; `pending` until it was applied. */
   steer?: 'pending' | 'applied';
 }
@@ -33,8 +37,9 @@ const MarkdownBody = memo(({ text }: { text: string }) => (
 ));
 
 /** One chat turn. Assistant answers render markdown; user turns stay plain text. */
-const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, steer }: Props) => {
+const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, typing = false, steer }: Props) => {
   const { t } = useI18n();
+  const shown = useSmoothText(content, streaming);
   if (role === 'user' && steer) {
     return (
       <div className="flex flex-col items-end gap-1">
@@ -70,9 +75,21 @@ const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, 
           </p>
         )}
         {toolCalls && <ToolCallList calls={toolCalls} />}
-        <div className={`prose-chat text-[15px] text-slate-800 dark:text-slate-200 ${streaming ? 'stream-caret' : ''}`}>
-          {content ? <MarkdownBody text={content} /> : streaming ? <span className="sr-only">…</span> : null}
-        </div>
+        {shown && (
+          <div className="prose-chat text-[15px] text-slate-800 dark:text-slate-200">
+            <MarkdownBody text={shown} />
+          </div>
+        )}
+        {typing && (
+          <div className={`${shown ? 'mt-2' : ''} inline-flex rounded-2xl rounded-bl-md bg-slate-100 px-3.5 py-3 text-slate-500 dark:bg-slate-800 dark:text-slate-400`} role="status">
+            <span className="typing-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="sr-only">{t('chat.typing')}</span>
+          </div>
+        )}
       </div>
     </div>
   );
