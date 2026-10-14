@@ -262,7 +262,8 @@ export class SandboxManager {
         NanoCpus: Math.round(limits.cpu * 1e9),
         Memory: limits.memMb * MB,
         MemorySwap: limits.memMb * MB,
-        PidsLimit: 256,
+        // Linux counts threads here, and one Chromium alone uses ~250: this still stops a fork bomb.
+        PidsLimit: 1024,
         ReadonlyRootfs: true,
         Tmpfs: { '/tmp': 'rw,nosuid,nodev,size=256m' },
         ShmSize: 64 * MB,

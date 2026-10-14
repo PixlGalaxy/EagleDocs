@@ -24,6 +24,8 @@ const MAX_BODY = 2 * 1024 * 1024;
 const MAX_STREAM = 1024 * 1024;
 const SNAPSHOT_CHARS = 60_000;
 const BROWSER_IDLE_MS = 10 * 60_000;
+// Each Chromium uses ~250 threads, which count against the container pids limit: keep few open.
+const MAX_BROWSERS = 2;
 const WALK_LIMIT = 20_000;
 const SKIP_DIRS = new Set(['.browser', '.rag', 'node_modules', '__pycache__', '.cache', '.git']);
 
@@ -192,6 +194,11 @@ async function session(profile, create) {
   let s = sessions.get(profile);
   if (!s) {
     if (!create) throw new HttpError(409, 'No page is open in this profile: use browser_open first');
+    // Too many browsers open: close the least recently used one (its cookies are saved first).
+    while (sessions.size >= MAX_BROWSERS) {
+      const [oldest] = [...sessions.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed)[0];
+      await browserRoutes.close({ profile: oldest });
+    }
     chromium ??= (await import('playwright-core')).chromium;
     const dir = join(WORKSPACE, '.browser', profile);
     await fs.mkdir(dir, { recursive: true });
@@ -199,7 +206,7 @@ async function session(profile, create) {
       headless: true,
       // The container already isolates the browser; Chromium's own sandbox needs privileges we drop.
       chromiumSandbox: false,
-      args: ['--disable-dev-shm-usage', '--no-first-run', '--disable-sync', '--disable-features=Translate'],
+      args: ['--disable-dev-shm-usage', '--no-first-run', '--disable-sync', '--disable-features=Translate', '--renderer-process-limit=4'],
       viewport: { width: 1280, height: 900 },
       acceptDownloads: false,
       locale: 'en-US',
