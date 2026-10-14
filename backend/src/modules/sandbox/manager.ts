@@ -87,7 +87,13 @@ export class SandboxManager {
       logger.info('Sandboxes are disabled (SANDBOX_ENABLED=false): code and browser tools are off');
       return;
     }
-    if (!(await this.docker.ping())) {
+    // Docker Desktop and freshly booted hosts can take a few seconds to answer.
+    let reachable = false;
+    for (let attempt = 0; attempt < 5 && !reachable; attempt++) {
+      reachable = await this.docker.ping();
+      if (!reachable) await new Promise((r) => setTimeout(r, 4000));
+    }
+    if (!reachable) {
       logger.warn('Docker is not reachable: code and browser tools are off. Mount /var/run/docker.sock to enable sandboxes.');
       return;
     }

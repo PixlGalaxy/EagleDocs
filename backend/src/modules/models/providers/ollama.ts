@@ -1,13 +1,16 @@
 import { randomUUID } from 'crypto';
 import type { ChatMessage, ModelChunk, ModelProvider, ModelRequest } from 'pixlai-engine';
 import { errorFrom, ndjson } from './http.js';
+import { logger } from '../../../logger.js';
 
 interface OllamaChunk {
   message?: {
     content?: string;
+    thinking?: string;
     tool_calls?: { function: { name: string; arguments: Record<string, unknown> | string } }[];
   };
   done?: boolean;
+  done_reason?: string;
   prompt_eval_count?: number;
   eval_count?: number;
   error?: string;
@@ -50,15 +53,28 @@ export class OllamaProvider implements ModelProvider {
     });
     if (!res.ok || !res.body) throw await errorFrom(res, 'Ollama');
 
+    let produced = false;
+    let thinking = 0;
     for await (const chunk of ndjson<OllamaChunk>(res.body)) {
       if (chunk.error) throw new Error(`Ollama: ${chunk.error}`);
-      if (chunk.message?.content) yield { type: 'text', text: chunk.message.content };
+      thinking += chunk.message?.thinking?.length ?? 0;
+      if (chunk.message?.content) {
+        produced = true;
+        yield { type: 'text', text: chunk.message.content };
+      }
       for (const call of chunk.message?.tool_calls ?? []) {
         const args = typeof call.function.arguments === 'string' ? JSON.parse(call.function.arguments || '{}') : call.function.arguments;
         // Ollama does not number calls; the engine needs an id to pair results.
+        produced = true;
         yield { type: 'tool_call', call: { id: `call_${randomUUID().slice(0, 8)}`, name: call.function.name, args: args ?? {} } };
       }
       if (chunk.done) {
+        if (!produced) {
+          // Usually a tool call the server could not parse (long code with broken JSON) or only hidden thinking.
+          logger.warn(
+            `Ollama ${request.model} returned an empty reply (done_reason ${chunk.done_reason ?? '?'}, ${chunk.eval_count ?? 0} tokens generated, ${thinking} thinking chars)`,
+          );
+        }
         yield { type: 'usage', inputTokens: chunk.prompt_eval_count ?? 0, outputTokens: chunk.eval_count ?? 0 };
         yield { type: 'done' };
       }

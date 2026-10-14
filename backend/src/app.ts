@@ -118,7 +118,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/memories', agentData.memories);
   app.use('/api/schedules', agentData.schedules);
   app.use('/api/skills', agentData.skills);
-  app.use('/api/browser', createBrowserRoutes({ db, config, sandboxes, tools: sandboxes.enabled ? new SandboxTools(sandboxes) : undefined }));
+  app.use('/api/browser', createBrowserRoutes({ db, config, sandboxes, tools: sandboxes.enabled ? new SandboxTools(sandboxes, workspace) : undefined }));
 
   app.use('/api/admin/logs', createLogsRoutes(db));
   app.use('/api/admin/models', createAdminModelRoutes(db, secrets));

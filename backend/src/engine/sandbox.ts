@@ -1,5 +1,6 @@
 import type { BrowserAction, BrowserPage, BrowserPort, ExecRequest, ExecResult, SandboxPort } from 'pixlai-engine';
 import type { SandboxHandle, SandboxManager } from '../modules/sandbox/manager.js';
+import type { DiskWorkspace } from './workspace.js';
 
 /** Request timeout on top of what the call itself is allowed to take. */
 const MARGIN_MS = 15_000;
@@ -13,7 +14,10 @@ class RunnerError extends Error {}
  * finds it dead (memory limit, Docker restart) starts a new one and retries once.
  */
 export class SandboxTools implements SandboxPort, BrowserPort {
-  constructor(private manager: SandboxManager) {}
+  constructor(
+    private manager: SandboxManager,
+    private workspace: DiskWorkspace,
+  ) {}
 
   async describe(): Promise<string> {
     const { cpu, memMb } = this.manager.limits();
@@ -53,8 +57,29 @@ export class SandboxTools implements SandboxPort, BrowserPort {
 
   // ---------------------------------------------------------------- SandboxPort
 
-  exec(userId: string, request: ExecRequest, signal: AbortSignal): Promise<ExecResult> {
-    return this.call(userId, '/exec', request, request.timeoutMs, signal);
+  /**
+   * Docker cannot cap a bind-mounted folder, so the quota is checked around each run: no code runs while the
+   * workspace is over its limit, and a run that pushed it over says so (the file tools refuse to write too).
+   */
+  async exec(userId: string, request: ExecRequest, signal: AbortSignal): Promise<ExecResult> {
+    const over = await this.overQuota(userId);
+    if (over) throw new Error(`The workspace is full (${over}). Delete files (or move scratch work to TEMP/) before running code.`);
+    const result = await this.call<ExecResult>(userId, '/exec', request, request.timeoutMs, signal);
+    if (result.files?.length) {
+      this.workspace.forgetUsage(userId);
+      const after = await this.overQuota(userId);
+      if (after) result.stderr = `${result.stderr}
+[EagleDocs] The workspace is now over its quota (${after}): delete files before writing more.`.trim();
+    }
+    return result;
+  }
+
+  private async overQuota(userId: string): Promise<string | null> {
+    const MB = 1048576;
+    for (const area of await this.workspace.usage(userId)) {
+      if (area.usedBytes > area.limitBytes) return `${area.name}: ${Math.round(area.usedBytes / MB)} MB of ${Math.round(area.limitBytes / MB)} MB`;
+    }
+    return null;
   }
 
   // ---------------------------------------------------------------- BrowserPort

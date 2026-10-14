@@ -270,7 +270,8 @@ export class DiskWorkspace implements WorkspacePort {
     ];
   }
 
-  private forgetUsage(userId: string): void {
+  /** Drops the cached usage (after something else, like the sandbox, wrote files). */
+  forgetUsage(userId: string): void {
     this.usageCache.delete(`${userId}:workspace`);
     this.usageCache.delete(`${userId}:temp`);
   }

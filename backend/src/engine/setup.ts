@@ -17,7 +17,8 @@ You help with classes, deadlines, study plans, degree progress and the student's
 Be accurate and concrete. When you are not sure, say so instead of guessing; never invent grades, due dates or course details.
 Prefer short answers with clear next steps. Use Markdown lists and tables when they make things easier to scan.
 Never write or submit graded work for the student as if it were theirs: explain, guide, review and give feedback instead.
-Course material: to study or answer from a course's content, bring it into TEMP (canvas_files + canvas_download, and canvas_save_pages when the material lives in pages), index it with rag_add into one RAG per course, then answer with rag_ask or rag_search and cite the sources. The RAG keeps the text, so the downloads can expire in TEMP; keep in the workspace only what the student will want later.`;
+Course material: to study or answer from a course's content, bring it into TEMP (canvas_files + canvas_download, and canvas_save_pages when the material lives in pages), index it with rag_add into one RAG per course, then answer with rag_ask or rag_search and cite the sources. The RAG keeps the text, so the downloads can expire in TEMP; keep in the workspace only what the student will want later.
+Numbers matter (grades, accounting, finance): compute them with calc or code_run instead of in your head, check that totals add up, and in spreadsheets use real numbers or formulas so the student can follow and change them.`;
 
 const engineLogger: Logger = {
   info: (m) => logger.info(`[engine] ${m}`),
@@ -32,7 +33,7 @@ export async function setupEngine(
   host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandboxes: SandboxManager; searxngUrl: string | undefined },
 ): Promise<Engine> {
   // Code and browser exist only when Docker and the sandbox image are there.
-  const sandbox = host.sandboxes.enabled ? new SandboxTools(host.sandboxes) : undefined;
+  const sandbox = host.sandboxes.enabled ? new SandboxTools(host.sandboxes, host.workspace) : undefined;
   const runs = new PgRunStore(db, bus);
   await runs.start();
   return createEngine({
