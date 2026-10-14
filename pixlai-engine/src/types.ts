@@ -77,7 +77,8 @@ export interface ResolvedModel {
 
 // ------------------------------------------------------------------ events
 
-export type RunStatus = 'running' | 'waiting_approval' | 'done' | 'failed' | 'cancelled';
+/** `waiting_mfa`: a tool waits for the user to approve a sign-in on another device (Duo, Authenticator). Hosts emit it. */
+export type RunStatus = 'running' | 'waiting_approval' | 'waiting_mfa' | 'done' | 'failed' | 'cancelled';
 
 export interface ToolCallView {
   id: string;
@@ -115,7 +116,12 @@ export type EngineEvent =
   /** The agent's visible plan for this task (plan_update). Each event replaces the previous plan. */
   | { type: 'plan'; steps: PlanStep[] }
   /** Something the agent wants the user to see even if they are not watching (notify). Hosts may push it. */
-  | { type: 'notify'; title: string; body: string; url?: string };
+  | { type: 'notify'; title: string; body: string; url?: string }
+  /**
+   * A tool is waiting for the user to approve a sign-in on their phone (Duo push, Microsoft Authenticator...).
+   * Emitted by host tools with ctx.emit, followed by status `waiting_mfa` and, once it moves on, `running`.
+   */
+  | { type: 'mfa_required'; service: string; message: string };
 
 export interface PlanStep {
   title: string;
