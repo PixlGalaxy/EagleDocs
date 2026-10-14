@@ -869,5 +869,7 @@
   "browser.noProfiles": "The browser has not been used yet",
   "browser.clear": "Sign out",
   "browser.clearTitle": "Sign out of this profile?",
-  "browser.clearBody": "EagleDocs will forget the cookies of \"{profile}\" and will need to log in again on those sites."
+  "browser.clearBody": "EagleDocs will forget the cookies of \"{profile}\" and will need to log in again on those sites.",
+  "apps.notAvailable": "Coming soon: you will be able to use EagleDocs from ChatGPT or Claude. To use your ChatGPT account inside EagleDocs, go to Settings > Models.",
+  "chat.typing": "EagleDocs is working…"
 }

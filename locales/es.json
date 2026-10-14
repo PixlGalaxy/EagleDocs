@@ -869,5 +869,7 @@
   "browser.noProfiles": "El navegador todavía no se ha usado",
   "browser.clear": "Cerrar sesión",
   "browser.clearTitle": "¿Cerrar la sesión de este perfil?",
-  "browser.clearBody": "EagleDocs olvidará las cookies de \"{profile}\" y tendrá que volver a iniciar sesión en esos sitios."
+  "browser.clearBody": "EagleDocs olvidará las cookies de \"{profile}\" y tendrá que volver a iniciar sesión en esos sitios.",
+  "apps.notAvailable": "Próximamente: podrás usar EagleDocs desde ChatGPT o Claude. Para usar tu cuenta de ChatGPT dentro de EagleDocs, ve a Ajustes > Modelos.",
+  "chat.typing": "EagleDocs está trabajando…"
 }

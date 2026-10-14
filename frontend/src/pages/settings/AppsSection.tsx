@@ -35,13 +35,18 @@ const AppsSection = () => {
   const ask = useConfirm();
   const [info, setInfo] = useState<McpInfo | null>(null);
   const [error, setError] = useState('');
+  const [notAvailable, setNotAvailable] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     mcpApi
       .info()
       .then(setInfo)
-      .catch((err) => setError(err instanceof ApiError ? err.message : t('common.networkError')));
+      .catch((err) => {
+        // No MCP endpoint on this server yet: say "off" rather than showing an error.
+        if (err instanceof ApiError && err.status === 404) setNotAvailable(true);
+        else setError(err instanceof ApiError ? err.message : t('common.networkError'));
+      });
   }, [t]);
 
   const copy = async () => {
@@ -59,6 +64,12 @@ const AppsSection = () => {
     return (
       <Notice tone="danger" icon={CircleAlert}>
         {error}
+      </Notice>
+    );
+  if (notAvailable)
+    return (
+      <Notice tone="neutral" icon={Plug}>
+        {t('apps.notAvailable')}
       </Notice>
     );
   if (!info) return <Skeleton className="h-64 rounded-xl" />;
