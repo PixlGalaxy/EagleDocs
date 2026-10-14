@@ -117,6 +117,8 @@ export interface ToolCall {
 export interface SubagentProgress {
   index: number;
   task: string;
+  /** The model the main agent picked for it. */
+  model?: string;
   status: 'running' | 'done' | 'failed' | 'cancelled';
   steps: ToolCall[];
 }
@@ -178,7 +180,7 @@ export type StreamEvent =
   | { type: 'interrupted' }
   | { type: 'notice'; message: string }
   /** Progress of a helper agent started by the agent_delegate tool. */
-  | { type: 'subagent'; parent_call_id: string; index: number; task: string; event: StreamEvent }
+  | { type: 'subagent'; parent_call_id: string; index: number; task: string; model_label?: string; event: StreamEvent }
   /** The reports of background helpers entered the chat, right before the answer that uses them. */
   | { type: 'background_results'; message: Message }
   /** A background helper job ends with `done` and no message. */

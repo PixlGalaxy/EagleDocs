@@ -68,6 +68,7 @@ export const SubagentList = ({ subagents }: { subagents: SubagentProgress[] }) =
               {SUBAGENT_ICON[agent.status]}
               <Bot size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
               <span className="truncate font-medium text-slate-700 dark:text-slate-300">{agent.task}</span>
+              {agent.model && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">{agent.model}</span>}
             </p>
             {agent.steps.length > 0 && (
               <p className="ml-[22px] truncate text-slate-500">

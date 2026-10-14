@@ -4,7 +4,8 @@ type SubagentEvent = Extract<StreamEvent, { type: 'subagent' }>;
 
 /** Folds one `subagent` event into the helpers' progress (helpers of helpers count as their parent's steps). */
 export function applySubagentEvent(list: SubagentProgress[], event: SubagentEvent): SubagentProgress[] {
-  const current = list.find((s) => s.index === event.index) ?? { index: event.index, task: event.task, status: 'running' as const, steps: [] };
+  const known = list.find((s) => s.index === event.index);
+  const current: SubagentProgress = known ?? { index: event.index, task: event.task, model: event.model_label, status: 'running', steps: [] };
   let inner = event.event;
   const nested = inner.type === 'subagent';
   while (inner.type === 'subagent') inner = inner.event;
@@ -17,7 +18,7 @@ export function applySubagentEvent(list: SubagentProgress[], event: SubagentEven
     const status = inner.status === 'done' || inner.status === 'failed' || inner.status === 'cancelled' ? inner.status : 'running';
     next = { ...current, status };
   }
-  if (next === current && list.includes(current)) return list;
+  if (next === current && known) return list;
   return [...list.filter((s) => s.index !== event.index), next].sort((a, b) => a.index - b.index);
 }
 
