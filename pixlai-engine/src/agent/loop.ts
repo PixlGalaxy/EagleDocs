@@ -42,6 +42,11 @@ const BUDGET_SUMMARY_REQUEST =
   'You have reached the limit of steps for this request. Do not call tools. Give your final answer now: ' +
   'what you did, what you found, and what is left to do.';
 
+/** Sent once when a model returns nothing at all (often a long tool call the server could not parse). */
+const EMPTY_REPLY_NUDGE =
+  'Your last reply arrived empty. If you meant to call a tool, call it again with valid JSON arguments (keep very long ' +
+  'code shorter or split it into steps); otherwise write your answer.';
+
 export interface Services {
   runs: RunStore;
   memory: MemoryStore;
@@ -225,6 +230,8 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       ? tools.list().map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }))
       : undefined;
 
+    let emptyRetried = false;
+    let nudge: string | null = null;
     for (;;) {
       if (signal.aborted) return finish('cancelled');
       await applySteers();
@@ -256,7 +263,11 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         const request = {
           model: model.model,
           messages: toProviderMessages(
-            finalCall ? [...context, { role: 'user' as const, content: BUDGET_SUMMARY_REQUEST }] : context,
+            finalCall
+              ? [...context, { role: 'user' as const, content: BUDGET_SUMMARY_REQUEST }]
+              : nudge
+                ? [...context, { role: 'user' as const, content: nudge }]
+                : context,
           ),
           ...(toolSpecs && !finalCall && { tools: toolSpecs }),
           signal: attempt.signal,
@@ -286,6 +297,15 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         // Keep what the user already saw as context, then loop: the steer is applied at the top.
         await emit({ type: 'interrupted' });
         if (text) push({ role: 'assistant', content: `${text}\n[interrupted by the user's correction]` });
+        continue;
+      }
+
+      nudge = null;
+      if (calls.length === 0 && !text.trim() && !finalCall && !emptyRetried) {
+        // Nothing at all came back: ask once more instead of ending the run with a blank answer.
+        emptyRetried = true;
+        nudge = EMPTY_REPLY_NUDGE;
+        services.logger.warn(`Run ${runId}: the model returned an empty reply; asking it again`);
         continue;
       }
 

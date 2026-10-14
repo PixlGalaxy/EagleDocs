@@ -28,7 +28,10 @@ export const codeRun = defineTool<{ language: CodeLanguage; code: string; cwd?: 
     "Run Python, Node.js or shell code in the user's sandbox. The working directory is their workspace (the same files as " +
     'the files_ tools), so scripts can read and write documents there: compute exactly, analyze CSV/Excel with pandas, ' +
     'make charts with matplotlib, convert or generate PDF/DOCX/PPTX/XLSX. Print what you need to see; save outputs as ' +
-    'files and tell the user their paths. State is not kept between calls (write intermediate results to files).',
+    'files and tell the user their paths. State is not kept between calls (write intermediate results to files). ' +
+    'Numbers: let the code compute every result from the inputs (never type totals you worked out yourself), store ' +
+    'them as numbers (spreadsheets: real values or formulas, not "$500" text), and print a check such as ' +
+    'inputs - outputs = remaining before you report the results.',
   parameters: {
     type: 'object',
     properties: {

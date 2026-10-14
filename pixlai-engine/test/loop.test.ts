@@ -185,3 +185,18 @@ test('each user has their own memory', async () => {
   assert.match(anaNext.requests[0]!.messages[0]!.content, /Ana prefers mornings/);
   assert.doesNotMatch(leoNext.requests[0]!.messages[0]!.content, /Ana prefers mornings/);
 });
+
+test('an empty model reply is retried once with a nudge, then accepted', async () => {
+  const { agent, sink } = setup();
+  const provider = new ScriptedProvider([() => [{ type: 'usage', inputTokens: 5, outputTokens: 900 }], () => text('Here is your answer')]);
+  const result = await agent.run({ runId: 'r1', model: model(provider), history: [user('make the excel')], sink });
+  assert.equal(result.content, 'Here is your answer');
+  assert.match(provider.requests[1]!.messages.at(-1)!.content, /arrived empty/);
+  // The nudge is not kept in the conversation.
+  assert.ok(!result.messages.some((m) => /arrived empty/.test(m.content)));
+
+  const always = new ScriptedProvider([() => []]);
+  const blank = await agent.run({ runId: 'r2', model: model(always), history: [user('x')], sink });
+  assert.equal(always.requests.length, 2, 'only one retry');
+  assert.equal(blank.status, 'done');
+});
