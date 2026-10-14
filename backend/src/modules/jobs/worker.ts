@@ -1,4 +1,4 @@
-import type { Engine, EngineEvent, ToolCallView } from 'pixlai-engine';
+import { backgroundReportMessage, type DelegateReport, type DelegateTask, type Engine, type EngineEvent, type ToolCallView } from 'pixlai-engine';
 import type { Bus } from '../../bus/bus.js';
 import type { EnvConfig } from '../../config/env.js';
 import type { Db } from '../../db/pool.js';
@@ -19,13 +19,31 @@ const POLL_MS = 2000;
 const HEARTBEAT_MS = 15_000;
 /** Queued jobs prefer the replica named in `preferred_node` for this long (sandbox affinity, phase 4). */
 const AFFINITY_SECONDS = 5;
+/** Background helper jobs per chat at once. */
+const MAX_BACKGROUND_PER_CHAT = 2;
+
+/** Helper agents' tokens and usage would be one stored event each: only their steps are worth showing. */
+function isNoise(event: EngineEvent): boolean {
+  let inner: EngineEvent = event;
+  while (inner.type === 'subagent') inner = inner.event;
+  return inner !== event && (inner.type === 'delta' || inner.type === 'usage');
+}
 
 interface JobRow {
   id: string;
   user_id: string;
   chat_id: string | null;
-  kind: 'chat' | 'scheduled' | 'sync';
-  payload: { model_ref?: string | null };
+  kind: 'chat' | 'scheduled' | 'sync' | 'delegate';
+  payload: {
+    model_ref?: string | null;
+    /** delegate jobs: their chat (kept out of chat_id so the chat stays free) and tasks. */
+    chat_id?: string;
+    tasks?: DelegateTask[];
+    /** delegate jobs, once finished: what the helpers reported. */
+    reports?: DelegateReport[];
+    /** A chat turn that answers with the reports of this delegate job. */
+    background_job_id?: string;
+  };
   cancel_requested: boolean;
 }
 
@@ -158,15 +176,24 @@ export class JobWorker {
     };
 
     try {
-      if (!user || !job.chat_id) return await fail('This job no longer has a chat or user.');
+      const chatId = job.kind === 'delegate' ? (job.payload.chat_id ?? null) : job.chat_id;
+      if (!user || !chatId) return await fail('This job no longer has a chat or user.');
       if (job.cancel_requested) {
         events.emit({ type: 'status', status: 'cancelled' });
         await events.flush();
         return await this.finish(job.id, 'cancelled');
       }
 
-      const history = await chats.history(job.chat_id);
-      const latest = [...history].reverse().find((m) => m.role === 'user')?.content ?? '';
+      // Reports of background helpers enter the chat now that it is free, so the history stays in order.
+      if (job.payload.background_job_id) {
+        const background = await this.backgroundReports(job.payload.background_job_id, chatId);
+        if (background) events.emit({ type: 'background_results', message: background });
+      }
+
+      const tasks = job.kind === 'delegate' ? (job.payload.tasks ?? []) : [];
+      const history = job.kind === 'delegate' ? [] : await chats.history(chatId);
+      const latest =
+        job.kind === 'delegate' ? tasks.map((task) => task.goal).join('\n') : ([...history].reverse().find((m) => m.role === 'user')?.content ?? '');
       const historyChars = history.slice(-8).reduce((n, m) => n + m.content.length, 0);
 
       let resolution;
@@ -197,6 +224,30 @@ export class JobWorker {
       // RAG tools compare this with each collection's model.
       await this.deps.embeddings.refresh();
 
+      if (job.kind === 'delegate') {
+        const { reports, usage } = await agent.runSubagents({
+          runId: job.id,
+          model: resolution.model,
+          tasks,
+          signal: controller.signal,
+          sink: {
+            emit: (event: EngineEvent) => {
+              if (!isNoise(event)) events.emit(event as unknown as { type: string });
+            },
+          },
+        });
+        await catalog.recordUsage(user.id, resolution.isEagleDocs, usage.inputTokens, usage.outputTokens);
+        if (controller.signal.aborted) {
+          events.emit({ type: 'error', error: 'Stopped' });
+          await events.flush();
+          return await this.finish(job.id, 'cancelled');
+        }
+        await this.answerWithReports(job, chatId, reports);
+        events.emit({ type: 'done' });
+        await events.flush();
+        return await this.finish(job.id, 'done');
+      }
+
       // The visible answer is the text after the last tool step; kept to save a partial answer if stopped.
       let liveText = '';
       const result = await agent.run({
@@ -205,8 +256,10 @@ export class JobWorker {
         history,
         signal: controller.signal,
         kind: job.kind === 'scheduled' ? 'scheduled' : 'chat',
+        ...(job.kind === 'chat' && { startBackground: (list: DelegateTask[]) => this.queueBackground(job, chatId, user.id, list) }),
         sink: {
           emit: (event: EngineEvent) => {
+            if (isNoise(event)) return;
             if (event.type === 'delta') liveText += event.text;
             if (event.type === 'tool_call' || event.type === 'interrupted') liveText = '';
             // Waiting on the student's phone (Duo) or back to work: the job row shows it (Admin, Chats list).
@@ -229,7 +282,7 @@ export class JobWorker {
       const status = result.status;
       const finalContent = status === 'done' ? result.content : liveText;
       const produced = status === 'done' ? result.messages.slice(0, -1) : result.messages;
-      const message = await chats.saveRun(job.chat_id, {
+      const message = await chats.saveRun(chatId, {
         jobId: job.id,
         produced,
         final: {
@@ -262,6 +315,50 @@ export class JobWorker {
     } finally {
       this.running.delete(job.id);
     }
+  }
+
+  /** agent_delegate(background): the helpers run as their own job, next to the chat instead of in it. */
+  private async queueBackground(job: JobRow, chatId: string, userId: string, tasks: DelegateTask[]): Promise<void> {
+    const { db, bus } = this.deps;
+    const { rows } = await db.query<{ n: number }>(
+      `SELECT COUNT(*)::int AS n FROM jobs WHERE kind = 'delegate' AND payload->>'chat_id' = $1 AND status IN ('queued', 'running')`,
+      [chatId],
+    );
+    if ((rows[0]?.n ?? 0) >= MAX_BACKGROUND_PER_CHAT) {
+      throw new Error(`${MAX_BACKGROUND_PER_CHAT} background tasks are already running in this chat: wait for them or delegate without background`);
+    }
+    const { rows: created } = await db.query<{ id: string }>(
+      "INSERT INTO jobs (user_id, kind, payload) VALUES ($1, 'delegate', $2) RETURNING id",
+      [userId, { chat_id: chatId, tasks, model_ref: job.payload.model_ref ?? null, parent_job_id: job.id }],
+    );
+    await bus.publish('job_queued', { jobId: created[0]!.id });
+  }
+
+  /** Keeps the reports on the delegate job and queues the chat turn that answers with them. */
+  private async answerWithReports(job: JobRow, chatId: string, reports: DelegateReport[]): Promise<void> {
+    const { db, bus } = this.deps;
+    await db.query(`UPDATE jobs SET payload = payload || jsonb_build_object('reports', $2::jsonb) WHERE id = $1`, [job.id, JSON.stringify(reports)]);
+    const { rows } = await db.query<{ id: string }>(
+      "INSERT INTO jobs (user_id, chat_id, kind, payload) VALUES ($1, $2, 'chat', $3) RETURNING id",
+      [job.user_id, chatId, { model_ref: job.payload.model_ref ?? null, background_job_id: job.id }],
+    );
+    await bus.publish('job_queued', { jobId: rows[0]!.id });
+  }
+
+  /** Stores the reports of a finished delegate job in its chat, once. */
+  private async backgroundReports(delegateJobId: string, chatId: string) {
+    const { db, chats } = this.deps;
+    const taken = await maybe<{ reports: DelegateReport[] }>(
+      db,
+      `UPDATE jobs SET payload = payload || '{"reported": true}'::jsonb
+       WHERE id = $1 AND kind = 'delegate' AND payload ? 'reports' AND NOT payload ? 'reported'
+       RETURNING payload->'reports' AS reports`,
+      [delegateJobId],
+    );
+    if (!taken) return null;
+    return chats.addUserMessage(db, chatId, backgroundReportMessage(taken.reports), {
+      background: { job_id: delegateJobId, tasks: taken.reports.map((r) => ({ goal: r.goal, status: r.status })) },
+    });
   }
 
   /** Steers that arrived after the final answer become the next message, so none is lost. */

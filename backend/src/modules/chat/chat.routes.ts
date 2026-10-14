@@ -51,6 +51,7 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
       chat,
       messages: await chats.visibleMessages(chat.id),
       pending_approvals: await chats.pendingApprovals(chat.id),
+      background_jobs: await chats.backgroundJobs(chat.id),
     });
   });
 
@@ -100,11 +101,12 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
     const chat = await chats.get(userId, routeParam(req.params.id));
     const jobId = typeof req.query.job === 'string' ? req.query.job : '';
     if (!UUID.test(jobId)) throw notFound();
-    const job = await maybe<{ status: string }>(db, 'SELECT status FROM jobs WHERE id = $1 AND chat_id = $2 AND user_id = $3', [
-      jobId,
-      chat.id,
-      userId,
-    ]);
+    // Background helper jobs keep their chat in the payload.
+    const job = await maybe<{ status: string }>(
+      db,
+      "SELECT status FROM jobs WHERE id = $1 AND (chat_id = $2 OR payload->>'chat_id' = $2::text) AND user_id = $3",
+      [jobId, chat.id, userId],
+    );
     if (!job) throw notFound();
 
     res.writeHead(200, {
@@ -197,8 +199,8 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
     res.json(
       await many(
         db,
-        `SELECT j.id, j.chat_id, c.title AS chat_title, j.kind, j.status, j.started_at, j.finished_at, j.error
-         FROM jobs j LEFT JOIN chats c ON c.id = j.chat_id WHERE j.user_id = $1 ORDER BY j.queued_at DESC LIMIT 50`,
+        `SELECT j.id, c.id AS chat_id, c.title AS chat_title, j.kind, j.status, j.started_at, j.finished_at, j.error
+         FROM jobs j LEFT JOIN chats c ON c.id = COALESCE(j.chat_id, (j.payload->>'chat_id')::uuid) WHERE j.user_id = $1 ORDER BY j.queued_at DESC LIMIT 50`,
         [req.user!.id],
       ),
     );

@@ -20,7 +20,15 @@ interface MessageRow {
   tool_calls: ToolCallRequest[] | null;
   tool_call_id: string | null;
   tool_name: string | null;
-  meta: { steer?: boolean; internal?: boolean; tool_views?: ToolCallView[]; stopped?: boolean; failed?: string; silent?: boolean };
+  meta: {
+    steer?: boolean;
+    internal?: boolean;
+    tool_views?: ToolCallView[];
+    stopped?: boolean;
+    failed?: string;
+    silent?: boolean;
+    background?: BackgroundInfo;
+  };
   model_ref: string | null;
   model_label: string | null;
   created_at: Date;
@@ -35,7 +43,14 @@ export interface MessageView {
   model_label: string | null;
   tool_calls: ToolCallView[];
   steer?: boolean;
+  /** Reports of helper agents that worked in the background (shown as a card, not as the user's words). */
+  background?: BackgroundInfo;
   created_at: Date;
+}
+
+export interface BackgroundInfo {
+  job_id: string;
+  tasks: { goal: string; status: string }[];
 }
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -49,6 +64,7 @@ export function toMessageView(row: MessageRow): MessageView {
     model_label: row.model_label,
     tool_calls: row.meta.tool_views ?? [],
     ...(row.meta.steer && { steer: true }),
+    ...(row.meta.background && { background: row.meta.background }),
     created_at: row.created_at,
   };
 }
@@ -182,6 +198,16 @@ export class ChatService {
     } finally {
       client.release();
     }
+  }
+
+  /** Helper agents working in the background for this chat. */
+  backgroundJobs(chatId: string) {
+    return many<{ id: string; status: string; tasks: { goal: string }[] }>(
+      this.db,
+      `SELECT id, status, payload->'tasks' AS tasks FROM jobs
+       WHERE kind = 'delegate' AND payload->>'chat_id' = $1 AND status IN ('queued', 'running') ORDER BY queued_at`,
+      [chatId],
+    );
   }
 
   pendingApprovals(chatId: string) {

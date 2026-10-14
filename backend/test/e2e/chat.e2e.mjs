@@ -157,6 +157,43 @@ check('partial answer kept', /word0/.test(events.at(-1).message?.content ?? ''),
 r = await user.req(B, 'GET', '/jobs');
 check('job list shows cancelled', r.json[0].status === 'cancelled', r.json[0].status);
 
+// ---------------------------------------------------------------- delegation (waiting, then in the background)
+r = await user.req(A, 'POST', '/chats', {});
+const delegateChat = r.json.id;
+r = await user.req(A, 'POST', `/chats/${delegateChat}/messages`, { content: 'split this [delegate] explain', model_ref: 'auto' });
+events = await user.stream(B, delegateChat, r.json.job_id);
+const helperSteps = events.filter((e) => e.type === 'subagent' && e.event.type === 'tool_result');
+check('helpers report their steps live', helperSteps.some((e) => e.index === 0 && e.event.call.name === 'time_now'), events.map((e) => e.type).join(','));
+check("helpers' tokens are not stored as events", !events.some((e) => e.type === 'subagent' && e.event.type === 'delta'));
+check('waiting delegation answers with the reports', /tool said/.test(events.at(-1).message?.content ?? ''), events.at(-1).message?.content);
+
+r = await user.req(A, 'POST', `/chats/${delegateChat}/messages`, { content: 'read everything [delegatebg] explain', model_ref: 'auto' });
+events = await user.stream(B, delegateChat, r.json.job_id);
+check('background delegation answers right away', /started/.test(events.at(-1).message?.content ?? ''), events.at(-1).message?.content);
+r = await user.req(A, 'GET', '/jobs');
+const delegateJob = r.json.find((j) => j.kind === 'delegate');
+check('helpers run as their own job, listed under the chat', delegateJob?.chat_id === delegateChat, JSON.stringify(r.json[0]));
+const helperEvents = await user.stream(A, delegateChat, delegateJob.id);
+check('background job streams helper progress and ends', helperEvents.some((e) => e.type === 'subagent') && helperEvents.at(-1).type === 'done', helperEvents.map((e) => e.type).join(','));
+let followUp;
+for (let i = 0; i < 30 && !followUp; i++) {
+  r = await user.req(A, 'GET', '/jobs');
+  // Jobs come newest first: the turn queued after the helpers finished.
+  const helpersAt = r.json.findIndex((j) => j.id === delegateJob.id);
+  followUp = r.json.slice(0, helpersAt).find((j) => j.kind === 'chat' && j.chat_id === delegateChat);
+  if (!followUp) await sleep(300);
+}
+check('a new turn answers with the reports', Boolean(followUp));
+events = await user.stream(B, delegateChat, followUp.id);
+check('reports enter the chat first', events.some((e) => e.type === 'background_results' && e.message.background?.tasks.length === 2), events.map((e) => e.type).join(','));
+check('the agent answers with them', events.at(-1).message?.content === 'summary of 2 reports', events.at(-1).message?.content);
+r = await user.req(A, 'GET', `/chats/${delegateChat}`);
+const reportMessage = r.json.messages.find((m) => m.background);
+check('saved chat keeps the report card and the answer', reportMessage && r.json.messages.at(-1).content === 'summary of 2 reports' && r.json.background_jobs.length === 0, JSON.stringify(r.json.background_jobs));
+r = await user.req(A, 'POST', `/chats/${delegateChat}/messages`, { content: 'hola otra vez', model_ref: 'auto' });
+check('chat is free again', r.status === 201);
+await user.stream(A, delegateChat, r.json.job_id);
+
 // ---------------------------------------------------------------- busy chat
 r = await user.req(A, 'POST', `/chats/${chatId}/messages`, { content: 'long [slow] explain', model_ref: 'auto' });
 const busyJob = r.json.job_id;

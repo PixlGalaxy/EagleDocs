@@ -4,6 +4,8 @@
 //   [canvas] -> calls canvas_briefing
 //   [pages]  -> calls canvas_save_pages for course 101
 //   [slow]   -> streams 40 words, 120 ms apart (for steer/cancel tests)
+//   [delegate] / [delegatebg] -> agent_delegate with two helpers (the first calls time_now), waiting / in the background
+//   background reports as the last user turn -> "summary of N reports"
 //   a steer (OUT-OF-BAND marker) as the last user turn -> "corrected: <text>"
 //   otherwise -> "echo: <text>"
 import http from 'http';
@@ -37,6 +39,10 @@ const server = http.createServer(async (req, res) => {
     done();
   };
 
+  if (lastUser.startsWith('[Background helpers finished')) {
+    text(`summary of ${lastUser.split('### Helper').length - 1} reports`);
+    return done();
+  }
   if (last.role === 'tool') {
     text(`tool said: ${String(last.content).slice(0, 80)}`);
     return done();
@@ -45,6 +51,10 @@ const server = http.createServer(async (req, res) => {
     const steer = lastUser.split('\n')[1] ?? '';
     text(`corrected: ${steer}`);
     return done();
+  }
+  const delegate = /\[delegate(bg)?\]/.exec(lastUser);
+  if (delegate && request.tools) {
+    return call('agent_delegate', { tasks: [{ goal: 'helper one [time]' }, { goal: 'helper two' }], background: Boolean(delegate[1]) });
   }
   if (lastUser.includes('[time]') && request.tools) return call('time_now', {});
   if (lastUser.includes('[canvas]') && request.tools) return call('canvas_briefing', { days: 7 });
