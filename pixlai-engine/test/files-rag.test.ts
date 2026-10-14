@@ -262,3 +262,26 @@ test('rag: adding the same unchanged files again skips them (resume after a stop
   assert.equal(manifest.sources.length, 3);
   assert.ok(manifest.sources.every((s: { size?: number }) => typeof s.size === 'number'));
 });
+
+test('rag: a near-copy of an indexed file is skipped; shared chunks are not embedded again', async () => {
+  const { agent, workspace, embeddings, sink } = setup();
+  const embedded: string[] = [];
+  const embed = embeddings.embed.bind(embeddings);
+  embeddings.embed = async (texts: string[]) => (embedded.push(...texts), embed(texts));
+  const deck = (last: string) =>
+    ['%PDF\nMarketing mix: the product itself.', 'Price is what is exchanged for it.', 'Place gets the product to buyers.', 'Promotion communicates the value.', last].join('\f');
+  await workspace.write('u1', 'deck.pdf', deck('Chapter summary for the exam.'));
+  await workspace.write('u1', 'deck (1).pdf', deck('Chapter summary for the exam.'));
+  await workspace.write('u1', 'other.pdf', deck('A brand new closing slide about services.'));
+  const p = new ScriptedProvider([
+    () => [...toolCall('rag_create', { name: 'mar', description: 'm' }, 'a'), ...toolCall('rag_add', { rag: 'mar', paths: ['deck.pdf', 'deck (1).pdf', 'other.pdf'] }, 'b')],
+    () => text('ok'),
+  ]);
+  await agent.run({ runId: 'r1', model: model(p), history: [user('x')], sink });
+  const result = stepResults(p, 1).at(-1)!;
+  assert.match(result, /"path": "deck \(1\)\.pdf",\s*"reason": "same content as deck\.pdf/);
+  assert.match(result, /"path": "other\.pdf",\s*"chunks": 5/);
+  assert.equal(embedded.filter((t) => t.includes('Price is what')).length, 1, 'shared slides embedded once');
+  assert.equal(embedded.filter((t) => t.includes('brand new closing slide')).length, 1);
+  assert.match(result, /"total_chunks": 10/);
+});

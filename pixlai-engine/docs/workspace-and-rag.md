@@ -184,7 +184,7 @@ and `ragId` are exported too.
 |---|---|---|
 | `rag_list` | The user's RAGs and shared ones | |
 | `rag_create` | New empty RAG with a name and description | |
-| `rag_add` | Index files or folders | Up to 200 files per call. A changed file replaces its old chunks; unchanged ones are skipped (size and modified time are recorded). Embeds 4 batches of 32 at a time, saves progress every 20 s, and stops by itself before its 15-minute timeout with an `incomplete` note: calling it again with the same paths continues where it stopped. Reports `added` and `skipped` (with the reason) and emits a `notice` per file. |
+| `rag_add` | Index files or folders | Up to 200 files per call. A changed file replaces its old chunks; unchanged ones are skipped (size and modified time are recorded). A file whose chunks are 90% identical to chunks of another indexed file is skipped as a copy ("Chapter 10 (1).pptx"), and identical chunks reuse their vectors instead of being embedded again. Embeds 4 batches of 32 at a time, saves progress every 20 s, and stops by itself before its 15-minute timeout with an `incomplete` note: calling it again with the same paths continues where it stopped. Reports `added` and `skipped` (with the reason) and emits a `notice` per file. |
 | `rag_search` | Top passages for a query | Results are untrusted content |
 | `rag_ask` | Answer a question from the best passages, with citations | Uses `ctx.complete` with the run's model |
 | `rag_delete` | Delete a RAG | Shared RAGs cannot be deleted |
