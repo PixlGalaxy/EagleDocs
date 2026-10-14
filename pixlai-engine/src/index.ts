@@ -1,4 +1,5 @@
-export { createEngine, type Engine, type EngineOptions, type RunOptions, type UserAgent } from './engine.js';
+export { createEngine, type Engine, type EngineOptions, type RunOptions, type SubagentRunOptions, type UserAgent } from './engine.js';
+export { backgroundReportMessage, type DelegateReport, type DelegateTask } from './agent/delegate.js';
 export * from './types.js';
 export type * from './ports.js';
 export { defineTool, ToolRegistry, type Tool, type ToolContext, type GateContext, type ApprovalText, type RunKind, type SubagentOutcome } from './tools/tool.js';

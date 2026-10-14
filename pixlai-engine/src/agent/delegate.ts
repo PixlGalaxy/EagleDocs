@@ -1,14 +1,55 @@
-import { defineTool } from '../tools/tool.js';
+import { defineTool, type SubagentOutcome } from '../tools/tool.js';
 
 /** Characters of each subagent's answer handed back to the parent. */
 export const SUBAGENT_SUMMARY_CHARS = 8000;
 
+/** One piece of work for a helper agent. */
+export interface DelegateTask {
+  goal: string;
+  context?: string;
+}
+
+/** A helper's report, as the parent agent reads it. */
+export interface DelegateReport {
+  goal: string;
+  status: SubagentOutcome['status'];
+  summary: string;
+}
+
+/** What a helper is told: the goal, plus the facts it needs from the conversation. */
+export function taskBrief(task: DelegateTask): string {
+  const goal = String(task?.goal ?? '').trim();
+  return task?.context ? `${goal}\n\nContext:\n${String(task.context)}` : goal;
+}
+
+export function toReport(goal: string, outcome: SubagentOutcome): DelegateReport {
+  const summary =
+    outcome.summary.length > SUBAGENT_SUMMARY_CHARS ? `${outcome.summary.slice(0, SUBAGENT_SUMMARY_CHARS)}\n[report truncated]` : outcome.summary;
+  return { goal, status: outcome.status, summary };
+}
+
+/**
+ * The message that hands background reports to the main agent in a later turn.
+ * Hosts store it as a user-role message; it says plainly it is not the user.
+ */
+export function backgroundReportMessage(reports: DelegateReport[]): string {
+  const body = reports
+    .map((r, i) => `### Helper ${i + 1} (${r.status}): ${r.goal.split('\n')[0]!.slice(0, 200)}\n${r.summary}`)
+    .join('\n\n');
+  return (
+    '[Background helpers finished. This message is from the system, not the user: it carries the reports of the ' +
+    'helpers you started earlier with agent_delegate. Answer the user now with what they found.]\n\n' +
+    body
+  );
+}
+
 /**
  * Hands independent pieces of work to subagents that run in parallel with a
  * fresh context and return a short report. They get read-only tools only:
- * no approvals, memory writes or schedules.
+ * no approvals, memory writes or schedules. With `background` (when the host
+ * supports it) the run does not wait: the reports arrive in a later turn.
  */
-export const agentDelegate = defineTool<{ tasks: { goal: string; context?: string }[] }>({
+export const agentDelegate = defineTool<{ tasks: DelegateTask[]; background?: boolean }>({
   name: 'agent_delegate',
   description:
     'Delegate independent subtasks to helper agents that work in parallel and report back. Use it for research ' +
@@ -30,6 +71,12 @@ export const agentDelegate = defineTool<{ tasks: { goal: string; context?: strin
           required: ['goal'],
         },
       },
+      background: {
+        type: 'boolean',
+        description:
+          'true for long work (many pages, files or sources) the user does not need in this answer: you reply ' +
+          'right away and the reports arrive later as a new message you then answer. Default false: wait for them.',
+      },
     },
     required: ['tasks'],
   },
@@ -41,20 +88,24 @@ export const agentDelegate = defineTool<{ tasks: { goal: string; context?: strin
     if (tasks.length > ctx.limits.maxParallelSubagents) {
       throw new Error(`At most ${ctx.limits.maxParallelSubagents} tasks at once`);
     }
-    const results = await Promise.all(
+    if (tasks.some((task) => !String(task?.goal ?? '').trim())) throw new Error('Every task needs a goal');
+
+    if (args.background === true && ctx.startBackground) {
+      await ctx.startBackground(tasks.map((task) => ({ goal: String(task.goal).trim(), ...(task.context && { context: String(task.context) }) })));
+      return {
+        started: tasks.length,
+        note:
+          'The helpers are working in the background. Tell the user in a sentence or two what you started and that ' +
+          'you will report back when they finish. Do not wait for them or delegate the same tasks again.',
+      };
+    }
+
+    return Promise.all(
       tasks.map(async (task, index) => {
-        const goal = String(task?.goal ?? '').trim();
-        if (!goal) return { goal, status: 'failed', summary: 'Empty goal' };
-        const brief = task.context ? `${goal}\n\nContext:\n${String(task.context)}` : goal;
-        const outcome = await ctx.spawnSubagent!(brief, index);
-        const summary =
-          outcome.summary.length > SUBAGENT_SUMMARY_CHARS
-            ? `${outcome.summary.slice(0, SUBAGENT_SUMMARY_CHARS)}\n[report truncated]`
-            : outcome.summary;
-        return { goal, status: outcome.status, summary };
+        const goal = String(task.goal).trim();
+        return toReport(goal, await ctx.spawnSubagent!(taskBrief(task), index));
       }),
     );
-    return results;
   },
 });
 

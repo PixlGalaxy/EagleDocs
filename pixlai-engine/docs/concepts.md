@@ -182,6 +182,18 @@ engine.forUser(user, { limits: { maxSteps: 30, toolTimeoutMs: 120_000 } });
 
 `agent_delegate` takes up to `maxParallelSubagents` tasks (`{ goal, context? }`) and runs each as a child loop with a fresh context, read-only tools and the fixed helper prompt. Children report back with a short text (cut to 8,000 characters). Their events reach the sink wrapped in `subagent` events. They cannot ask the user, cannot trigger approvals and cannot write memory or schedules. They can delegate further until `maxSubagentDepth`.
 
+### Background delegation
+
+By default the main agent waits for its helpers. When the host passes `startBackground` to `run`, the model may call `agent_delegate` with `background: true` for long work. The tool hands the tasks to the host and returns at once, and the agent tells the user it will report back. Without `startBackground`, `background` is ignored and the run waits as usual.
+
+The host then runs the helpers and answers with their reports:
+
+1. Store the tasks (a job, a queue row) and run them with `agent.runSubagents({ runId, model, tasks, sink })`. It returns `{ reports, usage }`, and the helpers' events reach `sink` as `subagent` events tagged with `runId`.
+2. Add `backgroundReportMessage(reports)` to the conversation as a user-role message. It says it comes from the system, not the user.
+3. Start a normal `run` on that conversation. The agent reads the reports and answers.
+
+Add the reports only when no other run of that conversation is in progress, so the history stays in order. EagleDocs keeps the reports on the helpers' job and inserts them when the follow-up turn starts.
+
 ## Schedules
 
 The agent manages schedules with the `cron_*` tools, and the host runs them. A schedule is a 5-field cron expression, an interval (`every 30m`, `every 2h`, `every 1d`, minimum 15 minutes) or an ISO date for a one-off, evaluated in the schedule's timezone. The engine exports `parseSchedule`, `nextRun`, `planSchedule`, `isValidTimezone` and `MIN_INTERVAL_MS`. A runner example is in [ports.md](ports.md#schedulestore).

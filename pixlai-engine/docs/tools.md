@@ -66,6 +66,7 @@ Return values: a string is sent as is, anything else with `JSON.stringify(value,
 | `host` | Whatever you passed in `engine.forUser(user, { host })`: your own services (database client, API client, config) so tools do not need globals |
 | `askUser?` | `(question) => void`. Ends the run after the current batch with the question as the answer. Only set for the main agent. |
 | `spawnSubagent?` | `(goal, index) => Promise<{ status, summary }>`. Only set while `depth < limits.maxSubagentDepth`. |
+| `startBackground?` | `(tasks) => Promise<void>`. The host's `startBackground` run option, main agent only. See [background delegation](concepts.md#background-delegation). |
 
 Passing host services:
 
@@ -133,7 +134,7 @@ Added by `createEngine` unless disabled. "Main agent only" tools are not offered
 | `cron_list` | List the user's schedules | none | yes | yes |
 | `cron_update` | Change, pause or resume a schedule | none | yes | no |
 | `cron_delete` | Delete a schedule | none | yes | no |
-| `agent_delegate` | Run up to `maxParallelSubagents` helper agents in parallel and collect their reports | none | no | no |
+| `agent_delegate` | Run up to `maxParallelSubagents` helper agents in parallel and collect their reports, or start them in the background (`background: true`) when the host supports it | none | no | no |
 
 Notes:
 
@@ -189,7 +190,7 @@ await agent.run({
 | data | Queries over CSV and JSON (filter, group, chart to image) | `SandboxPort` | Planned |
 | http | `http_request` to APIs the host allows (allowlist) | Host config | Planned |
 | mcp client | Connect external MCP servers and expose their tools | `McpPort` | Planned |
-| agents | `agent_delegate` with `output_schema`, steering and stopping of subagents, background subagents | `RunStore` | Planned (basic delegation exists) |
+| agents | `agent_delegate` with `output_schema`, steering of subagents | `RunStore` | Planned (delegation, background delegation and stopping through the host exist) |
 | cron | `cron_*` plus a "monitor" mode (runs only when something changed) and context from the previous run | `ScheduleStore` | Planned (basic `cron_*` exists) |
 
 Other planned work that touches tools: hooks (`beforeModelCall`, `beforeToolCall`, `afterToolCall`, `onRunEnd`), a skills loader from disk, telemetry through events, and an evals runner.

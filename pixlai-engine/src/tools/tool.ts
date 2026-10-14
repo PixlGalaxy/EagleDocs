@@ -66,6 +66,11 @@ export interface ToolContext {
   askUser?: (question: string) => void;
   /** Starts a subagent (only set when delegation is allowed at this depth). */
   spawnSubagent?: (goal: string, index: number) => Promise<SubagentOutcome>;
+  /**
+   * Hands tasks to the host to run in the background (agent_delegate with
+   * `background`). Only for the main agent, and only when the host supports it.
+   */
+  startBackground?: (tasks: { goal: string; context?: string }[]) => Promise<void>;
 }
 
 export type RunKind = 'chat' | 'scheduled' | 'subagent';

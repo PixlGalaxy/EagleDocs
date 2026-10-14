@@ -98,6 +98,14 @@ export interface LoopInput {
   signal: AbortSignal;
   extraInstructions?: string;
   budget?: Budget;
+  startBackground?: (tasks: { goal: string; context?: string }[]) => Promise<void>;
+}
+
+/** What a subagent at `depth` may use: read-only tools, and delegation only while depth allows it. */
+export function subagentTools(tools: ToolRegistry, depth: number, limits: Limits): ToolRegistry {
+  return tools.filter(
+    (t: Tool) => t.sideEffect === 'none' && !t.mainAgentOnly && (t.name !== 'agent_delegate' || depth < limits.maxSubagentDepth),
+  );
 }
 
 function errorText(err: unknown): string {
@@ -457,6 +465,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       ...(depth < limits.maxSubagentDepth && {
         spawnSubagent: (goal: string, index: number) => spawn(goal, index, call.id),
       }),
+      ...(depth === 0 && input.startBackground && { startBackground: input.startBackground }),
     };
     try {
       const value = await abortable(tool.run(call.args, ctx), toolSignal);
@@ -494,10 +503,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
   /** A child run with a fresh context, read-only tools and its events tagged for the parent. */
   async function spawn(goal: string, index: number, parentCallId: string): Promise<SubagentOutcome> {
     const childDepth = depth + 1;
-    const childTools = tools.filter(
-      (t: Tool) =>
-        t.sideEffect === 'none' && !t.mainAgentOnly && (t.name !== 'agent_delegate' || childDepth < limits.maxSubagentDepth),
-    );
+    const childTools = subagentTools(tools, childDepth, limits);
     const child = await runLoop({
       ...input,
       tools: childTools,

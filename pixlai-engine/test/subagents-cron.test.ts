@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { nextRun, parseSchedule, planSchedule } from '../src/index.js';
+import { backgroundReportMessage, nextRun, parseSchedule, planSchedule } from '../src/index.js';
 import { model, ScriptedProvider, setup, text, toolCall } from './helpers.js';
 
 const user = (content: string) => ({ role: 'user' as const, content });
@@ -109,4 +109,55 @@ test('cron parsing and next runs', () => {
   assert.throws(() => parseSchedule('61 * * * *'), /out of range/);
   assert.throws(() => parseSchedule('tomorrow'), /5-field/);
   assert.throws(() => planSchedule('0 8 * * *', 'Mars/Base', after), /Unknown timezone/);
+});
+
+test('background delegation hands the tasks to the host and answers right away', async () => {
+  const { agent, sink } = setup();
+  const provider = new ScriptedProvider([
+    () => toolCall('agent_delegate', { tasks: [{ goal: 'Read all syllabi', context: 'Fall 2026' }], background: true }),
+    () => text('Started a helper; I will report back.'),
+  ]);
+  const started: unknown[] = [];
+  const result = await agent.run({
+    runId: 'r1',
+    model: model(provider),
+    history: [{ role: 'user', content: 'read every syllabus' }],
+    sink,
+    startBackground: async (tasks) => void started.push(...tasks),
+  });
+  assert.equal(result.content, 'Started a helper; I will report back.');
+  assert.deepEqual(started, [{ goal: 'Read all syllabi', context: 'Fall 2026' }]);
+  assert.equal(provider.requests.length, 2, 'no helper ran inside the chat run');
+  assert.match(String(result.messages.find((m) => m.role === 'tool')?.content), /background/);
+
+  // A host without background support still gets the work done, waiting for it.
+  const fallback = new ScriptedProvider([
+    () => toolCall('agent_delegate', { tasks: [{ goal: 'g' }], background: true }),
+    () => text('child report'),
+    () => text('done'),
+  ]);
+  const waited = await agent.run({ runId: 'r2', model: model(fallback), history: [{ role: 'user', content: 'x' }], sink });
+  assert.equal(waited.content, 'done');
+  assert.equal(fallback.requests.length, 3);
+});
+
+test('runSubagents runs the helpers outside a chat and reports back', async () => {
+  const { agent, events, sink } = setup();
+  const provider = new ScriptedProvider([(req) => text(`report on ${String(req.messages.at(-1)!.content).split('\n')[0]}`)]);
+  const { reports, usage } = await agent.runSubagents({
+    runId: 'bg1',
+    model: model(provider),
+    tasks: [{ goal: 'A' }, { goal: 'B', context: 'ctx' }],
+    sink,
+  });
+  assert.deepEqual(
+    reports.map((r) => [r.goal, r.status, r.summary]),
+    [
+      ['A', 'done', 'report on A'],
+      ['B', 'done', 'report on B'],
+    ],
+  );
+  assert.ok(usage.inputTokens > 0);
+  assert.ok(events.every((e) => e.type === 'subagent' && e.parent_call_id === 'bg1'));
+  assert.match(backgroundReportMessage(reports), /not the user[\s\S]*Helper 2 \(done\): B\nreport on B/);
 });

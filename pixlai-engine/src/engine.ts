@@ -18,8 +18,8 @@ import type {
 import { BROWSER_TOOLS } from './browser/tools.js';
 import { CODE_TOOLS } from './tools/code.js';
 import { webDownload, webFetch, webSearch } from './web/tools.js';
-import { agentDelegate } from './agent/delegate.js';
-import { runLoop } from './agent/loop.js';
+import { agentDelegate, taskBrief, toReport, type DelegateReport, type DelegateTask } from './agent/delegate.js';
+import { runLoop, subagentTools } from './agent/loop.js';
 import { CRON_TOOLS, SCHEDULED_RUN_NOTE } from './cron/tools.js';
 import { BUILTIN_TOOLS } from './tools/builtin.js';
 import { CORE_TOOLS } from './tools/core.js';
@@ -74,6 +74,22 @@ export interface RunOptions {
   kind?: Exclude<RunKind, 'subagent'>;
   /** Narrows the tools for this run (e.g. ones the user turned off). */
   toolFilter?: (tool: Tool) => boolean;
+  /**
+   * Lets agent_delegate run helpers in the background: the host stores the tasks,
+   * runs them later with `runSubagents`, and hands the reports back in a new turn
+   * (see `backgroundReportMessage`). Without it, delegation always waits.
+   */
+  startBackground?: (tasks: DelegateTask[]) => Promise<void>;
+}
+
+export interface SubagentRunOptions {
+  /** Tags the helpers' events (`subagent` events with this as `parent_call_id`). */
+  runId: string;
+  model: ResolvedModel;
+  tasks: DelegateTask[];
+  sink: EventSink;
+  signal?: AbortSignal;
+  toolFilter?: (tool: Tool) => boolean;
 }
 
 /** One user's agent: isolated memory, skills, schedules and limits. Cheap to create per request. */
@@ -82,6 +98,8 @@ export interface UserAgent {
   readonly limits: Limits;
   tools(): Tool[];
   run(options: RunOptions): Promise<RunResult>;
+  /** Runs helper agents in parallel outside a chat run (background delegation). */
+  runSubagents(options: SubagentRunOptions): Promise<{ reports: DelegateReport[]; usage: { inputTokens: number; outputTokens: number } }>;
 }
 
 export interface Engine {
@@ -165,7 +183,41 @@ export function createEngine(options: EngineOptions): Engine {
             sink: run.sink,
             signal: run.signal ?? new AbortController().signal,
             extraInstructions: kind === 'scheduled' ? SCHEDULED_RUN_NOTE : undefined,
+            startBackground: run.startBackground,
           });
+        },
+        async runSubagents(run) {
+          let tools = subagentTools(available('chat'), 1, limits);
+          if (run.toolFilter) tools = tools.filter(run.toolFilter);
+          const budget = { inputTokens: 0, outputTokens: 0 };
+          const signal = run.signal ?? new AbortController().signal;
+          const reports = await Promise.all(
+            run.tasks.slice(0, limits.maxParallelSubagents).map(async (task, index) => {
+              const goal = String(task.goal ?? '').trim();
+              const child = await runLoop({
+                services,
+                basePrompt: options.basePrompt,
+                user,
+                limits,
+                host: userOptions?.host ?? {},
+                tools,
+                runId: run.runId,
+                kind: 'subagent',
+                depth: 1,
+                model: run.model,
+                history: [{ role: 'user', content: taskBrief(task) }],
+                sink: { emit: (event) => run.sink.emit({ type: 'subagent', parent_call_id: run.runId, index, task: goal.slice(0, 200), event }) },
+                signal,
+                extraInstructions: 'You are a helper at depth 1, working in the background.',
+                budget,
+              });
+              return toReport(goal, {
+                status: child.status === 'done' ? 'done' : child.status === 'cancelled' ? 'cancelled' : 'failed',
+                summary: child.status === 'done' ? child.content : `The helper ${child.status}: ${child.error ?? 'no answer'}`,
+              });
+            }),
+          );
+          return { reports, usage: budget };
         },
       };
     },
