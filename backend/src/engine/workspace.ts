@@ -323,6 +323,30 @@ export class DiskWorkspace implements WorkspacePort {
     this.forgetUsage(userId);
   }
 
+  /**
+   * Copies a file or folder (a forked chat's folder). Links are skipped, never
+   * followed or copied; the copy counts toward the quota and must fit.
+   */
+  async copy(userId: string, from: string, to: string): Promise<void> {
+    const a = this.resolve(userId, from);
+    const b = this.resolve(userId, to);
+    if (!a.rel || !b.rel) throw new Error('Cannot copy a root folder');
+    await this.assertNoLinks(a);
+    await this.assertNoLinks(b);
+    const stat = await fs.lstat(a.abs).catch(() => null);
+    if (!stat || stat.isSymbolicLink()) throw new Error(`Not found: ${from}`);
+    if (await fs.stat(b.abs).catch(() => null)) throw new Error(`${to} already exists`);
+    await this.assertFits(userId, b.area, stat.isDirectory() ? await dirBytes(a.abs) : stat.size);
+    await fs.mkdir(dirname(b.abs), { recursive: true });
+    await fs.cp(a.abs, b.abs, {
+      recursive: true,
+      errorOnExist: true,
+      force: false,
+      filter: async (src) => !(await fs.lstat(src).catch(() => null))?.isSymbolicLink(),
+    });
+    this.forgetUsage(userId);
+  }
+
   async delete(userId: string, path: string): Promise<void> {
     const r = this.resolve(userId, path);
     if (!r.rel) throw new Error('Cannot delete a root folder');

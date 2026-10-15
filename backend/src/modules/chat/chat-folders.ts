@@ -16,7 +16,8 @@ export async function migrateChatFolders(db: Db, workspace: DiskWorkspace): Prom
   await withAdvisoryLock(db, LOCKS.chatFolders, async () => {
     const rows = await many<{ id: string; user_id: string; folder: string }>(
       db,
-      `SELECT id, user_id, folder FROM chats WHERE folder IS NOT NULL AND folder <> $1 || '/' || id::text`,
+      // Hidden versions share their chat's folder: never moved on their own.
+      `SELECT id, user_id, folder FROM chats WHERE folder IS NOT NULL AND NOT hidden AND folder <> $1 || '/' || id::text`,
       [CHATS_FOLDER],
     );
     for (const chat of rows) {

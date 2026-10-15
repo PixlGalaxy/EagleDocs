@@ -359,6 +359,80 @@ check('the retry note stays hidden from the chat', !r.json.messages.some((m) => 
 r = await user.req(A, 'POST', `/jobs/${limitJobs[0]}/retry`);
 check('only stopped or failed turns can run again', r.status === 409, r.json?.error);
 
+// ---------------------------------------------------------------- try again, with the same or another model
+const retryChat = (await user.req(A, 'POST', '/chats', {})).json.id;
+r = await user.req(A, 'POST', `/chats/${retryChat}/messages`, { content: 'say it again', model_ref: `eagledocs:${mini.id}` });
+await user.stream(B, retryChat, r.json.job_id);
+r = await user.req(A, 'POST', `/chats/${retryChat}/regenerate`, { model_ref: `eagledocs:${smart.id}` });
+check('trying again queues a new answer', r.status === 201 && r.json.job_id, JSON.stringify(r.json));
+events = await user.stream(B, retryChat, r.json.job_id);
+r = await user.req(A, 'GET', `/chats/${retryChat}`);
+const retried = r.json.messages;
+check('the old answer is replaced, by the other model', retried.length === 2 && retried[1].role === 'assistant' && /Smart/.test(retried[1].model_label ?? '') && retried[1].content === 'echo: say it again', JSON.stringify(retried.map((m) => [m.role, m.model_label])));
+r = await user.req(A, 'POST', `/chats/${retryChat}/regenerate`, {});
+await user.stream(B, retryChat, r.json.job_id);
+r = await user.req(A, 'GET', `/chats/${retryChat}`);
+check("trying again with no model keeps the chat's model", r.json.messages.length === 2 && /Mini/.test(r.json.messages[1].model_label ?? ''), JSON.stringify(r.json.messages.map((m) => m.model_label)));
+const emptyChat = (await user.req(A, 'POST', '/chats', {})).json.id;
+r = await user.req(A, 'POST', `/chats/${emptyChat}/regenerate`, {});
+const nothing = r.status;
+r = await admin.req(A, 'POST', `/chats/${retryChat}/regenerate`, {});
+check("nothing to try again, or another student's chat, is refused", nothing === 409 && r.status === 404, `${nothing} ${r.status}`);
+
+// ---------------------------------------------------------------- forks
+r = await user.req(A, 'GET', `/chats/${attachChat}`);
+const original = r.json.messages;
+const firstAnswer = original.find((m) => m.role === 'assistant');
+r = await user.req(A, 'POST', `/chats/${attachChat}/fork`, { message_id: firstAnswer.id });
+const fork1 = r.json;
+check('a fork from an answer is a new chat under the original, numbered 1', r.status === 201 && fork1.parent_id === attachChat && fork1.fork_label === '1' && fork1.id !== attachChat, JSON.stringify(r.json).slice(0, 160));
+r = await user.req(A, 'GET', `/chats/${fork1.id}`);
+check('it has the conversation up to that answer (its file paths now in the fork folder)', r.json.messages.length === 2 && r.json.messages[1].content === firstAnswer.content.split(attachChat).join(fork1.id), r.json.messages[1]?.content?.slice(0, 160));
+const forkedFile = r.json.messages[0].attachments?.[0]?.path ?? '';
+check("its files are a copy in its own folder, and the messages point there", forkedFile.startsWith(`Chats/${fork1.id}/`), forkedFile);
+r = await user.req(A, 'GET', `/files/stat?path=${encodeURIComponent(forkedFile)}`);
+check('the copied file is there', r.status === 200, String(r.status));
+r = await user.req(A, 'POST', `/chats/${attachChat}/fork`, {});
+const fork2 = r.json;
+r = await user.req(A, 'POST', `/chats/${fork1.id}/fork`, {});
+const fork11 = r.json;
+check('the next fork is 2, and a fork of fork 1 is 1.1', fork2.fork_label === '2' && fork11.fork_label === '1.1' && fork11.parent_id === fork1.id, `${fork2.fork_label} ${fork11.fork_label}`);
+r = await user.req(A, 'POST', `/chats/${attachChat}/fork`, { message_id: original[0].id });
+const fromUser = r.status;
+r = await admin.req(A, 'POST', `/chats/${attachChat}/fork`, {});
+check("a fork starts from an answer, and only the owner forks", fromUser === 409 && r.status === 404, `${fromUser} ${r.status}`);
+// Deleting the original deletes every fork under it, with their folders.
+await user.req(A, 'DELETE', `/chats/${attachChat}`);
+const remaining = (await user.req(A, 'GET', '/chats')).json.map((c) => c.id);
+const folders = ((await user.req(A, 'GET', '/files?path=Chats')).json.entries ?? []).map((e) => e.name);
+check('deleting a chat deletes all its forks and their folders', ![attachChat, fork1.id, fork2.id, fork11.id].some((id) => remaining.includes(id) || folders.includes(id)), JSON.stringify(folders));
+
+// ---------------------------------------------------------------- editing a message (versions, like ChatGPT)
+const editChat = (await user.req(A, 'POST', '/chats', {})).json.id;
+r = await user.req(A, 'POST', `/chats/${editChat}/messages`, { content: 'first question', model_ref: 'auto' });
+await user.stream(B, editChat, r.json.job_id);
+r = await user.req(A, 'POST', `/chats/${editChat}/messages`, { content: 'second question', model_ref: 'auto' });
+await user.stream(B, editChat, r.json.job_id);
+r = await user.req(A, 'GET', `/chats/${editChat}`);
+const firstQuestion = r.json.messages[0];
+r = await user.req(A, 'POST', `/chats/${editChat}/messages/${firstQuestion.id}/edit`, { content: 'first question, edited', model_ref: 'auto' });
+check('editing a message answers it again', r.status === 201 && r.json.job_id, JSON.stringify(r.json));
+await user.stream(B, editChat, r.json.job_id);
+r = await user.req(A, 'GET', `/chats/${editChat}`);
+let shownNow = r.json.messages;
+check('the chat continues from the edited text, as version 2 of 2', shownNow.length === 2 && shownNow[0].content === 'first question, edited' && shownNow[0].version === 2 && shownNow[0].versions === 2 && shownNow[1].content === 'echo: first question, edited', JSON.stringify(shownNow.map((m) => [m.content, m.version, m.versions])));
+r = await user.req(A, 'POST', `/chats/${editChat}/messages/${shownNow[0].id}/version`, { version: 1 });
+check('switching versions', r.status === 204, String(r.status));
+r = await user.req(A, 'GET', `/chats/${editChat}`);
+shownNow = r.json.messages;
+check('version 1 comes back with all that followed it', shownNow.length === 4 && shownNow[0].content === 'first question' && shownNow[0].version === 1 && shownNow[0].versions === 2 && shownNow[2].content === 'second question', JSON.stringify(shownNow.map((m) => m.content)));
+const listedChats = (await user.req(A, 'GET', '/chats')).json;
+check('hidden versions never show in the chat list', listedChats.filter((c) => c.title === listedChats.find((x) => x.id === editChat)?.title && c.id !== editChat).length === 0 && listedChats.some((c) => c.id === editChat), String(listedChats.length));
+r = await admin.req(A, 'POST', `/chats/${editChat}/messages/${shownNow[0].id}/edit`, { content: 'not mine' });
+check("nobody else can edit someone's message", r.status === 404, String(r.status));
+r = await user.req(A, 'DELETE', `/chats/${editChat}`);
+check('a chat with versions deletes', r.status === 204, String(r.status));
+
 // ---------------------------------------------------------------- schedules
 r = await user.req(A, 'POST', '/schedules', { name: 'Check', cron: '0 8 * * 1', prompt: 'Weekly check [SILENT]' });
 check('create schedule', r.status === 201 && r.json.next_run_at, JSON.stringify(r.json));

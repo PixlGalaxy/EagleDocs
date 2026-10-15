@@ -1,7 +1,8 @@
 import type { ChatMessage, Display, ToolCallRequest, ToolCallView, UserQuestion } from 'pixlai-engine';
 import type { Db, Queryable } from '../../db/pool.js';
 import { many, maybe } from '../../db/pool.js';
-import { notFound } from '../../errors.js';
+import { conflict, notFound } from '../../errors.js';
+import { withTx } from '../../db/tx.js';
 import type { Attachment } from './attachments.js';
 
 export interface ChatRow {
@@ -36,6 +37,9 @@ interface MessageRow {
     questions?: UserQuestion[];
     /** Pages the agent showed (show_html). */
     displays?: Display[];
+    /** An edited message: which edit it belongs to, and which of its versions this is. */
+    version_group?: string;
+    version?: number;
   };
   model_ref: string | null;
   model_label: string | null;
@@ -59,6 +63,10 @@ export interface MessageView {
   questions?: UserQuestion[];
   /** Pages the agent showed, by title; each loads from its own URL (the HTML is never inlined here). */
   displays?: { kind: Display['kind']; title: string }[];
+  /** An edited message of the student: this is version `version` of `versions` (the route fills `versions`). */
+  version_group?: string;
+  version?: number;
+  versions?: number;
   created_at: Date;
 }
 
@@ -82,6 +90,7 @@ export function toMessageView(row: MessageRow): MessageView {
     ...(row.meta.attachments?.length && { attachments: row.meta.attachments }),
     ...(row.meta.questions?.length && { questions: row.meta.questions }),
     ...(row.meta.displays?.length && { displays: row.meta.displays.map((d) => ({ kind: d.kind, title: d.title })) }),
+    ...(row.meta.version_group && { version_group: row.meta.version_group, version: row.meta.version ?? 1 }),
     created_at: row.created_at,
   };
 }
@@ -106,7 +115,7 @@ export class ChatService {
       }
     >(
       this.db,
-      `SELECT c.id, c.title, c.model_ref, c.kind, c.created_at, c.updated_at,
+      `SELECT c.id, c.title, c.model_ref, c.kind, c.created_at, c.updated_at, c.parent_id, c.fork_label,
          (SELECT j.id FROM jobs j WHERE j.chat_id = c.id AND j.status IN ('queued', 'running', 'waiting_approval', 'waiting_mfa')
           ORDER BY j.queued_at DESC LIMIT 1) AS active_job_id,
          EXISTS (SELECT 1 FROM jobs j WHERE j.kind = 'delegate' AND j.payload->>'chat_id' = c.id::text AND j.status IN ('queued', 'running')) AS helpers_running,
@@ -118,7 +127,7 @@ export class ChatService {
             FROM messages m WHERE m.chat_id = c.id AND m.role = 'assistant'
               AND jsonb_path_exists(m.meta->'tool_views', '$[*] ? (@.name == "agent_delegate")')
             ORDER BY m.seq DESC LIMIT 1) AS run_tasks
-       FROM chats c WHERE c.user_id = $1 AND NOT c.archived ORDER BY c.updated_at DESC LIMIT 200`,
+       FROM chats c WHERE c.user_id = $1 AND NOT c.archived AND NOT c.hidden ORDER BY c.updated_at DESC LIMIT 200`,
       [userId],
     );
     return rows.map(({ helpers_running, bg_tasks, run_tasks, unread, ...chat }) => {
@@ -143,7 +152,7 @@ export class ChatService {
       this.db,
       `SELECT c.*, (SELECT j.id FROM jobs j WHERE j.chat_id = c.id AND j.status IN ('queued', 'running', 'waiting_approval', 'waiting_mfa')
           ORDER BY j.queued_at DESC LIMIT 1) AS active_job_id
-       FROM chats c WHERE c.id = $1 AND c.user_id = $2`,
+       FROM chats c WHERE c.id = $1 AND c.user_id = $2 AND NOT c.hidden`,
       [chatId, userId],
     );
     if (!chat) throw notFound();
@@ -161,6 +170,79 @@ export class ChatService {
   async rename(userId: string, chatId: string, title: string): Promise<void> {
     await this.get(userId, chatId);
     await this.db.query('UPDATE chats SET title = $1, updated_at = now() WHERE id = $2', [title.slice(0, 120), chatId]);
+  }
+
+  /** A chat and every fork under it, at every level, with their folders (deleting a chat deletes them all). */
+  async withForks(userId: string, chatId: string): Promise<{ id: string; folder: string }[]> {
+    if (!UUID.test(chatId)) return [];
+    const rows = await many<{ id: string; folder: string | null }>(
+      this.db,
+      `WITH RECURSIVE tree AS (
+         SELECT id, folder FROM chats WHERE id = $1 AND user_id = $2
+         UNION ALL
+         SELECT c.id, c.folder FROM chats c JOIN tree t ON c.parent_id = t.id
+       ) SELECT id, folder FROM tree`,
+      [chatId, userId],
+    );
+    return rows.map((r) => ({ id: r.id, folder: r.folder ?? chatFolder(r.id) }));
+  }
+
+  /**
+   * Forks a chat: a new chat under it (numbered "1", "2", "2.1"...) with its
+   * conversation up to `messageId` (an answer of the agent; the last finished
+   * one when absent). File paths in the copied messages point at the fork's own
+   * folder, which the caller fills with a copy of the original's.
+   */
+  async fork(userId: string, chatId: string, messageId?: string): Promise<ChatRow & { parent_id: string; fork_label: string; folder: string }> {
+    const chat = await this.get(userId, chatId);
+    const parent = await maybe<{ fork_label: string | null }>(this.db, 'SELECT fork_label FROM chats WHERE id = $1', [chat.id]);
+    let cutoff: string | null;
+    if (messageId) {
+      if (!UUID.test(messageId)) throw notFound();
+      const at = await maybe<{ seq: string; role: string; internal: boolean }>(
+        this.db,
+        "SELECT seq, role, meta ? 'internal' AS internal FROM messages WHERE id = $1 AND chat_id = $2",
+        [messageId, chat.id],
+      );
+      if (!at) throw notFound();
+      if (at.role !== 'assistant' || at.internal) throw conflict('chat.forkFromAnswer');
+      cutoff = at.seq;
+    } else {
+      const last = await maybe<{ seq: string | null }>(
+        this.db,
+        "SELECT MAX(seq) AS seq FROM messages WHERE chat_id = $1 AND role = 'assistant' AND NOT (meta ? 'internal')",
+        [chat.id],
+      );
+      cutoff = last?.seq ?? null;
+    }
+    if (!cutoff) throw conflict('chat.nothingToFork');
+
+    const from = `${chatFolder(chat.id)}/`;
+    const fromJson = JSON.stringify(from).slice(1, -1);
+    return withTx(this.db, async (client) => {
+      // Numbered in order under its parent; a fork of a fork extends the parent's number.
+      await client.query('SELECT id FROM chats WHERE id = $1 FOR UPDATE', [chat.id]);
+      const { rows: count } = await client.query<{ n: string }>('SELECT COUNT(*) AS n FROM chats WHERE parent_id = $1 AND NOT hidden', [chat.id]);
+      const n = Number(count[0]!.n) + 1;
+      const label = parent?.fork_label ? `${parent.fork_label}.${n}` : String(n);
+      const { rows } = await client.query<ChatRow & { parent_id: string; fork_label: string; folder: string }>(
+        `INSERT INTO chats (user_id, title, model_ref, kind, parent_id, fork_label) VALUES ($1, $2, $3, 'chat', $4, $5) RETURNING *`,
+        [userId, chat.title, chat.model_ref, chat.id, label],
+      );
+      const forked = rows[0]!;
+      const to = `${chatFolder(forked.id)}/`;
+      const toJson = JSON.stringify(to).slice(1, -1);
+      await client.query('UPDATE chats SET folder = $2 WHERE id = $1', [forked.id, chatFolder(forked.id)]);
+      await client.query(
+        `INSERT INTO messages (chat_id, role, content, tool_calls, tool_call_id, tool_name, meta, model_ref, model_label, tokens_in, tokens_out, created_at)
+         SELECT $2, role, replace(content, $4, $5),
+           CASE WHEN tool_calls IS NULL THEN NULL ELSE replace(tool_calls::text, $6, $7)::jsonb END,
+           tool_call_id, tool_name, replace(meta::text, $6, $7)::jsonb, model_ref, model_label, tokens_in, tokens_out, created_at
+         FROM messages WHERE chat_id = $1 AND seq <= $3 ORDER BY seq`,
+        [chat.id, forked.id, cutoff, from, to, fromJson, toJson],
+      );
+      return { ...forked, folder: chatFolder(forked.id) };
+    });
   }
 
   async remove(userId: string, chatId: string): Promise<void> {

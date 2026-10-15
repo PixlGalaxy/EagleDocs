@@ -3,7 +3,7 @@ import type { Bus } from '../../bus/bus.js';
 import type { Db } from '../../db/pool.js';
 import { many, maybe, one } from '../../db/pool.js';
 import { withTx } from '../../db/tx.js';
-import { badRequest, conflict, notFound, tooManyRequests } from '../../errors.js';
+import { badRequest, conflict, notFound, tooManyRequests, withDetail } from '../../errors.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAuth } from '../auth/session.middleware.js';
@@ -11,6 +11,7 @@ import { titleFrom, type ChatService } from './chat.service.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import { intoChatFolder, resolveAttachments } from './attachments.js';
 import { deleteChatFolder } from './chat-folders.js';
+import { editMessage, switchVersion, versionCounts } from './chat-versions.js';
 import { logger } from '../../logger.js';
 import { nameChat } from './titles.js';
 import { compactHistory, estimateTokens, type ReasoningLevel } from 'pixlai-engine';
@@ -100,9 +101,12 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const chat = await chats.get(req.user!.id, routeParam(req.params.id));
     // Opening a chat (or reloading it when an answer lands while it is open) reads it.
     await chats.markRead(req.user!.id, chat.id);
+    // Edited messages carry how many versions they have, for the < n/m > arrows.
+    const counts = await versionCounts(db, chat.id);
+    const messages = (await chats.visibleMessages(chat.id)).map((m) => (m.version_group ? { ...m, versions: counts.get(m.version_group) ?? 1 } : m));
     res.json({
       chat,
-      messages: await chats.visibleMessages(chat.id),
+      messages,
       pending_approvals: await chats.pendingApprovals(chat.id),
       background_jobs: await chats.backgroundJobs(chat.id),
       context: await chats.lastContext(chat.id),
@@ -133,14 +137,43 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     res.json(await chats.get(req.user!.id, routeParam(req.params.id)));
   });
 
-  /** Deleting a chat deletes its folder too (what was uploaded in it and what the agent made there). */
+  /**
+   * Deleting a chat deletes its folder too (what was uploaded in it and what the
+   * agent made there), and its forks at every level with theirs.
+   */
   chatsRouter.delete('/:id', async (req: AppRequest, res) => {
     const userId = req.user!.id;
     const chat = await chats.get(userId, routeParam(req.params.id));
-    const folder = await chats.folderOf(userId, chat.id);
+    await chats.folderOf(userId, chat.id);
+    const tree = await chats.withForks(userId, chat.id);
     await chats.remove(userId, chat.id);
-    await deleteChatFolder(workspace, userId, folder).catch((err: Error) => logger.warn(`Chat ${chat.id} deleted, its folder stays: ${err.message}`));
+    for (const gone of tree) {
+      await deleteChatFolder(workspace, userId, gone.folder).catch((err: Error) => logger.warn(`Chat ${gone.id} deleted, its folder stays: ${err.message}`));
+    }
     res.status(204).end();
+  });
+
+  /**
+   * A fork: a new chat under this one with its conversation up to an answer
+   * (`message_id`, or the last finished answer) and a copy of its files.
+   */
+  chatsRouter.post('/:id/fork', async (req: AppRequest, res) => {
+    const userId = req.user!.id;
+    const chat = await chats.get(userId, routeParam(req.params.id));
+    const messageId = (req.body as { message_id?: unknown })?.message_id;
+    if (messageId !== undefined && typeof messageId !== 'string') throw badRequest('error.invalidInput');
+    const source = await chats.folderOf(userId, chat.id);
+    const forked = await chats.fork(userId, chat.id, messageId);
+    if (await workspace.stat(userId, source).catch(() => null)) {
+      try {
+        await workspace.copy(userId, source, forked.folder);
+      } catch (err) {
+        // No room for the copy (quota): no half fork.
+        await chats.remove(userId, forked.id).catch(() => undefined);
+        throw withDetail(conflict('chat.forkNoRoom'), (err as Error).message);
+      }
+    }
+    res.status(201).json({ ...forked, active_job_id: null });
   });
 
   /** The chat's info card: messages, tokens, models, dates, and its folder's files. */
@@ -185,6 +218,76 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     await bus.publish('job_queued', { jobId });
     if (!chat.title) void nameChat({ db, catalog }, { userId, chatId: chat.id, modelRef, provisional }, content || provisional);
     res.status(201).json({ job_id: jobId, message });
+  });
+
+  /**
+   * Edits one of the student's messages (like ChatGPT): the version shown so far
+   * is kept hidden and can be shown again; the new text is answered from there.
+   */
+  chatsRouter.post('/:id/messages/:messageId/edit', async (req: AppRequest, res) => {
+    const userId = req.user!.id;
+    const chat = await chats.get(userId, routeParam(req.params.id));
+    const body = (req.body ?? {}) as { content?: unknown; model_ref?: unknown; reasoning?: unknown };
+    const content = text(body.content, MAX_MESSAGE_CHARS);
+    const modelRef = modelRefOf(body.model_ref) ?? chat.model_ref;
+    const reasoning = REASONING.includes(body.reasoning as ReasoningLevel) ? (body.reasoning as ReasoningLevel) : undefined;
+    const { messageId, jobId } = await editMessage(db, userId, chat.id, routeParam(req.params.messageId), content, async (client) => {
+      const { rows } = await client.query<{ id: string }>(
+        "INSERT INTO jobs (user_id, chat_id, kind, payload) VALUES ($1, $2, 'chat', $3) RETURNING id",
+        [userId, chat.id, { model_ref: modelRef, ...(reasoning && { reasoning }) }],
+      );
+      return rows[0]!.id;
+    });
+    await bus.publish('job_queued', { jobId });
+    res.status(201).json({ job_id: jobId, message_id: messageId });
+  });
+
+  /** Shows another version of an edited message (< n/m >). */
+  chatsRouter.post('/:id/messages/:messageId/version', async (req: AppRequest, res) => {
+    const chat = await chats.get(req.user!.id, routeParam(req.params.id));
+    const version = Number((req.body as { version?: unknown })?.version);
+    if (!Number.isInteger(version) || version < 1) throw badRequest('error.invalidInput');
+    await switchVersion(db, req.user!.id, chat.id, routeParam(req.params.messageId), version);
+    res.status(204).end();
+  });
+
+  /**
+   * "Retry" on the last answer: it goes (with its steps and tool results) and
+   * the same message is answered again, by another model when `model_ref` says so
+   * (for this answer only; the chat's model stays).
+   */
+  chatsRouter.post('/:id/regenerate', async (req: AppRequest, res) => {
+    const userId = req.user!.id;
+    const chat = await chats.get(userId, routeParam(req.params.id));
+    const body = (req.body ?? {}) as { model_ref?: unknown; reasoning?: unknown };
+    const modelRef = modelRefOf(body.model_ref) ?? chat.model_ref;
+    const reasoning = REASONING.includes(body.reasoning as ReasoningLevel) ? (body.reasoning as ReasoningLevel) : undefined;
+    const jobId = await withTx(db, async (client) => {
+      await assertChatIdle(client, chat.id);
+      // The last thing in the chat must be an answer of the agent (not the student's message, not a question pending).
+      const { rows: last } = await client.query<{ role: string; job_id: string | null; seq: string }>(
+        `SELECT role, meta->>'job_id' AS job_id, seq FROM messages
+         WHERE chat_id = $1 AND role IN ('user', 'assistant') AND NOT (meta ? 'internal') AND NOT (meta ? 'background')
+         ORDER BY seq DESC LIMIT 1`,
+        [chat.id],
+      );
+      const answer = last[0];
+      if (!answer || answer.role !== 'assistant' || !answer.job_id) throw conflict('chat.nothingToRetry');
+      const { rows: gone } = await client.query<{ seq: string }>(
+        `DELETE FROM messages WHERE chat_id = $1 AND meta->>'job_id' = $2 RETURNING seq`,
+        [chat.id, answer.job_id],
+      );
+      // A summary that already covered the removed answer would bring it back: drop it.
+      const first = Math.min(...gone.map((g) => Number(g.seq)));
+      await client.query('UPDATE chats SET summary = NULL, summary_until_seq = NULL, updated_at = now() WHERE id = $1 AND summary_until_seq >= $2', [chat.id, first]);
+      const { rows } = await client.query<{ id: string }>(
+        "INSERT INTO jobs (user_id, chat_id, kind, payload) VALUES ($1, $2, 'chat', $3) RETURNING id",
+        [userId, chat.id, { model_ref: modelRef, ...(reasoning && { reasoning }), regenerate_of: answer.job_id }],
+      );
+      return rows[0]!.id;
+    });
+    await bus.publish('job_queued', { jobId });
+    res.status(201).json({ job_id: jobId });
   });
 
   /**
