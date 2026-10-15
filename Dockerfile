@@ -46,6 +46,8 @@ COPY --from=build-backend /app/pixlai-engine/package.json /app/pixlai-engine/pac
 COPY --from=build-backend /app/backend/dist /app/backend/dist
 COPY --from=build-backend /app/backend/node_modules /app/backend/node_modules
 COPY --from=build-backend /app/backend/package.json /app/backend/package.json
+# Built-in agent skills (markdown), read at startup.
+COPY backend/skills /app/backend/skills
 COPY locales /app/locales
 
 COPY nginx.conf /etc/nginx/nginx.conf
