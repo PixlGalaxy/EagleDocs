@@ -35,10 +35,11 @@ export function workspaceLinkPath(href: string): string | null {
   return rest && !rest.split('/').includes('..') ? rest : null;
 }
 
-/** Where the composer uploads: one folder per day, so the workspace stays tidy. */
+/** Where the composer stages uploads until the message is sent: one TEMP folder per day. */
 export function uploadFolder(now = new Date()): string {
   const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  return `Chat uploads/${day}`;
+  // In TEMP: sending moves them into the chat's folder (Chats/<id>); a file never sent is deleted after 24 h.
+  return `TEMP/uploads/${day}`;
 }
 
 export function formatSize(bytes: number): string {

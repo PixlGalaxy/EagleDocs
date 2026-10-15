@@ -174,21 +174,23 @@ const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR
 const upload = async (name, bytes, type) => {
   const form = new FormData();
   form.append('file', new Blob([bytes], { type }), name);
-  const res = await fetch(`${A}/files/upload?path=${encodeURIComponent('Chat uploads/e2e')}`, { method: 'POST', headers: { cookie: user.headers('GET').cookie, 'x-csrf-token': decodeURIComponent(user.jar.csrf) }, body: form });
+  const res = await fetch(`${A}/files/upload?path=${encodeURIComponent('TEMP/uploads/e2e')}`, { method: 'POST', headers: { cookie: user.headers('GET').cookie, 'x-csrf-token': decodeURIComponent(user.jar.csrf) }, body: form });
   return res.json();
 };
 await upload('board.png', PNG, 'image/png');
 await upload('notes.txt', Buffer.from('Exam on Thursday'), 'text/plain');
 const attachChat = (await user.req(A, 'POST', '/chats', {})).json.id;
-r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '[echoimages]', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png', 'Chat uploads/e2e/notes.txt'] });
+r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '[echoimages]', model_ref: 'auto', attachments: ['TEMP/uploads/e2e/board.png', 'TEMP/uploads/e2e/notes.txt'] });
 check('a message can carry a photo and a file', r.status === 201 && r.json.message.attachments?.map((a) => a.kind).join(',') === 'image,file', JSON.stringify(r.json.message?.attachments));
 // Uploads move into the chat's own folder, named after the chat.
 const firstJob = r.json.job_id;
 const [boardPath, notesPath] = r.json.message.attachments.map((a) => a.path);
 const chatFolder = boardPath.slice(0, boardPath.lastIndexOf('/'));
 check("uploads move into the chat's folder", /^Chats\/.+/.test(chatFolder) && notesPath === `${chatFolder}/notes.txt`, `${boardPath} ${notesPath}`);
-r = await user.req(A, 'GET', `/files?path=${encodeURIComponent('Chat uploads/e2e')}`);
-check('...and leave the uploads area', !(r.json.entries ?? []).some((e) => e.name === 'board.png'), JSON.stringify(r.json).slice(0, 120));
+r = await user.req(A, 'GET', `/files?path=${encodeURIComponent('TEMP/uploads/e2e')}`);
+check('...and the staging folder they leave empty is removed', r.status === 404 || !(r.json.entries ?? []).length, JSON.stringify(r.json).slice(0, 120));
+r = await user.req(A, 'GET', '/files?path=');
+check('there is no "Chat uploads" folder', !(r.json.entries ?? []).some((e) => e.name === 'Chat uploads'), JSON.stringify((r.json.entries ?? []).map((e) => e.name)));
 events = await user.stream(B, attachChat, firstJob);
 let said = events.at(-1).message?.content ?? '';
 check('a model without vision gets a note with the file path instead', /^images=0/.test(said) && said.includes(`Image attached: ${boardPath}`) && /notes\.txt \(file/.test(said), said);
@@ -220,7 +222,7 @@ check('saving does not create files', r.status === 404, String(r.status));
 // Another chat gets its own folder; the same file name there does not clash.
 await upload('board.png', PNG, 'image/png');
 const otherChat = (await user.req(A, 'POST', '/chats', {})).json.id;
-r = await user.req(A, 'POST', `/chats/${otherChat}/messages`, { content: 'second chat photo', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png'] });
+r = await user.req(A, 'POST', `/chats/${otherChat}/messages`, { content: 'second chat photo', model_ref: 'auto', attachments: ['TEMP/uploads/e2e/board.png'] });
 const otherPath = r.json.message?.attachments?.[0]?.path ?? '';
 check('each chat keeps its uploads in its own folder, named by its id', otherPath === `Chats/${otherChat}/board.png` && chatFolder === `Chats/${attachChat}`, otherPath);
 await user.stream(B, otherChat, r.json.job_id);

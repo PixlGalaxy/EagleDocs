@@ -4,6 +4,7 @@ import { LOCKS, withAdvisoryLock } from '../../db/tx.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import { logger } from '../../logger.js';
 import { CHATS_FOLDER, chatFolder } from './chat.service.js';
+import { pruneLegacyUploads } from './attachments.js';
 
 /**
  * Moves chats still in a folder named after their title ("Chats/hola") to
@@ -41,6 +42,9 @@ export async function migrateChatFolders(db: Db, workspace: DiskWorkspace): Prom
         logger.warn(`Chat ${chat.id}: could not move "${chat.folder}" to its id folder: ${(err as Error).message}`);
       }
     }
+    // Uploads used to stage in "Chat uploads/<day>": remove what is left of it empty.
+    const users = await many<{ user_id: string }>(db, 'SELECT DISTINCT user_id FROM chats');
+    for (const { user_id } of users) await pruneLegacyUploads(workspace, user_id).catch(() => undefined);
   });
 }
 

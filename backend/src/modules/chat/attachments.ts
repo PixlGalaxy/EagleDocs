@@ -35,21 +35,40 @@ export async function resolveAttachments(workspace: DiskWorkspace, userId: strin
   return out;
 }
 
-/** Where the composer uploads before a message is sent ("Chat uploads/<day>/..."). */
-export const UPLOADS_FOLDER = 'Chat uploads';
+/**
+ * Where the composer uploads before a message is sent: "TEMP/uploads/<day>/".
+ * In TEMP, so a file attached and never sent is deleted by itself.
+ */
+export const UPLOADS_FOLDER = 'TEMP/uploads';
+/** Where it uploaded before (staged files there still move on send; empty folders are removed). */
+export const LEGACY_UPLOADS_FOLDER = 'Chat uploads';
+
+const staged = (path: string) => path.startsWith(`${UPLOADS_FOLDER}/`) || path.startsWith(`${LEGACY_UPLOADS_FOLDER}/`);
+
+/** Removes `path` and its parents up to (not including) `stop` while they are empty folders. */
+async function pruneEmpty(workspace: DiskWorkspace, userId: string, path: string, stop: string): Promise<void> {
+  for (let dir = path; dir && dir !== stop && dir.startsWith(`${stop}/`); dir = dir.slice(0, dir.lastIndexOf('/'))) {
+    const entries = await workspace.list(userId, dir).catch(() => null);
+    if (!entries || entries.length) return;
+    await workspace.delete(userId, dir).catch(() => undefined);
+  }
+}
 
 /**
  * Files the composer uploaded for this message move into the chat's folder
- * (a name already there gets " (2)", " (3)"...). Files the student picked from
- * elsewhere in the workspace stay where they are.
+ * (a name already there gets " (2)", " (3)"...), and the staging folders they
+ * leave empty are removed. Files the student picked from elsewhere in the
+ * workspace (the chat's own folder included) stay where they are.
  */
 export async function intoChatFolder(workspace: DiskWorkspace, userId: string, attachments: Attachment[], folder: string): Promise<Attachment[]> {
   const out: Attachment[] = [];
+  const left = new Set<string>();
   for (const a of attachments) {
-    if (!a.path.startsWith(`${UPLOADS_FOLDER}/`)) {
+    if (!staged(a.path)) {
       out.push(a);
       continue;
     }
+    left.add(a.path.slice(0, a.path.lastIndexOf('/')));
     const dot = a.name.lastIndexOf('.');
     const [stem, ext] = dot > 0 ? [a.name.slice(0, dot), a.name.slice(dot)] : [a.name, ''];
     let target = `${folder}/${a.name}`;
@@ -57,7 +76,19 @@ export async function intoChatFolder(workspace: DiskWorkspace, userId: string, a
     await workspace.move(userId, a.path, target);
     out.push({ ...a, path: target, name: target.slice(folder.length + 1) });
   }
+  for (const dir of left) {
+    await pruneEmpty(workspace, userId, dir, dir.startsWith(`${LEGACY_UPLOADS_FOLDER}/`) ? '' : 'TEMP');
+  }
+  if ([...left].some((d) => d.startsWith(`${LEGACY_UPLOADS_FOLDER}/`))) await pruneEmpty(workspace, userId, LEGACY_UPLOADS_FOLDER, '');
   return out;
+}
+
+/** The old "Chat uploads" folder: its empty day folders and itself when empty go (files in it stay). */
+export async function pruneLegacyUploads(workspace: DiskWorkspace, userId: string): Promise<void> {
+  const days = await workspace.list(userId, LEGACY_UPLOADS_FOLDER).catch(() => null);
+  if (!days) return;
+  for (const day of days) if (day.type === 'dir') await pruneEmpty(workspace, userId, day.path, '');
+  await pruneEmpty(workspace, userId, LEGACY_UPLOADS_FOLDER, '');
 }
 
 /**
