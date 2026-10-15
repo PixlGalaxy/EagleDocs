@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, BookOpen, CalendarClock, FolderTree, GraduationCap, Map as MapIcon, Menu, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
+import { ArrowDown, BookOpen, CalendarClock, Folder, FolderOpen, GraduationCap, Map as MapIcon, Menu, PanelLeftClose, PanelLeftOpen, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError, apiUrl } from '../../api/client';
 import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, ReasoningLevel, StreamEvent, ToolCall, WorkspaceEntry } from '../../api/types';
@@ -23,6 +23,7 @@ import { toolLabel } from '../../components/chat/toolLabels';
 import { MAX_ATTACHMENTS } from '../../components/chat/attachments';
 import WorkspacePanel from './WorkspacePanel';
 import ResizableDock from './ResizableDock';
+import { CHAT_COLUMN } from '../../components/chat/layout';
 import Modal from '../../components/ui/Modal';
 import Toast from '../../components/ui/Toast';
 import { useConfirm } from '../../components/ui/confirm';
@@ -60,6 +61,16 @@ function storedReasoning(): ReasoningLevel {
     return REASONING_LEVELS.find((level) => level === value) ?? 'default';
   } catch {
     return 'default';
+  }
+}
+
+/** The chat list on wide screens: shown unless the student hid it (remembered in this browser). */
+const CHAT_LIST_KEY = 'eagledocs.chatList';
+function storedListHidden(): boolean {
+  try {
+    return localStorage.getItem(CHAT_LIST_KEY) === 'hidden';
+  } catch {
+    return false;
   }
 }
 
@@ -109,6 +120,16 @@ const ChatPage = () => {
   const attachments = useDraftAttachments();
   /** Workspace panel: docked on wide screens (remembered), a drawer on phones (always starts closed). */
   const [filesDocked, setFilesDocked] = useState(storedFilesPanel);
+  const [listHidden, setListHidden] = useState(storedListHidden);
+  const toggleList = () => {
+    const next = !listHidden;
+    setListHidden(next);
+    try {
+      localStorage.setItem(CHAT_LIST_KEY, next ? 'hidden' : 'shown');
+    } catch {
+      // Private mode: it just is not remembered.
+    }
+  };
   const [filesDrawer, setFilesDrawer] = useState(false);
   /** Bumped when a run ends, so the files panel reloads what the agent may have written. */
   const [filesVersion, setFilesVersion] = useState(0);
@@ -556,10 +577,20 @@ const ChatPage = () => {
     <div className="flex min-h-0 flex-1">
       <title>{activeChat ? `${activeChat.title} - EagleDocs` : `${t('nav.chat')} - EagleDocs`}</title>
 
-      {/* Desktop sidebar */}
-      <aside className="hidden w-72 shrink-0 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
-        <ChatSidebar chats={chats} loading={loadingChats} activeId={chatId} onNew={() => navigate('/chat')} onRename={setRenaming} onDelete={setDeleting} />
-      </aside>
+      {/* Desktop sidebar, unless hidden for a wider chat */}
+      {!listHidden && (
+        <ResizableDock
+          side="left"
+          storageKey="eagledocs.chatListWidth"
+          defaultWidth={288}
+          minWidth={220}
+          maxWidth={440}
+          label={t('chat.resizeList')}
+          className="hidden border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block"
+        >
+          <ChatSidebar chats={chats} loading={loadingChats} activeId={chatId} onNew={() => navigate('/chat')} onRename={setRenaming} onDelete={setDeleting} />
+        </ResizableDock>
+      )}
 
       {/* Mobile drawer */}
       {sidebarOpen && (
@@ -582,7 +613,7 @@ const ChatPage = () => {
         </div>
       )}
 
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section data-chat-column className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 bg-white/70 px-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/70 sm:px-4">
           <button
             type="button"
@@ -592,27 +623,23 @@ const ChatPage = () => {
           >
             <Menu size={20} />
           </button>
+          <button
+            type="button"
+            onClick={toggleList}
+            aria-label={listHidden ? t('chat.showList') : t('chat.hideList')}
+            title={listHidden ? t('chat.showList') : t('chat.hideList')}
+            aria-pressed={!listHidden}
+            className="hidden rounded-lg p-2 text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 md:inline-flex"
+          >
+            {listHidden ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+          </button>
           <p className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-slate-700 dark:text-slate-200">{activeChat?.title ?? t('chat.new')}</p>
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              onClick={toggleFiles}
-              aria-label={filesDocked ? t('chat.hideFiles') : t('chat.showFiles')}
-              title={filesDocked ? t('chat.hideFiles') : t('chat.showFiles')}
-              aria-pressed={filesDocked}
-              className={`shrink-0 rounded-lg p-2 transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
-                filesDocked ? 'lg:bg-[var(--accent-50)] lg:text-[var(--accent-700)] lg:dark:bg-[var(--accent-500)]/15 lg:dark:text-[var(--accent-200)]' : ''
-              } text-slate-600 dark:text-slate-300`}
-            >
-              <FolderTree size={18} aria-hidden="true" />
-            </button>
-          </div>
         </header>
 
         {/* The conversation; the jump-to-latest button floats over its bottom edge. */}
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div ref={scrollRef} onScroll={onScroll} className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-            <div ref={contentRef} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+            <div ref={contentRef} className={`mx-auto w-full ${CHAT_COLUMN} space-y-6 px-4 py-6`}>
               {noModels && (
                 <Notice tone="warning" icon={Plug}>
                   {t('chat.noModels')}{' '}
@@ -773,7 +800,7 @@ const ChatPage = () => {
           {chatId && <BackgroundTasks chatId={chatId} jobs={background} onFinished={onBackgroundFinished} />}
           {/* Corrections the agent has not read yet wait here, next to where they were written. */}
           {live && live.steers.some((st) => !st.applied) && (
-            <div className="mx-auto mb-2 w-full max-w-3xl space-y-2">
+            <div className={`mx-auto mb-2 w-full ${CHAT_COLUMN} space-y-2`}>
               {live.steers
                 .filter((st) => !st.applied)
                 .map((st) => (
@@ -797,14 +824,39 @@ const ChatPage = () => {
                 {showReasoning && <ReasoningPicker value={reasoning} onChange={chooseReasoning} disabled={!!live} />}
               </>
             }
-            status={chatId && context ? <ContextRing usage={context} onCompact={compact} busy={!!live} compacting={compacting} /> : null}
+            status={
+              <>
+                {chatId && context && <ContextRing usage={context} onCompact={compact} busy={!!live} compacting={compacting} />}
+                {/* The workspace panel, next to the context meter. */}
+                <button
+                  type="button"
+                  onClick={toggleFiles}
+                  aria-label={filesDocked ? t('chat.hideFiles') : t('chat.showFiles')}
+                  title={filesDocked ? t('chat.hideFiles') : t('chat.showFiles')}
+                  aria-pressed={filesDocked}
+                  className={`shrink-0 rounded-lg p-1.5 transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                    filesDocked ? 'lg:bg-[var(--accent-50)] lg:text-[var(--accent-700)] lg:dark:bg-[var(--accent-500)]/15 lg:dark:text-[var(--accent-200)]' : 'text-slate-500 dark:text-slate-400'
+                  }`}
+                >
+                  {filesDocked ? <FolderOpen size={18} aria-hidden="true" /> : <Folder size={18} aria-hidden="true" />}
+                </button>
+              </>
+            }
           />
         </div>
       </section>
 
       {/* Workspace files, docked on wide screens; drag its left edge to resize. */}
       {filesDocked && (
-        <ResizableDock className="hidden border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:block">
+        <ResizableDock
+          side="right"
+          storageKey="eagledocs.filesPanelWidth"
+          defaultWidth={320}
+          minWidth={240}
+          maxWidth={900}
+          label={t('chat.resizeFiles')}
+          className="hidden border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:block"
+        >
           <WorkspacePanel onAttach={attachFromWorkspace} onClose={toggleFiles} refreshKey={filesVersion} />
         </ResizableDock>
       )}

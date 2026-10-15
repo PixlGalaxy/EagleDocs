@@ -1,50 +1,82 @@
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { useI18n } from '../../i18n/I18nContext';
 
-const WIDTH_KEY = 'eagledocs.filesPanelWidth';
-const DEFAULT_WIDTH = 320;
-const MIN_WIDTH = 240;
-/** The chat keeps at least this much of the window. */
+/** The chat always keeps at least this width, whatever panels are open beside it. */
+const CHAT_MIN_WIDTH = 560;
+/** A panel never takes more than this share of the row it sits in. */
 const MAX_SHARE = 0.6;
 const STEP = 24;
 
-const maxWidth = () => Math.max(MIN_WIDTH, Math.round(window.innerWidth * MAX_SHARE));
-const clamp = (width: number) => Math.min(maxWidth(), Math.max(MIN_WIDTH, Math.round(width)));
+interface Props {
+  children: ReactNode;
+  className?: string;
+  /** Where the panel sits: its resize handle is on the edge that faces the chat. */
+  side: 'left' | 'right';
+  /** Where this browser remembers its width. */
+  storageKey: string;
+  defaultWidth: number;
+  minWidth: number;
+  /** Never wider than this, even with room to spare. */
+  maxWidth: number;
+  /** For the handle (screen readers and the tooltip). */
+  label: string;
+}
 
-function savedWidth(): number {
+function saved(key: string, fallback: number): number {
   try {
-    const value = Number(localStorage.getItem(WIDTH_KEY));
-    return value > 0 ? clamp(value) : DEFAULT_WIDTH;
+    const value = Number(localStorage.getItem(key));
+    return value > 0 ? value : fallback;
   } catch {
-    return DEFAULT_WIDTH;
+    return fallback;
   }
 }
 
 /**
- * A right-side panel the student widens or narrows by dragging its left edge
- * (or with the arrow keys on the handle). Double-click resets it. The width is
- * remembered in this browser.
+ * A side panel next to the chat that the student widens or narrows by dragging
+ * the edge facing the chat (or with the arrow keys on the handle); double-click
+ * resets it. Its limits come from what is really there: the chat beside it (the
+ * row's `[data-chat-column]`) keeps at least CHAT_MIN_WIDTH even with a panel on
+ * each side, so neither the panels nor the chat get squeezed out of shape.
  */
-const ResizableDock = ({ children, className = '' }: { children: ReactNode; className?: string }) => {
-  const { t } = useI18n();
-  const [width, setWidth] = useState(savedWidth);
+const ResizableDock = ({ children, className = '', side, storageKey, defaultWidth, minWidth, maxWidth, label }: Props) => {
+  const [width, setWidth] = useState(() => Math.min(maxWidth, Math.max(minWidth, saved(storageKey, defaultWidth))));
   const [dragging, setDragging] = useState(false);
   const start = useRef<{ x: number; width: number } | null>(null);
+  const self = useRef<HTMLElement>(null);
 
-  const remember = useCallback((value: number) => {
-    try {
-      localStorage.setItem(WIDTH_KEY, String(value));
-    } catch {
-      // Private mode or blocked storage: the width just resets next time.
-    }
-  }, []);
+  /** The widest this panel may be now, if it were `current` wide: what the chat can spare, its share, its cap. */
+  const limitFor = useCallback(
+    (current: number) => {
+      const row = self.current?.parentElement;
+      if (!row) return maxWidth;
+      const chat = row.querySelector<HTMLElement>(':scope > [data-chat-column]');
+      const spare = chat ? current + chat.clientWidth - CHAT_MIN_WIDTH : Infinity;
+      return Math.max(minWidth, Math.round(Math.min(maxWidth, row.clientWidth * MAX_SHARE, spare)));
+    },
+    [maxWidth, minWidth],
+  );
+  const fit = useCallback((value: number, current: number) => Math.min(limitFor(current), Math.max(minWidth, Math.round(value))), [limitFor, minWidth]);
 
-  // A smaller window must never leave the panel wider than its share.
+  const remember = useCallback(
+    (value: number) => {
+      try {
+        localStorage.setItem(storageKey, String(value));
+      } catch {
+        // Private mode or blocked storage: the width just resets next time.
+      }
+    },
+    [storageKey],
+  );
+
+  // Less room (a smaller window, the other panel opening or growing) must never squeeze the chat below its minimum.
   useEffect(() => {
-    const onResize = () => setWidth((w) => clamp(w));
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+    const row = self.current?.parentElement;
+    if (!row) return;
+    const observer = new ResizeObserver(() => setWidth((w) => fit(w, w)));
+    observer.observe(row);
+    const chat = row.querySelector<HTMLElement>(':scope > [data-chat-column]');
+    if (chat) observer.observe(chat);
+    return () => observer.disconnect();
+  }, [fit]);
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -55,8 +87,9 @@ const ResizableDock = ({ children, className = '' }: { children: ReactNode; clas
   };
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     if (!start.current) return;
-    // Dragging left widens a panel that sits on the right.
-    setWidth(clamp(start.current.width + start.current.x - e.clientX));
+    // Dragging away from the chat widens the panel: right for a left panel, left for a right one.
+    const moved = e.clientX - start.current.x;
+    setWidth(fit(start.current.width + (side === 'left' ? moved : -moved), width));
   };
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     if (!start.current) return;
@@ -66,37 +99,39 @@ const ResizableDock = ({ children, className = '' }: { children: ReactNode; clas
     remember(width);
   };
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const delta = e.key === 'ArrowLeft' ? STEP : e.key === 'ArrowRight' ? -STEP : 0;
-    const next = e.key === 'Home' ? MIN_WIDTH : e.key === 'End' ? maxWidth() : delta ? clamp(width + delta) : null;
+    const grow = side === 'left' ? 'ArrowRight' : 'ArrowLeft';
+    const shrink = side === 'left' ? 'ArrowLeft' : 'ArrowRight';
+    const delta = e.key === grow ? STEP : e.key === shrink ? -STEP : 0;
+    const next = e.key === 'Home' ? minWidth : e.key === 'End' ? limitFor(width) : delta ? fit(width + delta, width) : null;
     if (next === null) return;
     e.preventDefault();
     setWidth(next);
     remember(next);
   };
   const reset = () => {
-    const next = clamp(DEFAULT_WIDTH);
+    const next = fit(defaultWidth, width);
     setWidth(next);
     remember(next);
   };
 
   return (
-    <aside style={{ width }} className={`relative shrink-0 ${dragging ? 'select-none' : ''} ${className}`}>
+    <aside ref={self} style={{ width }} className={`relative shrink-0 ${dragging ? 'select-none' : ''} ${className}`}>
       <div
         role="separator"
         aria-orientation="vertical"
-        aria-label={t('chat.resizeFiles')}
-        aria-valuemin={MIN_WIDTH}
-        aria-valuemax={maxWidth()}
+        aria-label={label}
+        aria-valuemin={minWidth}
+        aria-valuemax={maxWidth}
         aria-valuenow={width}
         tabIndex={0}
-        title={t('chat.resizeFiles')}
+        title={label}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onDoubleClick={reset}
         onKeyDown={onKeyDown}
-        className="group absolute inset-y-0 -left-1.5 z-10 flex w-3 cursor-col-resize justify-center outline-none"
+        className={`group absolute inset-y-0 z-10 flex w-3 cursor-col-resize justify-center outline-none ${side === 'left' ? '-right-1.5' : '-left-1.5'}`}
       >
         <span
           className={`h-full w-px transition-colors group-hover:w-0.5 group-hover:bg-[var(--accent-500)] group-focus-visible:w-0.5 group-focus-visible:bg-[var(--accent-500)] ${

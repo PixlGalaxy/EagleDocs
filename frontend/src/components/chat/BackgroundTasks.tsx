@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { CHAT_COLUMN } from './layout';
 import { Loader2, Square } from 'lucide-react';
 import { chatApi } from '../../api/chat';
 import type { BackgroundJob, SubagentProgress } from '../../api/types';
@@ -54,7 +55,7 @@ const BackgroundTasks = ({ chatId, jobs, onFinished }: { chatId: string; jobs: B
   if (jobs.length === 0) return null;
   return (
     // Capped so many helpers never squeeze the conversation on a phone.
-    <div className="scroll-thin mx-auto mb-2 max-h-[40vh] w-full max-w-3xl space-y-2 overflow-y-auto" aria-live="polite">
+    <div className={`scroll-thin mx-auto mb-2 max-h-[40vh] w-full ${CHAT_COLUMN} space-y-2 overflow-y-auto`} aria-live="polite">
       {jobs.map((job) => (
         <BackgroundJobCard key={job.id} chatId={chatId} job={job} onFinished={onFinished} />
       ))}

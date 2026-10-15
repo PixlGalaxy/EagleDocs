@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
+import { CHAT_COLUMN } from './layout';
 import { ArrowUp, CornerDownRight, Mic, Paperclip, Square } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import { AttachmentTray } from './AttachmentViews';
@@ -131,7 +132,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busy, disabled, 
         : t(steering ? 'chat.steerHint' : 'chat.disclaimer');
 
   return (
-    <form onSubmit={submit} className="mx-auto w-full max-w-3xl" {...dragHandlers}>
+    <form onSubmit={submit} className={`mx-auto w-full ${CHAT_COLUMN}`} {...dragHandlers}>
       <div
         className={`relative rounded-3xl border bg-white shadow-sm transition-[border-color,box-shadow] focus-within:border-[var(--accent-400)] focus-within:ring-2 focus-within:ring-[var(--accent-500)]/30 dark:bg-slate-900 ${
           dragging ? 'border-[var(--accent-500)] ring-2 ring-[var(--accent-500)]/30' : 'border-slate-300 dark:border-slate-700'
