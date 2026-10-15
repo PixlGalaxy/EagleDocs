@@ -29,7 +29,8 @@ Rules the loop follows:
 
 - Every tool call gets exactly one result, even when the tool does not exist, throws, times out, is rejected or is skipped because the run was cancelled.
 - **Step budget.** `limits.maxSteps` (default 20) counts model calls of this run; each subagent has its own step budget, while tokens are shared. When it is reached, or when `limits.maxTokens` is reached (when it is not 0), the engine makes one last call with the tools removed and an extra user message asking for a final summary. Whatever the model answers becomes `content`, even if it tried to call tools.
-- **Errors.** If the provider throws (and the run was not cancelled or steered), the run ends with `status: 'failed'` and `error` set. Messages produced up to that point stay in `messages`.
+- **Errors and retries.** If the provider throws a transient error (a dropped connection such as `terminated`, `ECONNRESET` or `fetch failed`, an error with `status` 5xx, or a 429 whose `code` is not `usage_limit_reached`), the step is retried after 1 s and again after 4 s; text already streamed is cleared with an `interrupted` event first. Any other error, or a third failure, ends the run with `status: 'failed'` and `error` set. Messages produced up to that point stay in `messages`.
+- **Empty replies.** If the model returns nothing at all (no text, no tool call), the engine asks once more with a short nudge that is not stored in the conversation.
 - **Models without tools.** When `model.supportsTools` is `false`, no tools are sent, the system prompt says so, and a `notice` event is emitted.
 - Subagents share the token budget with their parent. Each loop (parent and every subagent) counts its own steps.
 
@@ -49,14 +50,27 @@ The system prompt is built once per run and is byte-stable for the whole run, so
 | Section | Content |
 |---|---|
 | Base prompt | `basePrompt` from `createEngine` (replaced by a fixed helper prompt in subagents) |
+| Personality | SOUL.md from `MemoryStore.read`, when not empty. Skipped in subagents. |
 | About the user | Name, answer language, timezone and each `facts` line |
-| What you remember | Up to 20 items from `MemoryStore.forPrompt(userId, latestUserMessage, 20)`, as `[id] content`. Skipped when empty and in subagents. |
+| What you know about the user, your notes | USER.md and MEMORY.md entries as bullets, then a line with how full each file is (so the agent consolidates before the limit). Skipped in subagents. |
 | Skills | The index from `SkillStore.list`: `slug: name. description`. Only when the model can use tools and there is at least one skill. Skipped in subagents. |
 | Rules | Untrusted content is data; the steer marker is genuine; external actions wait for approval; request independent tool calls together. A different rule is used when the model has no tools. |
 | Extra instructions | The scheduled-task note for `scheduled` runs, or the depth note for subagents |
 | Date line | `Today is <full date> (<timezone>)`. Date only, no clock time, so it stays stable within a day. Use `time_now` for the time. |
 
-Memories are read once at the start. A `memory_add` during the run does not change the prompt; the fact appears in the next run.
+The files are read once at the start. A `memory_update` during the run does not change the prompt; the change shows in the next run.
+
+## Memory
+
+Memory follows Hermes Agent: three small markdown files per user, all in every conversation.
+
+| File | Target | What goes in |
+|---|---|---|
+| SOUL.md | `soul` | The agent's personality and tone. Prose; changed only with `replace`. |
+| USER.md | `user` | Who the user is: studies, schedule, goals, preferences. One fact per entry. |
+| MEMORY.md | `notes` | The agent's own notes: conventions and lessons that apply to every conversation. |
+
+Entries are separated by a line with `§`. The agent edits with `memory_update`: one call per file with a batch of operations (`add`, `patch` a span inside one entry, `remove` the entry containing a span, `replace` the whole file). The size limit (`limits.soulChars`, `userChars`, `notesChars`: 3000, 1500, 2500) is checked on the result, so the agent can drop stale entries and add in the same call. Lessons about one kind of task belong in that skill (`skills_note`), which loads only when relevant. `applyOperations` is exported for hosts that let users edit the files with the same rules.
 
 ## Events
 
@@ -64,19 +78,20 @@ The sink receives these `EngineEvent` values in order. `sink.emit` is awaited by
 
 | `type` | Emitted when | Payload |
 |---|---|---|
-| `status` | `running` at the start and after an approval is decided; `waiting_approval` while waiting; `done` when the run ends normally (also when it ends with a question); `failed` or `cancelled` when it ends otherwise. The last `status` event always matches `RunResult.status`. | `status` |
+| `status` | `running` at the start and after an approval is decided; `waiting_approval` while waiting; `waiting_mfa` when a host tool waits on a sign-in approval; `done` when the run ends normally (also when it ends with a question); `failed` or `cancelled` when it ends otherwise. The last `status` event always matches `RunResult.status`. | `status` |
 | `model` | Once at the start of a top-level run (not for subagents) | `model_ref`, `model_label` |
 | `delta` | For every text chunk from the model, and once for the `ask_user` question | `text` |
 | `tool_call` | A call starts running. For external tools it is emitted first with status `waiting_approval`, and again with `running` once approved. Unknown tools emit it and then an error result. | `call: ToolCallView` |
 | `tool_result` | A call finished (`done`, `error` or `rejected`) | `call: ToolCallView` with `result_preview` (first 300 characters) |
 | `approval_required` | An external tool is waiting for the user | `approval: { id, tool_name, summary, details }` |
 | `steer_applied` | A steer was added to the context | `id`, `content` (the user's own words) |
-| `interrupted` | A steer cut a generation short | none |
-| `subagent` | Wraps any event from a subagent | `parent_call_id`, `index`, `task` (first 200 characters of the goal), `event` |
+| `interrupted` | A steer cut a generation short, or a dropped connection is about to be retried: drop the partial text | none |
+| `subagent` | Wraps any event from a subagent | `parent_call_id`, `index`, `task` (first 200 characters of the goal), `model_label`, `event` |
 | `usage` | The provider reported token usage | `input_tokens`, `output_tokens` |
 | `notice` | The model cannot use tools but tools exist | `message` |
 | `plan` | `plan_update` ran. Each event replaces the previous plan. | `steps: { title, status }[]` with status `pending`, `in_progress`, `done` or `skipped` |
 | `notify` | `notify` ran. Hosts may turn it into a push notification. | `title`, `body`, `url?` |
+| `mfa_required` | Emitted by host tools (`ctx.emit`) that wait for the user to approve a sign-in on their phone, followed by `status: waiting_mfa` and later `running` | `service`, `message` |
 
 `ToolCallView` is `{ id, name, args, status, result_preview? }` with status `running`, `done`, `error`, `waiting_approval` or `rejected`.
 
@@ -175,12 +190,13 @@ engine.forUser(user, { limits: { maxSteps: 30, toolTimeoutMs: 120_000 } });
 | `maxSchedules` | 10 | Schedules per user, checked by `cron_create` |
 | `toolTimeoutMs` | 60,000 | Time a tool gets to run (the clock starts after any approval). On timeout the model gets `{"error":"Timed out after 60s"}`. |
 | `approvalTimeoutMs` | 86,400,000 | Wait for an approval before treating it as expired |
+| `soulChars`, `userChars`, `notesChars` | 3000, 1500, 2500 | Size of SOUL.md, USER.md and MEMORY.md, checked by `memory_update` |
 
 `DEFAULT_LIMITS` is exported.
 
 ## Subagents
 
-`agent_delegate` takes up to `maxParallelSubagents` tasks (`{ goal, context? }`) and runs each as a child loop with a fresh context, read-only tools and the fixed helper prompt. Children report back with a short text (cut to 8,000 characters). Their events reach the sink wrapped in `subagent` events. They cannot ask the user, cannot trigger approvals and cannot write memory or schedules. They can delegate further until `maxSubagentDepth`.
+`agent_delegate` takes up to `maxParallelSubagents` tasks (`{ goal, context?, model? }`) and runs each as a child loop with a fresh context, read-only tools and the fixed helper prompt. Children report back with a short text (cut to 8,000 characters). Their events reach the sink wrapped in `subagent` events. They cannot ask the user, cannot trigger approvals and cannot write memory or schedules. They can delegate further until `maxSubagentDepth`.
 
 ### Choosing a model per helper
 

@@ -250,4 +250,8 @@ The full event list is in [concepts.md](concepts.md#events).
 
 - [concepts.md](concepts.md): how a run works, steering, approvals, limits.
 - [ports.md](ports.md): implement the stores and your own provider.
-- [tools.md](tools.md): tool options, built-in tools, planned tool packs.
+- [tools.md](tools.md): tool options, built-in tools, tool packs and roadmap.
+- [recipes.md](recipes.md): a chat server with streaming, steering, approvals and stop, ready to adapt.
+- [security.md](security.md): what to check before you give the agent tools that act outside.
+- [skills.md](skills.md): teach the agent procedures without growing the prompt.
+- [reference.md](reference.md): every export.

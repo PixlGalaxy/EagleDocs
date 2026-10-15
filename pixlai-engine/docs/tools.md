@@ -121,9 +121,7 @@ Added by `createEngine` unless disabled. "Main agent only" tools are not offered
 | Tool | Purpose | Side effect | Main agent only | Parallel safe |
 |---|---|---|---|---|
 | `time_now` | Current date and time in the user's timezone or a given IANA timezone | none | no | yes |
-| `memory_add` | Save a durable fact about the user (max 500 characters) | none | yes | no |
-| `memory_search` | Search saved facts | none | no | yes |
-| `memory_remove` | Forget a saved fact by id | none | yes | no |
+| `memory_update` | Edit SOUL.md, USER.md or MEMORY.md with a batch of add / patch / remove / replace, within the size limit | none | yes | no |
 | `skills_load` | Load the full instructions of a skill | none | no | yes |
 | `skills_note` | Record a short lesson (max 300 characters) on a skill | none | yes | no |
 | `plan_update` | Show a checklist of 1 to 20 steps to the user (`plan` event); send the full list each time | none | no | no |
@@ -140,7 +138,7 @@ Notes:
 
 - `cron_*` tools only work in `chat` runs and are removed from `scheduled` runs.
 - `agent_delegate` is removed when `maxSubagentDepth` is 0.
-- A subagent gets every tool that has `sideEffect: 'none'` and is not main-agent-only: the built-ins `time_now`, `memory_search`, `skills_load`, `plan_update`, `calc` and `agent_delegate` (while depth allows), plus your own tools that qualify.
+- A subagent gets every tool that has `sideEffect: 'none'` and is not main-agent-only: the built-ins `time_now`, `skills_load`, `plan_update`, `calc` and `agent_delegate` (while depth allows), plus your own tools that qualify.
 
 The tool arrays are exported (`BUILTIN_TOOLS`, `CORE_TOOLS`, `CRON_TOOLS`), as is the `evaluate` function behind `calc`.
 
@@ -172,14 +170,14 @@ await agent.run({
 
 `agent.tools()` returns the tools a normal chat run would offer, which is useful for building a settings screen.
 
-## Planned tool packs
+## Tool packs and roadmap
 
-**Not implemented yet.** This is the roadmap; names and behaviour may change. Each pack will be optional (`tools: [webPack(), filesPack(...)]`), and packs that need infrastructure will ask the host for it through a new port instead of assuming a vendor.
+Packs turn on when the host provides their port (a `workspace` enables files, `embeddings` with it enables rag, and so on). Rows marked **Planned** are the roadmap: names and behaviour may change, and packs that need infrastructure will ask the host for it through a port instead of assuming a vendor.
 
 | Pack | Planned tools | Port the host provides | Status |
 |---|---|---|---|
 | core | `plan_update`, `ask_user`, `notify`, `time_now`, `calc` | Notifications (optional) | Available now (see above) |
-| memory v2 | `memory_add/search/update/remove` with categories and per-category limits | `MemoryStore` | Planned |
+| memory | SOUL.md, USER.md and MEMORY.md with `memory_update` (Hermes style) | `MemoryStore` | Done |
 | skills v2 | `skills_list`, `skills_load`, `skills_read_file`, `skills_note`, `skills_create`, `skills_patch` (the agent writes and improves skills) | `SkillStore` | Planned |
 | web | `web_search`, `web_fetch` (HTML to clean text), `web_download` | `SearchPort`, `FetchPort` | Available ([docs](code-web-browser.md)); `web_extract` planned |
 | files | `files_list/read/write/mkdir/move/delete/search/usage` in the user's workspace | `WorkspacePort` | Available ([docs](workspace-and-rag.md)); `files_patch` planned |

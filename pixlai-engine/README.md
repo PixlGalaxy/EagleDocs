@@ -1,10 +1,26 @@
 # PixlAI-Engine
 
 A multi-user agent engine for Node.js: a tool-calling loop with live steering,
-approvals for irreversible actions, parallel subagents, cron jobs, memory,
-skills, a per-user file workspace, RAG over documents, code execution, web search
-and a real browser. It has no runtime dependencies and knows nothing about HTTP, databases
-or any product: you plug those in through small interfaces ("ports").
+approvals for irreversible actions, parallel and background subagents, cron jobs,
+Hermes-style memory, skills, a per-user file workspace, RAG over documents, code
+execution, web search and a real browser. It has no runtime dependencies and knows
+nothing about HTTP, databases or any product: you plug those in through small
+interfaces ("ports").
+
+## Features
+
+| | |
+|---|---|
+| **One agent per user** | Isolated memory, skills, schedules and limits; no per-user state in the process, so many processes can serve the same users. |
+| **Live steering** | The user corrects the agent while it works; a correction can cut an answer short and the agent starts again with it. |
+| **Approvals** | Anything irreversible outside the user's files waits for the user, with a card that shows the real effect. |
+| **Subagents** | Parallel helpers with read-only tools, each on the model its task needs, waiting or in the background. |
+| **Memory** | SOUL.md, USER.md and MEMORY.md, in every conversation, edited by the agent within a size limit. |
+| **Skills** | An index in the prompt, full instructions on demand, and per-user lessons learned. |
+| **Schedules** | Cron, intervals and one-offs in the user's timezone; the agent creates them, the host runs them. |
+| **Files and RAG** | A per-user workspace with quotas and an expiring `TEMP/`, document extraction and RAG with citations. |
+| **Code, web, browser** | `code_run` in your sandbox, web search and safe fetching, a real browser with an approval policy. |
+| **Robust loop** | Step and token budgets, per-tool timeouts, retries of dropped model connections, context compaction at 75%. |
 
 It powers [EagleDocs](../README.md), but the folder is self-contained: copy
 `pixlai-engine/` into another project, implement the ports, and it works.
@@ -14,11 +30,16 @@ It powers [EagleDocs](../README.md), but the folder is self-contained: copy
 | Page | Read it for |
 |---|---|
 | [Getting started](docs/getting-started.md) | Install, a minimal model provider, the smallest working agent, a custom tool, handling events |
-| [Concepts](docs/concepts.md) | The run loop, system prompt, events, run kinds, steering, approvals, cancellation, limits |
+| [Concepts](docs/concepts.md) | The run loop, retries, system prompt, memory, events, run kinds, steering, approvals, cancellation, limits, subagents, schedules |
 | [Ports](docs/ports.md) | The contract of every port, in-memory references, SQL guidance for several processes, writing a `ModelProvider` |
-| [Tools](docs/tools.md) | `defineTool`, `ToolContext`, built-in tool catalog, `disableBuiltins`, `toolFilter`, planned tool packs |
+| [Tools](docs/tools.md) | `defineTool`, `ToolContext`, built-in tool catalog, `disableBuiltins`, `toolFilter`, tool packs and roadmap |
 | [Code, web and browser](docs/code-web-browser.md) | `code_run` over a `SandboxPort`, `web_search`/`web_fetch`/`web_download`, the browser pack and its approval policy, tool gates |
 | [Workspace, files and RAG](docs/workspace-and-rag.md) | The files and rag packs, `WorkspacePort`, `TextExtractor`, `EmbeddingPort`, `SharedRagSource`, storage format |
+| [Skills](docs/skills.md) | How the agent uses skills, writing good ones, serving them from your host, skills vs. memory |
+| [Security](docs/security.md) | What the engine guarantees, what your ports must enforce, a checklist for new tools |
+| [Recipes](docs/recipes.md) | A chat server with streaming, steering, approvals and stop; background delegation; schedules; per-user limits; model routing |
+| [API reference](docs/reference.md) | Every export, grouped, with links |
+| [Changelog](CHANGELOG.md) | What changed, breaking changes first |
 
 ## Quick start
 
@@ -53,7 +74,7 @@ const result = await agent.run({
 |---|---|
 | `ModelProvider` | `stream(request)` yielding `text`, `tool_call`, `usage` and `done` chunks. One per backend (Ollama, OpenAI-compatible, Anthropic...). The host picks the model per run. |
 | `RunStore` | Steers (`takeSteers`, `watchSteers`) and approvals (`createApproval`, `waitForApproval`). Back it with a shared store (e.g. Postgres + LISTEN/NOTIFY) to run on several processes. |
-| `MemoryStore` | Durable facts per user, and which ones go into the prompt. |
+| `MemoryStore` | SOUL.md, USER.md and MEMORY.md per user (personality, who the user is, the agent's notes). |
 | `SkillStore` | Skills available to a user (index + full instructions + lessons learned). |
 | `ScheduleStore` | The user's cron jobs. Running them when due is the host's job (see below). |
 | `EventSink` | Where run events go (UI stream, logs). |
@@ -88,7 +109,7 @@ const sendEmail = defineTool<{ to: string; body: string }>({
 - `timeoutMs`: overrides the default 60 s for tools that legitimately take minutes.
 - `gate(args, ctx)`: per-call decision (`run`, `approve` or `{ refuse }`) when the risk depends on the arguments or the state.
 
-Built-in tools: `time_now`, `memory_add`, `memory_search`, `memory_remove`, `skills_load`, `skills_note`,
+Built-in tools: `time_now`, `memory_update`, `skills_load`, `skills_note`,
 `plan_update`, `ask_user`, `notify`, `calc`, `cron_create`, `cron_list`, `cron_update`, `cron_delete`,
 `agent_delegate`. Turn any off with `disableBuiltins`, or narrow them per run with `toolFilter`
 (see [Tools](docs/tools.md)).
@@ -102,13 +123,21 @@ add `web_search`, `web_fetch` and `web_download`; a `browser` adds the `browser_
 
 ## How a run works
 
-1. The system prompt is built once per run (base prompt, user profile, memories, skills index, rules) and stays
-   byte-identical for the whole run, so provider prompt caches keep working.
+1. The system prompt is built once per run (base prompt, SOUL.md, user profile, USER.md and MEMORY.md, skills
+   index, rules) and stays byte-identical for the whole run, so provider prompt caches keep working.
 2. Loop: model, then tools, then model again, until it answers without tools. Every tool call gets exactly one
    result, even when it fails, times out or is skipped.
 3. When the step or token budget runs out, a last call without tools asks for a final summary.
 4. When the history nears 75% of the context window, old tool outputs are cleared first; if that is not enough,
    the middle of the conversation is summarized with the same model.
+5. A dropped connection, a 5xx or a rate limit is retried twice (1 s, 4 s); an empty reply is retried once with a nudge.
+
+### Memory
+
+Three small markdown files per user go into every conversation: SOUL.md (the agent's personality), USER.md (who
+the user is) and MEMORY.md (the agent's own notes). The agent edits them with `memory_update`, a batch of add,
+patch, remove or replace checked against a size limit, so it consolidates instead of growing forever
+(see [Memory](docs/concepts.md#memory)).
 
 ### Steering
 
@@ -128,8 +157,9 @@ host to treat as the next message.
 
 `agent_delegate` runs up to `maxParallelSubagents` helpers at once, each with a fresh context. Helpers get
 read-only tools only: no approvals, no memory writes, no schedules. They can delegate further until
-`maxSubagentDepth`. Their events reach the sink wrapped in `{ type: 'subagent', parent_call_id, index, event }`,
-and each returns a short report to the parent.
+`maxSubagentDepth`. Their events reach the sink wrapped in `{ type: 'subagent', parent_call_id, index, model_label, event }`,
+and each returns a short report to the parent. With `helperModels` the agent gives each helper the model its task
+needs; with `startBackground` it can leave long work running and answer with the reports in a later turn.
 
 ### Cron jobs
 
@@ -143,7 +173,8 @@ create schedules, and an answer of exactly `[SILENT]` means there is nothing to 
 
 ```ts
 engine.forUser(user, { limits: { maxSteps: 20, maxTokens: 0, maxSubagentDepth: 2, maxParallelSubagents: 3,
-  maxSchedules: 10, toolTimeoutMs: 60_000, approvalTimeoutMs: 86_400_000 } });
+  maxSchedules: 10, toolTimeoutMs: 60_000, approvalTimeoutMs: 86_400_000,
+  soulChars: 3000, userChars: 1500, notesChars: 2500 } });
 ```
 
 ## Development

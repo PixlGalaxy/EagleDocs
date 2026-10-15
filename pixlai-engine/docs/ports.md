@@ -5,7 +5,7 @@ The engine knows nothing about databases, HTTP or model vendors. You plug those 
 | Port | Purpose | In-memory reference |
 |---|---|---|
 | `RunStore` | Steers and approvals of a run | `InMemoryRunStore` |
-| `MemoryStore` | Durable facts per user | `InMemoryMemoryStore` |
+| `MemoryStore` | SOUL.md, USER.md and MEMORY.md per user | `InMemoryMemoryStore` |
 | `SkillStore` | Skills available to a user | `InMemorySkillStore` |
 | `ScheduleStore` | A user's scheduled tasks | `InMemoryScheduleStore` |
 | `ModelProvider` / `ResolvedModel` | The LLM backend, chosen per run | none (see the [getting started](getting-started.md#a-minimal-model-provider) provider) |
@@ -53,23 +53,19 @@ runs.decide(approvalId, 'approved');
 ## MemoryStore
 
 ```ts
+type MemoryDoc = 'soul' | 'user' | 'notes';
 interface MemoryStore {
-  add(userId: string, content: string, source: 'agent' | 'user'): Promise<MemoryItem>;
-  remove(userId: string, id: string): Promise<boolean>;
-  search(userId: string, query: string, limit: number): Promise<MemoryItem[]>;
-  forPrompt(userId: string, latestUserMessage: string, limit: number): Promise<MemoryItem[]>;
+  read(userId: string): Promise<Record<MemoryDoc, string>>;
+  write(userId: string, doc: MemoryDoc, content: string): Promise<void>;
 }
-interface MemoryItem { id: string; content: string; createdAt: string }
 ```
 
 | Method | Contract |
 |---|---|
-| `add` | Saves a fact for this user. `source` says whether the agent or the user created it. Returns the stored item. |
-| `remove` | Deletes the item only if it belongs to `userId`. Returns whether something was deleted. |
-| `search` | Items of this user relevant to `query`, at most `limit` (the tool uses 10). Substring, full-text or vector search are all fine. |
-| `forPrompt` | The most useful items for the prompt of this run, at most `limit` (the engine uses 20). Called once per run. `latestUserMessage` lets you rank by relevance. |
+| `read` | The three files of this user; empty strings for files that do not exist yet. Called once per run. |
+| `write` | Replaces one file. The engine has already applied the operations and checked the size limit. Throw to refuse (for example, the user paused memory); the message reaches the agent. |
 
-Always scope by `userId`. The in-memory version matches any query word as a substring and returns the newest items for the prompt.
+Always scope by `userId`. See [Memory](concepts.md#memory) for the format.
 
 ## SkillStore
 
@@ -177,7 +173,7 @@ interface ResolvedModel {
 }
 ```
 
-The host chooses the model for every run (routing, quotas, fallbacks). The engine never retries or switches models.
+The host chooses the model for every run (routing, quotas, fallbacks). The engine never switches models; it only retries the same call after transient failures (see below).
 
 ### Writing a ModelProvider
 
@@ -211,7 +207,7 @@ Things that can happen in a valid history:
 **Abort signal:**
 
 - Pass `request.signal` to your HTTP request, or check it between chunks. When it aborts (cancellation, or a steer that interrupts a generation), stop. Throwing an abort error or ending the stream silently are both fine: the engine checks its own state afterwards.
-- Do not swallow other errors. A thrown error ends the run with `status: 'failed'` and its message in `error` (cut to 600 characters), so keep secrets out of error messages.
+- Do not swallow other errors. Throw them with a numeric `status` (the HTTP status) and a `code` when the backend gives one: the engine retries 5xx and 429 (except `code: 'usage_limit_reached'`) and dropped connections twice, after 1 s and 4 s. Anything else ends the run with `status: 'failed'` and its message in `error` (cut to 600 characters), so keep secrets out of error messages.
 
 ## Running on several processes
 
