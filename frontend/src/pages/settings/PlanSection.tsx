@@ -45,6 +45,8 @@ const PlanSection = () => {
     { label: t('plan.jobs'), value: String(tier.max_background_jobs) },
     { label: t('plan.schedules'), value: String(tier.max_schedules) },
     { label: t('plan.helpers'), value: String(tier.max_parallel_subagents) },
+    { label: t('plan.mcpCalls'), value: `${usage_today.mcp_calls ?? 0} / ${tier.mcp_daily_calls || t('plan.unlimited')}` },
+    { label: t('plan.mcpCodeRuns'), value: `${usage_today.mcp_code_runs ?? 0} / ${tier.mcp_daily_code_runs || t('plan.unlimited')}` },
   ];
 
   return (

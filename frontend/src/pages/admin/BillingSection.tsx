@@ -26,6 +26,8 @@ const NEW_TIER: Partial<Tier> & { name: string } = {
   max_schedules: 3,
   max_parallel_subagents: 3,
   max_subagent_depth: 2,
+  mcp_daily_calls: 300,
+  mcp_daily_code_runs: 40,
   is_default: false,
   enabled: true,
 };
@@ -184,6 +186,12 @@ const BillingSection = () => {
             </Field>
             <Field label={t('admin.helperDepth')} hint={t('admin.helperDepthHint')}>
               {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} max={3} value={draft.max_subagent_depth} onChange={num('max_subagent_depth')} className={`${input} font-mono`} />}
+            </Field>
+            <Field label={t('admin.mcpCalls')} hint={t('admin.zeroUnlimited')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} value={draft.mcp_daily_calls} onChange={num('mcp_daily_calls')} className={`${input} font-mono`} />}
+            </Field>
+            <Field label={t('admin.mcpCodeRuns')} hint={t('admin.zeroUnlimited')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} value={draft.mcp_daily_code_runs} onChange={num('mcp_daily_code_runs')} className={`${input} font-mono`} />}
             </Field>
             <Field label={t('admin.sortOrder')}>
               {(id) => <input id={id} type="number" value={draft.sort ?? 0} onChange={num('sort')} className={`${input} font-mono`} />}
