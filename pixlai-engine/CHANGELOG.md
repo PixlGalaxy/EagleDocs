@@ -12,6 +12,12 @@ All notable changes to PixlAI-Engine. The engine is pre-1.0: minor versions can 
 
 ### Added
 
+- **Questions with options.** `ask_user` takes 1 to 4 `questions`, each with 2 to 4 options (`multi_select` optional); `RunResult.questions` and a `questions` event let hosts show them as choices. `content` keeps a text version. The free-text `question` still works.
+- **`show_html`** (with `EngineOptions.displays: ['html']`): the agent shows an interactive page in the conversation; pages come in `RunResult.displays` and a `display` event.
+- Tool cards are smaller: `ToolCallView.args` clips texts over 2,000 characters, and a tool's optional `view(args)` decides what its card shows.
+- `SearchChain`: one `SearchPort` over several providers (next one on a failure or no results; failed providers cool down). `SearchPort` options carry `userId`, so a provider can act per user.
+- `web_fetch` reads pages drawn by JavaScript and pages behind a bot check (403, 429, 503) in the user's browser when a `BrowserPort` is configured.
+- `RunOptions.notes` (and `SubagentRunOptions.notes`): context only the host knows, added to this run's system prompt and inherited by helpers, e.g. the folder where a conversation keeps its files.
 - `RunOptions.reasoning` (`ReasoningLevel`) reaches `ModelRequest.reasoning`, so hosts can offer a thinking selector.
 - `compactHistory` for compaction on demand: the host stores the summary and sends it before the kept messages.
 - `UserAgent.callTool(name, args)` runs one tool outside a conversation (for MCP servers and other hosts), with the same context, gates, timeout and untrusted wrapping; tools that need an approval are refused.

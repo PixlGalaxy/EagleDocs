@@ -10,8 +10,8 @@ Everything `pixlai-engine` exports, grouped by what you use it for. Types are Ty
 | `Engine` | `forUser(user, { limits?, host? })` returns a `UserAgent`. |
 | `EngineOptions` | `stores`, `basePrompt`, `tools?`, `disableBuiltins?`, `limits?`, `logger?`, `clock?`, and the optional ports (`workspace`, `extractor`, `embeddings`, `sharedRags`, `sandbox`, `search`, `fetcher`, `browser`, `browserPolicy`). |
 | `UserAgent` | `run(options)`, `runSubagents(options)`, `callTool(name, args, options?)` (one tool outside a conversation, e.g. for an MCP server: same gates, timeout and untrusted wrapping; tools that need an approval are refused), `tools()`, `user`, `limits`. |
-| `RunOptions` | `runId`, `model`, `history`, `sink`, `signal?`, `kind?` (`chat` / `scheduled`), `toolFilter?`, `startBackground?`, `helperModels?`. [Concepts](concepts.md#runs-and-the-loop) |
-| `SubagentRunOptions` | `runId`, `model`, `tasks`, `sink`, `signal?`, `toolFilter?`, `helperModels?`, for background helpers. [Concepts](concepts.md#background-delegation) |
+| `RunOptions` | `runId`, `model`, `history`, `sink`, `signal?`, `kind?` (`chat` / `scheduled`), `toolFilter?`, `reasoning?`, `notes?` (the host's notes for this run, added to the system prompt and inherited by helpers), `startBackground?`, `helperModels?`. [Concepts](concepts.md#runs-and-the-loop) |
+| `SubagentRunOptions` | `runId`, `model`, `tasks`, `sink`, `signal?`, `toolFilter?`, `helperModels?`, `notes?`, for background helpers. [Concepts](concepts.md#background-delegation) |
 | `RunResult` | `status`, `content`, `messages`, `toolCalls`, `usage`, `error?`, `awaitingUser?`. [Concepts](concepts.md#runresult) |
 | `Limits`, `DEFAULT_LIMITS` | Step, token, delegation, schedule, timeout and memory-size limits. [Concepts](concepts.md#limits) |
 | `UserProfile` | `id`, `name`, `language`, `timezone`, `facts?`. |
@@ -89,6 +89,7 @@ Everything `pixlai-engine` exports, grouped by what you use it for. Types are Ty
 | `WorkspacePort`, `FileEntry`, `StorageArea`, `TextExtractor`, `EmbeddingPort`, `SharedRagSource`, `SharedRagInfo` | Files, document text, embeddings and shared RAGs. [Workspace and RAG](workspace-and-rag.md) |
 | `SandboxPort`, `ExecRequest`, `ExecResult`, `CodeLanguage` | Code execution. |
 | `SearchPort`, `SearchHit`, `FetchPort`, `FetchedPage` | Web search and fetching. |
+| `SearchChain`, `SearchProvider`, `SearchChainOptions` | A `SearchPort` over several providers: next one on failure or no results, failed ones cool down. [Docs](code-web-browser.md#several-search-providers-searchchain) |
 | `BrowserPort`, `BrowserPage`, `BrowserAction`, `BrowserPolicy` | A real browser and where it may act. |
 | `Logger`, `Clock` | Optional logging and time source. |
 

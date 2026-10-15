@@ -23,6 +23,7 @@ import { helperModel, runLoop, runToolOnce, subagentTools } from './agent/loop.j
 import { CRON_TOOLS, SCHEDULED_RUN_NOTE } from './cron/tools.js';
 import { BUILTIN_TOOLS } from './tools/builtin.js';
 import { CORE_TOOLS } from './tools/core.js';
+import { DISPLAY_TOOLS } from './tools/display.js';
 import { FILES_TOOLS } from './tools/files.js';
 import { RAG_TOOLS } from './rag/tools.js';
 import { ToolRegistry, type RunKind, type Tool } from './tools/tool.js';
@@ -40,6 +41,11 @@ import {
 } from './types.js';
 
 export interface EngineOptions {
+  /**
+   * What the host can show in the conversation besides text. `'html'` enables show_html: the host must render
+   * `RunResult.displays` isolated from the app (a sandboxed frame without network).
+   */
+  displays?: 'html'[];
   stores: { runs: RunStore; memory: MemoryStore; skills: SkillStore; schedules: ScheduleStore };
   /** The users' files. Enables the files pack (and, with `embeddings`, the rag pack). */
   workspace?: WorkspacePort;
@@ -88,6 +94,11 @@ export interface RunOptions {
   /** How hard the model thinks (reasoning models). Helpers get the same level. */
   reasoning?: ReasoningLevel;
   /**
+   * The host's notes for this run, added to the system prompt and inherited by
+   * helpers: context only the host knows (e.g. "save this chat's files in Chats/Essay").
+   */
+  notes?: string;
+  /**
    * Lets agent_delegate run helpers in the background: the host stores the tasks,
    * runs them later with `runSubagents`, and hands the reports back in a new turn
    * (see `backgroundReportMessage`). Without it, delegation always waits.
@@ -110,6 +121,8 @@ export interface SubagentRunOptions {
   toolFilter?: (tool: Tool) => boolean;
   /** Resolves each task's `model`; tasks without one use `model`. */
   helperModels?: HelperModels;
+  /** Same as RunOptions.notes. */
+  notes?: string;
 }
 
 /** One user's agent: isolated memory, skills, schedules and limits. Cheap to create per request. */
@@ -157,6 +170,7 @@ export function createEngine(options: EngineOptions): Engine {
     ...(options.fetcher ? [webFetch] : []),
     ...(options.fetcher && options.workspace ? [webDownload] : []),
     ...(options.browser ? BROWSER_TOOLS : []),
+    ...(options.displays?.includes('html') ? DISPLAY_TOOLS : []),
   ];
   const builtins = packs.filter((t) => !disabled.has(t.name));
   const registry = new ToolRegistry([...builtins, ...(options.tools ?? [])]);
@@ -212,6 +226,7 @@ export function createEngine(options: EngineOptions): Engine {
             startBackground: run.startBackground,
             helperModels: run.helperModels,
             reasoning: run.reasoning,
+            notes: run.notes,
           });
         },
         callTool(name, args, opts = {}) {
@@ -258,6 +273,7 @@ export function createEngine(options: EngineOptions): Engine {
                 },
                 signal,
                 extraInstructions: 'You are a helper at depth 1, working in the background.',
+                notes: run.notes,
                 budget,
               });
               return toReport(goal, {

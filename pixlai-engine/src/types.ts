@@ -157,7 +157,38 @@ export type EngineEvent =
    * A tool is waiting for the user to approve a sign-in on their phone (Duo push, Microsoft Authenticator...).
    * Emitted by host tools with ctx.emit, followed by status `waiting_mfa` and, once it moves on, `running`.
    */
-  | { type: 'mfa_required'; service: string; message: string };
+  | { type: 'mfa_required'; service: string; message: string }
+  /** The agent asked the user questions with options (ask_user); the run ends and the answers come as the next message. */
+  | { type: 'questions'; questions: UserQuestion[] }
+  /** The agent showed something in the conversation (show_html). The content is in RunResult.displays. */
+  | { type: 'display'; kind: Display['kind']; title: string };
+
+/** One option of a question to the user (ask_user). */
+export interface UserQuestionOption {
+  label: string;
+  description?: string;
+}
+
+/** A question the agent asks with choices; the user can always answer in their own words too. */
+export interface UserQuestion {
+  question: string;
+  /** A short tag for the question (a few words), e.g. "Format". */
+  header?: string;
+  options: UserQuestionOption[];
+  /** The user may pick several options. */
+  multiSelect?: boolean;
+}
+
+/**
+ * Something the agent shows in the conversation besides its text (show_html):
+ * the host renders it, isolated from the app.
+ */
+export interface Display {
+  kind: 'html';
+  title: string;
+  /** A complete HTML document (inline CSS and JS). */
+  content: string;
+}
 
 export interface PlanStep {
   title: string;
@@ -220,6 +251,10 @@ export interface RunResult {
   toolCalls: ToolCallView[];
   usage: { inputTokens: number; outputTokens: number; steps: number };
   error?: string;
-  /** Set when the run ended by asking the user something (ask_user): `content` is the question. */
+  /** Set when the run ended by asking the user something (ask_user): `content` is the question as text. */
   awaitingUser?: boolean;
+  /** The questions with options, when ask_user gave them: hosts can show them as choices. */
+  questions?: UserQuestion[];
+  /** What the agent showed besides text (show_html), in order. */
+  displays?: Display[];
 }

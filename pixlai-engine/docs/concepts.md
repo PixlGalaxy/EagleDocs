@@ -90,6 +90,8 @@ The sink receives these `EngineEvent` values in order. `sink.emit` is awaited by
 | `usage` | The provider reported token usage | `input_tokens`, `output_tokens` |
 | `context` | Before each model call of a top-level run | `used` (estimated prompt tokens, about 1,000 per image), `window` (`model.contextWindow`). Compaction starts at 75%. |
 | `notice` | The model cannot use tools but tools exist | `message` |
+| `questions` | `ask_user` was called with options, just before the run ends | `questions: UserQuestion[]` (`question`, `header?`, `options: { label, description? }[]`, `multiSelect?`) |
+| `display` | `show_html` showed a page (the HTML itself is in `RunResult.displays`) | `kind: 'html'`, `title` |
 | `plan` | `plan_update` ran. Each event replaces the previous plan. | `steps: { title, status }[]` with status `pending`, `in_progress`, `done` or `skipped` |
 | `notify` | `notify` ran. Hosts may turn it into a push notification. | `title`, `body`, `url?` |
 | `mfa_required` | Emitted by host tools (`ctx.emit`) that wait for the user to approve a sign-in on their phone, followed by `status: waiting_mfa` and later `running` | `service`, `message` |
@@ -103,6 +105,8 @@ A user message can carry `images: { mediaType, data, name? }[]` (base64, no `dat
 ## Run kinds
 
 `RunOptions.kind` is `'chat'` (default) or `'scheduled'`. `'subagent'` is created internally.
+
+`RunOptions.notes` adds the host's own context to this run's system prompt, for things only the host knows: which conversation this is, where it keeps its files, a ticket's customer. Helpers the run starts get the same notes.
 
 | | `chat` | `scheduled` | `subagent` |
 |---|---|---|---|
@@ -126,6 +130,8 @@ The host decides what to do with `[SILENT]`: the engine returns it as normal `co
 | `usage` | `inputTokens` and `outputTokens` including subagents; `steps` counts this run's own model calls |
 | `error` | Message when `failed` (cut to 600 characters) |
 | `awaitingUser` | `true` when the agent called `ask_user`. The run ended after the current tool batch; the user's reply starts a new run. |
+| `questions` | The questions with options when `ask_user` gave them. Show them as choices and send the answers as the user's next message; `content` has the same questions as text for clients that cannot. |
+| `displays` | `{ kind: 'html', title, content }[]` from `show_html`, in order (max 3 per run). Render them isolated from your app: a sandboxed frame with scripts but no same-origin and no network. |
 
 When you store `messages` and send them back as `history`, keep the `steer` flag: the engine re-applies the out-of-band marker for messages that have it.
 

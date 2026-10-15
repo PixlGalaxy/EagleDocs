@@ -51,7 +51,8 @@ interface ExecResult { exitCode: number | null; stdout: string; stderr: string; 
 
 ```ts
 interface SearchPort {
-  search(query: string, options: { limit: number; language?: string; signal: AbortSignal }): Promise<SearchHit[]>;
+  // userId: who searches, for providers that act per user (e.g. their own browser)
+  search(query: string, options: { limit: number; language?: string; signal: AbortSignal; userId?: string }): Promise<SearchHit[]>;
 }
 interface FetchPort {
   fetch(url: string, options: { maxBytes: number; signal: AbortSignal }): Promise<FetchedPage>;
@@ -64,11 +65,33 @@ interface FetchedPage { url: string; status: number; contentType: string; body: 
   table rows and links as Markdown, drops scripts, styles, navigation, footers, forms and elements with `hidden` or
   `aria-hidden="true"`, and prefers the page's `<main>`/`<article>`. Documents (PDF, DOCX...) go through your
   `TextExtractor`, with a `page` argument. Long content comes in parts of 15,000 characters with `next_offset`. Up to
-  10 MB. Results are untrusted content.
+  10 MB. Results are untrusted content. When a `BrowserPort` is configured, `web_fetch` reads two kinds of page in
+  the real browser instead (profile `reader`, closed afterwards) and says `read_with: "browser"`: HTML with under 300
+  characters of text (drawn by JavaScript) and answers 403, 429 or 503 (bot checks).
 - `web_download`: saves the file into the workspace (default `TEMP/web/`), up to 100 MB, for `files_read`, `rag_add` or
   `code_run`.
 - **Your `FetchPort` is the security boundary.** Refuse private and loopback addresses (also after DNS resolution and
   on every redirect), cap the size, and set a timeout. The tools only accept `http:` and `https:` URLs.
+
+### Several search providers: `SearchChain`
+
+One search service gets blocked or rate limited sooner or later. `SearchChain` is a `SearchPort` that tries
+providers in order and returns the first results:
+
+```ts
+const search = new SearchChain([
+  { name: 'searxng', search: searx.search.bind(searx) },
+  { name: 'duckduckgo', search: ddg.search.bind(ddg) },
+  // Only when a key is set; read on every search, so a change applies at once.
+  { name: 'paid', enabled: () => Boolean(settings.apiKey), search: (q, o) => paidApi.search(q, o) },
+], { cooldownMs: 5 * 60_000, logger });
+```
+
+- A provider that throws is skipped for `cooldownMs` (it is tried last, not dropped, so a lone survivor still runs).
+- One that finds nothing passes the query on without a penalty; if nobody finds anything, the answer is no results.
+- It throws only when every enabled provider failed. `lastProvider` tells which one answered.
+
+Put the cheap providers first: a paid API or a browser only runs when the free ones cannot answer.
 
 ## BrowserPort, the browser pack and its policy
 

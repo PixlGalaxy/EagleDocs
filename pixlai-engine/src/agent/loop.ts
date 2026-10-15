@@ -22,6 +22,8 @@ import type {
   EngineEvent,
   EventSink,
   HelperModels,
+  Display,
+  UserQuestion,
   ReasoningLevel,
   Limits,
   ResolvedModel,
@@ -99,6 +101,8 @@ export interface LoopInput {
   sink: EventSink;
   signal: AbortSignal;
   extraInstructions?: string;
+  /** The host's notes for this run (e.g. where this chat keeps its files); helpers inherit them. */
+  notes?: string;
   budget?: Budget;
   startBackground?: (tasks: { goal: string; context?: string; model?: string }[]) => Promise<void>;
   /** Models the agent may give its helpers. */
@@ -257,6 +261,25 @@ function planBatches(calls: ToolCallRequest[], tools: ToolRegistry): ToolCallReq
  * (before each model call, after each tool batch) and cut a generation short
  * when they arrive mid-answer. Every tool call gets exactly one result.
  */
+/** Longest text argument a tool card keeps (a file's content, a page's HTML): the model's history keeps it all. */
+const VIEW_ARG_CHARS = 2000;
+
+/** Arguments as tool cards show them: long texts clipped, so events and saved answers stay small. */
+export function viewArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const clip = (v: unknown): unknown =>
+    typeof v === 'string' && v.length > VIEW_ARG_CHARS
+      ? `${v.slice(0, VIEW_ARG_CHARS)}… (${v.length - VIEW_ARG_CHARS} more characters)`
+      : Array.isArray(v)
+        ? v.map(clip)
+        : v && typeof v === 'object'
+          ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, clip(x)]))
+          : v;
+  return clip(args) as Record<string, unknown>;
+}
+
+/** Pages show_html may put in one answer. */
+const MAX_DISPLAYS = 3;
+
 export async function runLoop(input: LoopInput): Promise<RunResult> {
   const { services, user, limits, tools, model, sink, signal, runId, depth } = input;
   const budget = input.budget ?? { inputTokens: 0, outputTokens: 0 };
@@ -270,6 +293,9 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
   let finalText = '';
   /** Set by ask_user: the run ends after this batch with the question as the answer. */
   let question: string | null = null;
+  let questions: UserQuestion[] | undefined;
+  /** What show_html put in the conversation, in order. */
+  const displays: Display[] = [];
 
   /** Ends a run that did not finish normally, telling the sink first. */
   const finish = async (status: 'failed' | 'cancelled', error?: string): Promise<RunResult> => {
@@ -284,6 +310,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     toolCalls: toolViews,
     usage: { inputTokens: budget.inputTokens, outputTokens: budget.outputTokens, steps },
     ...(error && { error }),
+    ...(displays.length && { displays }),
   });
 
   try {
@@ -309,6 +336,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
           workspaceNote && `## Workspace\n${workspaceNote}`,
           sandboxNote && `## Code sandbox\n${sandboxNote}`,
           canUseTools && tools.get('agent_delegate') && input.helperModels?.list.length && helperModelsNote(input.helperModels.list),
+          input.notes,
           input.extraInstructions,
         ]
           .filter(Boolean)
@@ -453,8 +481,9 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         finalText = asked;
         await emit({ type: 'delta', text: asked });
         push({ role: 'assistant', content: asked });
+        if (questions) await emit({ type: 'questions', questions });
         await emit({ type: 'status', status: 'done' });
-        return { ...result('done'), awaitingUser: true };
+        return { ...result('done'), awaitingUser: true, ...(questions && { questions }) };
       }
     }
   } catch (err) {
@@ -465,7 +494,8 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
 
   /** Runs one call (with approval when needed) and returns its tool message. */
   async function executeCall(call: ToolCallRequest): Promise<ChatMessage> {
-    const view: ToolCallView = { id: call.id, name: call.name, args: call.args, status: 'running' };
+    const shown = tools.get(call.name)?.view?.(call.args) ?? call.args;
+    const view: ToolCallView = { id: call.id, name: call.name, args: viewArgs(shown), status: 'running' };
     toolViews.push(view);
     const finish = async (status: ToolCallView['status'], content: string): Promise<ChatMessage> => {
       view.status = status;
@@ -553,8 +583,14 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       callId: call.id,
       runKind: input.kind,
       ...(depth === 0 && {
-        askUser: (q: string) => {
+        askUser: (q: string, structured?: UserQuestion[]) => {
           question = q;
+          questions = structured;
+        },
+        display: (item: Display) => {
+          if (displays.length >= MAX_DISPLAYS) throw new Error(`At most ${MAX_DISPLAYS} pages per answer`);
+          displays.push(item);
+          void emit({ type: 'display', kind: item.kind, title: item.title });
         },
       }),
       ...(depth < limits.maxSubagentDepth && {

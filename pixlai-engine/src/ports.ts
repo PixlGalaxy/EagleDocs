@@ -205,7 +205,8 @@ export interface SearchHit {
 
 /** Web search. Any backend: a metasearch engine (SearXNG), an API (Brave, Google CSE), a scraper. */
 export interface SearchPort {
-  search(query: string, options: { limit: number; language?: string; signal: AbortSignal }): Promise<SearchHit[]>;
+  /** `userId`: who is searching, for providers that act per user (e.g. their own browser). */
+  search(query: string, options: { limit: number; language?: string; signal: AbortSignal; userId?: string }): Promise<SearchHit[]>;
 }
 
 export interface FetchedPage {

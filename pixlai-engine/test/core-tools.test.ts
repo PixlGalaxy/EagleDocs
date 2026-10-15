@@ -103,3 +103,55 @@ test('a tool can set its own timeout instead of the default', async () => {
   assert.match(provider.requests[1]!.messages.at(-1)!.content, /Timed out after 0s/);
   assert.equal(provider.requests[2]!.messages.at(-1)!.content, 'ok');
 });
+
+test('ask_user with options: the questions come back structured, and as text for the conversation', async () => {
+  const { agent, events, sink } = setup();
+  const questions = [
+    { question: 'Which format do you want?', header: 'Format', options: [{ label: 'Flashcards (Recommended)', description: 'Quick review' }, { label: 'Practice quiz' }] },
+    { question: 'Which chapters?', header: 'Chapters', multi_select: true, options: [{ label: 'Ch 4' }, { label: 'Ch 5' }, { label: 'Ch 6' }] },
+  ];
+  const provider = new ScriptedProvider([() => toolCall('ask_user', { questions }), () => text('never reached')]);
+  const result = await agent.run({ runId: 'r1', model: model(provider), history: [user('help me study')], sink });
+  assert.equal(result.awaitingUser, true);
+  assert.equal(result.questions?.length, 2);
+  assert.deepEqual(result.questions?.[1], { question: 'Which chapters?', header: 'Chapters', multiSelect: true, options: [{ label: 'Ch 4' }, { label: 'Ch 5' }, { label: 'Ch 6' }] });
+  assert.match(result.content, /\*\*Format:\*\* Which format do you want\?[\s\S]*- Flashcards \(Recommended\): Quick review[\s\S]*\(pick any\)/);
+  assert.ok(events.some((e) => e.type === 'questions' && e.questions.length === 2));
+  assert.equal(provider.requests.length, 1);
+});
+
+test('ask_user refuses questions the user could not answer well, so the model fixes them', async () => {
+  const { agent, sink } = setup();
+  const provider = new ScriptedProvider([
+    () => toolCall('ask_user', { questions: [{ question: 'Pick one?', options: [{ label: 'Only one' }] }] }, 'a'),
+    () => toolCall('ask_user', { questions: Array.from({ length: 5 }, () => ({ question: 'q?', options: [{ label: 'a' }, { label: 'b' }] })) }, 'b'),
+    () => text('ok'),
+  ]);
+  await agent.run({ runId: 'r1', model: model(provider), history: [user('x')], sink });
+  assert.match(provider.requests[1]!.messages.at(-1)!.content, /needs 2 to 4 options/);
+  assert.match(provider.requests[2]!.messages.at(-1)!.content, /at most 4 questions/);
+});
+
+test('show_html puts pages in the result (max 3), only when the host can show them', async () => {
+  const { agent, events, sink } = setup({ displays: ['html'] });
+  const page = '<!doctype html><html><body><canvas id="c"></canvas><script>1+1</script></body></html>';
+  const provider = new ScriptedProvider([
+    () => [
+      ...toolCall('show_html', { title: 'Projectile motion', html: page }, 'a'),
+      ...toolCall('show_html', { title: 'Not html', html: 'just text' }, 'b'),
+      ...toolCall('show_html', { title: 'Too big', html: `<p>${'x'.repeat(200_001)}</p>` }, 'c'),
+    ],
+    () => [...toolCall('show_html', { title: 'Two', html: page }, 'd'), ...toolCall('show_html', { title: 'Three', html: page }, 'e'), ...toolCall('show_html', { title: 'Four', html: page }, 'f')],
+    () => text('Here it is.'),
+  ]);
+  const result = await agent.run({ runId: 'r1', model: model(provider), history: [user('show me')], sink });
+  assert.deepEqual(result.displays?.map((d) => d.title), ['Projectile motion', 'Two', 'Three']);
+  assert.equal(result.displays?.[0]?.content, page);
+  assert.ok(!JSON.stringify(result.toolCalls).includes('<canvas'), 'tool cards show the title, not the page');
+  const r = provider.requests[1]!.messages.filter((m) => m.role === 'tool').map((m) => m.content);
+  assert.match(r[1]!, /must be an HTML document/);
+  assert.match(r[2]!, /too big/);
+  assert.match(provider.requests[2]!.messages.at(-1)!.content, /At most 3 pages/);
+  assert.ok(events.some((e) => e.type === 'display' && e.title === 'Projectile motion'));
+  assert.ok(!setup().agent.tools().some((t) => t.name === 'show_html'), 'off unless the host shows pages');
+});

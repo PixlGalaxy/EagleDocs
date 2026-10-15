@@ -1,4 +1,4 @@
-import type { FetchPort, FetchedPage, SearchPort } from '../ports.js';
+import type { BrowserPort, FetchPort, FetchedPage, SearchPort } from '../ports.js';
 import { asText, cleanPath, RAG_DIR, workspaceOf } from '../tools/files.js';
 import { defineTool, type Tool, type ToolContext } from '../tools/tool.js';
 import { htmlToText } from './html.js';
@@ -50,6 +50,28 @@ async function pageText(ctx: ToolContext, page: FetchedPage): Promise<{ title: s
   return text === null ? null : { title: '', pages: [text] };
 }
 
+/** Below this much text an HTML page is most likely drawn by JavaScript. */
+const THIN_PAGE_CHARS = 300;
+/** The browser profile web_fetch reads with: apart from the agent's own browsing and logins. */
+const READER_PROFILE = 'reader';
+
+/**
+ * A page the plain download could not read (drawn by JavaScript, or a bot check
+ * answering 403/429/503), read in the user's real browser instead. Null when
+ * there is no browser or it fails too.
+ */
+async function renderInBrowser(browser: BrowserPort | undefined, ctx: ToolContext, url: string): Promise<{ url: string; title: string; text: string } | null> {
+  if (!browser) return null;
+  try {
+    const view = await browser.open(ctx.user.id, READER_PROFILE, url, ctx.signal);
+    return { url: view.url, title: view.title, text: view.snapshot };
+  } catch {
+    return null;
+  } finally {
+    await browser.close(ctx.user.id, READER_PROFILE).catch(() => undefined);
+  }
+}
+
 export const webSearch = defineTool<{ query: string; limit?: number }>({
   name: 'web_search',
   description:
@@ -70,7 +92,7 @@ export const webSearch = defineTool<{ query: string; limit?: number }>({
     const query = String(args.query ?? '').trim().slice(0, 400);
     if (!query) throw new Error('query is empty');
     const limit = Math.min(MAX_RESULTS, Math.max(1, Number(args.limit) || 6));
-    const hits = await searchOf(ctx).search(query, { limit, language: ctx.user.language, signal: ctx.signal });
+    const hits = await searchOf(ctx).search(query, { limit, language: ctx.user.language, signal: ctx.signal, userId: ctx.user.id });
     if (hits.length === 0) return { query, results: [], note: 'No results. Try other words, or fewer of them.' };
     return {
       query,
@@ -83,8 +105,9 @@ export const webFetch = defineTool<{ url: string; offset?: number; page?: number
   name: 'web_fetch',
   description:
     'Open a web page or online document (PDF, DOCX...) and read it as text, without a browser: articles, docs, syllabi, ' +
-    `search results. Long content comes in parts of ${PAGE_CHARS} characters: pass next_offset to continue. For pages that ` +
-    'need a login or JavaScript, use the browser tools instead. To keep a file, use web_download.',
+    `search results. Long content comes in parts of ${PAGE_CHARS} characters: pass next_offset to continue. Pages drawn by ` +
+    'JavaScript or behind a bot check are read in a real browser automatically. For pages that need a login, use the ' +
+    'browser tools. To keep a file, use web_download.',
   parameters: {
     type: 'object',
     properties: {
@@ -99,9 +122,22 @@ export const webFetch = defineTool<{ url: string; offset?: number; page?: number
   parallelSafe: true,
   timeoutMs: 90_000,
   async run(args, ctx) {
-    const page = await fetcherOf(ctx).fetch(httpUrl(args.url), { maxBytes: MAX_FETCH_BYTES, signal: ctx.signal });
-    if (page.status >= 400) return { url: page.url, status: page.status, error: `The site answered ${page.status}` };
-    const doc = await pageText(ctx, page);
+    const url = httpUrl(args.url);
+    const page = await fetcherOf(ctx).fetch(url, { maxBytes: MAX_FETCH_BYTES, signal: ctx.signal });
+    // Bot checks answer these to plain downloads; a real browser usually gets through.
+    const blocked = [403, 429, 503].includes(page.status);
+    if (page.status >= 400 && !blocked) return { url: page.url, status: page.status, error: `The site answered ${page.status}` };
+    let doc = blocked ? null : await pageText(ctx, page);
+    const chars = (d: typeof doc) => d?.pages.join('').trim().length ?? 0;
+    let rendered = false;
+    if (blocked || (/html/i.test(page.contentType) && chars(doc) < THIN_PAGE_CHARS)) {
+      const view = await renderInBrowser(ctx.browser, ctx, url);
+      if (view && view.text.trim().length > chars(doc)) {
+        doc = { title: view.title, pages: [view.text] };
+        rendered = true;
+      }
+    }
+    if (blocked && !rendered) return { url: page.url, status: page.status, error: `The site answered ${page.status}` };
     if (!doc) return { url: page.url, content_type: page.contentType, error: 'This is not a page or document that can be read as text' };
     const pageNo = Number(args.page) || 0;
     if (pageNo && (pageNo < 1 || pageNo > doc.pages.length)) throw new Error(`page must be between 1 and ${doc.pages.length}`);
@@ -112,10 +148,11 @@ export const webFetch = defineTool<{ url: string; offset?: number; page?: number
     return {
       url: page.url,
       ...(doc.title && { title: doc.title }),
+      ...(rendered && { read_with: 'browser' }),
       ...(doc.pages.length > 1 && { pages: doc.pages.length }),
       total_chars: text.length,
       ...(next !== null && { next_offset: next }),
-      content: part || '(no text found on this page; it may need JavaScript: try the browser tools)',
+      content: part || '(no text found on this page)',
     };
   },
 });

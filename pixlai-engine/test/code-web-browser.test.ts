@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   htmlToText,
+  SearchChain,
   InMemoryWorkspace,
   type BrowserAction,
   type BrowserPage,
@@ -245,4 +246,69 @@ test('browser: without a policy every action asks', async () => {
   await run;
   assert.match(lastTool(p), /rejected it/);
   assert.equal(browser.actions.length, 0);
+});
+
+// ------------------------------------------------------------------ search chain and reading pages in the browser
+
+test('SearchChain: next provider on failure or no results, skips a failed one for a while, throws only when all fail', async () => {
+  let now = 0;
+  const calls: string[] = [];
+  const hit = (name: string) => [{ title: name, url: `https://${name}.example/`, snippet: '' }];
+  let blocked = true;
+  let paidOn = false;
+  const chain = new SearchChain(
+    [
+      { name: 'free', search: async () => (calls.push('free'), blocked ? Promise.reject(new Error('anti-bot page')) : hit('free')) },
+      { name: 'empty', search: async () => (calls.push('empty'), []) },
+      { name: 'paid', enabled: () => paidOn, search: async () => (calls.push('paid'), hit('paid')) },
+      { name: 'browser', search: async () => (calls.push('browser'), hit('browser')) },
+    ],
+    { cooldownMs: 60_000, now: () => now },
+  );
+  const opts = { limit: 5, signal: new AbortController().signal };
+  assert.equal((await chain.search('q', opts))[0]!.title, 'browser', 'a paid provider without a key is skipped');
+  assert.deepEqual(calls, ['free', 'empty', 'browser']);
+  paidOn = true;
+  calls.length = 0;
+  assert.equal((await chain.search('q', opts))[0]!.title, 'paid');
+  assert.deepEqual(calls, ['empty', 'paid'], 'the provider that failed is not tried first while it cools down');
+  now = 61_000;
+  blocked = false;
+  calls.length = 0;
+  assert.equal((await chain.search('q', opts))[0]!.title, 'free', 'after the cooldown it is first again');
+  const dead = new SearchChain([{ name: 'a', search: async () => Promise.reject(new Error('down')) }]);
+  await assert.rejects(dead.search('q', opts), /not available right now \(a: down\)/);
+  const nothing = new SearchChain([{ name: 'a', search: async () => [] }]);
+  assert.deepEqual(await nothing.search('q', opts), [], 'an answer with no results is an answer');
+});
+
+test('web_fetch reads pages drawn by JavaScript and pages behind a bot check in the browser', async () => {
+  class AppFetch implements FetchPort {
+    async fetch(url: string) {
+      if (url.includes('blocked')) return { url, status: 403, contentType: 'text/html', body: Buffer.from('Just a moment...') };
+      if (url.includes('gone')) return { url, status: 404, contentType: 'text/html', body: Buffer.from('nope') };
+      return { url, status: 200, contentType: 'text/html', body: Buffer.from('<html><body><div id="root"></div><script src="/app.js"></script></body></html>') };
+    }
+  }
+  const browser = new FakeBrowser();
+  browser.page = (url: string) => ({ url, title: 'Rendered', snapshot: `heading "Course schedule"\n${'Week 1 Intro to accounting. '.repeat(30)}` });
+  const { agent, sink } = setup({ fetcher: new AppFetch(), browser });
+  const p = new ScriptedProvider([
+    () => [
+      ...toolCall('web_fetch', { url: 'https://spa.example/schedule' }, 'a'),
+      ...toolCall('web_fetch', { url: 'https://blocked.example/' }, 'b'),
+      ...toolCall('web_fetch', { url: 'https://gone.example/' }, 'c'),
+    ],
+    () => text('ok'),
+  ]);
+  await agent.run({ runId: 'r1', model: model(p), history: [user('read it')], sink });
+  const r = p.requests[1]!.messages.filter((m) => m.role === 'tool').map((m) => m.content);
+  assert.match(r[0]!, /"read_with": "browser"[\s\S]*Course schedule/);
+  assert.match(r[1]!, /"read_with": "browser"/);
+  assert.match(r[2]!, /"status": 404/, 'a page that does not exist is not opened in the browser');
+  assert.equal(browser.pages.size, 0, 'the reader profile is closed afterwards');
+  const plain = setup({ fetcher: new AppFetch() });
+  const q = new ScriptedProvider([() => toolCall('web_fetch', { url: 'https://blocked.example/' }), () => text('ok')]);
+  await plain.agent.run({ runId: 'r2', model: model(q), history: [user('read it')], sink: plain.sink });
+  assert.match(q.requests[1]!.messages.at(-1)!.content, /"status": 403/, 'without a browser the block is reported');
 });

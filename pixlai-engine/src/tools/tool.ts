@@ -14,7 +14,7 @@ import type {
   TextExtractor,
   WorkspacePort,
 } from '../ports.js';
-import type { EngineEvent, JsonSchema, Limits, UserProfile } from '../types.js';
+import type { EngineEvent, JsonSchema, Limits, UserProfile, Display, UserQuestion } from '../types.js';
 
 /** What a tool sees while it runs. */
 export interface ToolContext {
@@ -63,7 +63,9 @@ export interface ToolContext {
    * Ends the run after the current tool batch with `question` as the answer,
    * so the user can reply (ask_user). Not available to subagents.
    */
-  askUser?: (question: string) => void;
+  askUser?: (question: string, questions?: UserQuestion[]) => void;
+  /** Shows something in the conversation (show_html). Not available to subagents. */
+  display?: (item: Display) => void;
   /** Starts a subagent (only set when delegation is allowed at this depth). */
   /** `model`: a ref or tag from the host's helper models; the parent's model when absent or unknown. */
   spawnSubagent?: (goal: string, index: number, model?: string) => Promise<SubagentOutcome>;
@@ -127,6 +129,11 @@ export interface Tool<Args extends Record<string, unknown> = Record<string, unkn
    * Falls back to the tool name if it throws.
    */
   describe?(args: Args, ctx: GateContext): ApprovalText | Promise<ApprovalText>;
+  /**
+   * The arguments as tool cards (events, saved answers) show them. Default: all of them, long texts clipped.
+   * Leave out what is shown another way or too big to send around (show_html's page).
+   */
+  view?(args: Args): Record<string, unknown>;
   run(args: Args, ctx: ToolContext): Promise<unknown>;
 }
 
