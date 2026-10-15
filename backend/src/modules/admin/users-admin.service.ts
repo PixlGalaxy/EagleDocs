@@ -72,6 +72,12 @@ export class UsersAdminService {
     return toPublicUser(row);
   }
 
+  private async tierOrNull(value: unknown): Promise<string | null> {
+    const id = uuidOrNull(value);
+    if (id && !(await this.db.query('SELECT 1 FROM tiers WHERE id = $1', [id])).rowCount) throw badRequest('error.invalidInput');
+    return id;
+  }
+
   /** Admin-created accounts skip verification. The institution comes from the email domain when there is a match. */
   async create(body: Record<string, unknown>) {
     const email = normalizeEmail(body.email);
@@ -79,7 +85,7 @@ export class UsersAdminService {
     const password = validatePassword(body.password);
     const displayName = optionalText(body.display_name);
     const role = ROLES.includes(body.role as Role) ? (body.role as Role) : 'user';
-    const tierId = uuidOrNull(body.tier_id);
+    const tierId = await this.tierOrNull(body.tier_id);
 
     await assertUniqueUser(this.db, 'email', email);
     await assertUniqueUser(this.db, 'username', username);
@@ -124,7 +130,13 @@ export class UsersAdminService {
       }
       if (body.display_name !== undefined) set('display_name', optionalText(body.display_name));
       if (body.institution_id !== undefined) set('institution_id', uuidOrNull(body.institution_id));
-      if (body.tier_id !== undefined) set('tier_id', uuidOrNull(body.tier_id));
+      // A plan given by hand, optionally until a date (a scholarship, a trial); then the default plan applies again.
+      if (body.tier_id !== undefined) set('tier_id', await this.tierOrNull(body.tier_id));
+      if (body.tier_expires_at !== undefined) {
+        const until = body.tier_expires_at ? new Date(String(body.tier_expires_at)) : null;
+        if (until && Number.isNaN(until.getTime())) throw badRequest('error.invalidInput');
+        set('tier_expires_at', until);
+      }
 
       let role = current.role;
       let status = current.status;

@@ -6,6 +6,7 @@ import { badRequest, notFound, withDetail } from '../../errors.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import type { BuiltinSkills } from '../skills/builtin.js';
+import type { TiersService } from '../billing/tiers.service.js';
 import { requireAuth } from '../auth/session.middleware.js';
 import { PgMemoryStore, writeAgentDoc } from '../../engine/stores.js';
 
@@ -17,7 +18,7 @@ const id = (req: AppRequest) => {
 };
 
 /** Settings -> Memory, Schedules and Skills: what the agent keeps per user, visible and editable. */
-export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills) {
+export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills, tiers: TiersService) {
   const memories = Router();
   const schedules = Router();
   const skills = Router();
@@ -71,7 +72,7 @@ export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills) {
     if (!name || !prompt || prompt.length > 2000) throw badRequest('schedules.invalid');
     const timezone = req.user!.timezone || 'America/New_York';
     const count = await maybe<{ n: number }>(db, 'SELECT COUNT(*) AS n FROM schedules WHERE user_id = $1', [req.user!.id]);
-    if ((count?.n ?? 0) >= 10) throw badRequest('schedules.limit');
+    if ((count?.n ?? 0) >= (await tiers.limitsFor(req.user!.id)).maxSchedules) throw badRequest('schedules.limit');
     const row = await maybe(
       db,
       `INSERT INTO schedules (user_id, name, schedule, timezone, prompt, enabled, next_run_at)

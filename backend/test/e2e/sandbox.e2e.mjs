@@ -76,7 +76,10 @@ await admin.req('PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
 // ---------------------------------------------------------------- Admin → Sandbox
 r = await admin.req('GET', '/admin/sandbox');
 check('sandboxes enabled (Docker and image found)', r.status === 200 && r.json.enabled === true, JSON.stringify(r.json));
-r = await admin.req('PUT', '/admin/sandbox', { ...r.json, idle_timeout_minutes: 10, default_mem_mb: 1024 });
+// Memory per student comes from their plan (Free by default).
+const freePlan = (await admin.req('GET', '/admin/tiers')).json.find((t) => t.is_default);
+await admin.req('PUT', `/admin/tiers/${freePlan.id}`, { mem_mb: 1024 });
+r = await admin.req('PUT', '/admin/sandbox', { ...r.json, idle_timeout_minutes: 10 });
 check('admin saves sandbox settings', r.status === 200 && r.json.idle_timeout_minutes === 10);
 r = await admin.req('PUT', '/admin/sandbox', { ...r.json, default_mem_mb: 1 });
 check('invalid limits refused', r.status === 400);

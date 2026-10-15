@@ -11,6 +11,11 @@ export const SETTINGS_KEYS = {
   pushVapidPublic: 'push.vapid_public',
   pushVapidPrivate: 'push.vapid_private',
   pushContactEmail: 'push.contact_email',
+  /** Stripe billing (off by default). The keys are secrets (secret_enc). */
+  billingEnabled: 'billing.enabled',
+  billingGraceDays: 'billing.grace_days',
+  stripeSecretKey: 'stripe.secret_key',
+  stripeWebhookSecret: 'stripe.webhook_secret',
   codexEnabled: 'codex.enabled',
   /** ISO date set by the Codex circuit breaker; absent when healthy. */
   codexDisabledUntil: 'codex.disabled_until',

@@ -19,8 +19,8 @@ export class SandboxTools implements SandboxPort, BrowserPort {
     private workspace: DiskWorkspace,
   ) {}
 
-  async describe(): Promise<string> {
-    const { cpu, memMb } = this.manager.limits();
+  async describe(userId: string): Promise<string> {
+    const { cpu, memMb } = await this.manager.limitsFor(userId);
     return [
       `Ubuntu with Python 3 (pandas, numpy, matplotlib, openpyxl, python-docx, python-pptx, pymupdf, pypdf, reportlab, requests),`,
       `Node.js and bash. Limits: ${cpu} CPU, ${memMb} MB of memory, 256 processes. Files written under the workspace persist;`,

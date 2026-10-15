@@ -29,6 +29,8 @@ import { SchoolService } from './modules/school/school.service.js';
 import { PushService } from './modules/push/push.service.js';
 import { BuiltinSkills, loadBuiltinSkills } from './modules/skills/builtin.js';
 import { CourseFolders, syncDueCourseFolders } from './modules/canvas/course-folders.js';
+import { TiersService } from './modules/billing/tiers.service.js';
+import { BillingService } from './modules/billing/billing.service.js';
 import { DiskWorkspace, sweepTemp } from './engine/workspace.js';
 import { AdminEmbeddings } from './engine/documents.js';
 import { ChatService } from './modules/chat/chat.service.js';
@@ -101,10 +103,16 @@ async function main() {
   const chats = new ChatService(db);
   const canvas = new CanvasService(db, connections);
   const workspace = new DiskWorkspace(config.DATA_ROOT, settings);
+  // Every per-student limit comes from their plan (tiers): disk, sandbox, daily messages, jobs, schedules, helpers.
+  const tiers = new TiersService(db);
+  const billing = new BillingService(db, settings, tiers, config);
+  workspace.setQuotaSource(async (userId) => (await tiers.limitsFor(userId)).diskMb);
+  catalog.setDailyLimitSource(async (userId) => (await tiers.limitsFor(userId)).dailyMessages);
   const courseFolders = new CourseFolders(db, canvas, workspace);
   const embeddings = new AdminEmbeddings(db, secrets);
   // Before the engine: code and browser tools are offered only when sandboxes work.
   const sandboxes = new SandboxManager(db, bus, settings, config);
+  sandboxes.setPerUserLimits(async (userId) => tiers.limitsFor(userId));
   await sandboxes.start().catch((err) => logger.warn(`Sandboxes are off: ${(err as Error).message}`));
   const sandbox = sandboxes.enabled ? new SandboxTools(sandboxes, workspace) : undefined;
   const push = new PushService(db, settings, config.NODE_ENV !== 'production');
@@ -117,7 +125,7 @@ async function main() {
   const builtinSkills = new BuiltinSkills(db, loadBuiltinSkills());
   logger.info(`Loaded ${builtinSkills.all.length} built-in skills`);
   const engine = await setupEngine(db, bus, { workspace, embeddings, sandbox, searxngUrl: config.SEARXNG_URL, builtinSkills });
-  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, school, push, builtinSkills, courseFolders, t, concurrency: config.JOB_WORKERS });
+  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, school, push, builtinSkills, courseFolders, tiers, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
   // Leader tasks: whichever replica gets the advisory lock runs each cycle.
@@ -134,6 +142,8 @@ async function main() {
   // TEMP files expire 24 h after their last change.
   // "<Term>/<Course>/" folders follow Canvas: assignments, instructions, announcements.
   scheduleExclusive(db, 'canvas-folders', LOCKS.canvasFolders, 15 * 60 * 1000, () => syncDueCourseFolders(db, courseFolders));
+  // A failed payment keeps the plan for the grace period, then the student goes back to the default plan.
+  scheduleExclusive(db, 'billing-grace', LOCKS.billingGrace, 60 * 60 * 1000, () => billing.expireGrace());
   scheduleExclusive(db, 'temp-sweep', LOCKS.tempSweep, 15 * 60 * 1000, async () => {
     await sweepTemp(config.DATA_ROOT);
   });
@@ -162,6 +172,8 @@ async function main() {
     push,
     builtinSkills,
     courseFolders,
+    tiers,
+    billing,
   });
   const onListening = () => {
     logger.info(`Node ${config.NODE_ID} listening on ${config.HOST ?? 'all interfaces'}:${config.PORT} (${config.NODE_ENV})`);

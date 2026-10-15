@@ -74,6 +74,20 @@ export class SandboxManager {
     readonly docker = new DockerClient(),
   ) {}
 
+  /** CPU and memory of one student's sandbox (their plan); the admin defaults when unset. */
+  private perUser?: (userId: string) => Promise<{ cpu: number; memMb: number }>;
+
+  setPerUserLimits(source: (userId: string) => Promise<{ cpu: number; memMb: number }>): void {
+    this.perUser = source;
+  }
+
+  async limitsFor(userId: string): Promise<SandboxLimits> {
+    const base = this.limits();
+    if (!this.perUser) return base;
+    const own = await this.perUser(userId);
+    return { ...base, cpu: Math.min(8, Math.max(0.1, own.cpu)), memMb: Math.min(16384, Math.max(256, own.memMb)) };
+  }
+
   limits(): SandboxLimits {
     return {
       image: this.settings.getString(K.sandboxImage, this.config.SANDBOX_IMAGE),
@@ -260,7 +274,7 @@ export class SandboxManager {
   }
 
   private async create(userId: string): Promise<SandboxHandle> {
-    const limits = this.limits();
+    const limits = await this.limitsFor(userId);
     const token = randomBytes(32).toString('hex');
     const name = `eagledocs-sbx-${userId.slice(0, 8)}-${randomBytes(3).toString('hex')}`;
     const published = !this.insideDocker;

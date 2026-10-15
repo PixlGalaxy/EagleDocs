@@ -53,6 +53,18 @@ E2E_DATABASE_URL=postgres://eagledocs:eagledocs@localhost:55433/eagledocs E2E_DA
   node test/e2e/sandbox-nodes.e2e.mjs
 ```
 
+## Plans and billing (`billing.e2e.mjs`)
+
+Runs a fake Stripe API on port 4995 and sends webhooks signed like Stripe. Covers the seeded plans, each plan's limits
+(daily messages, schedules, sandbox memory), a plan given by hand and its expiry, turning billing on (keys first),
+checkout, signed and duplicate webhooks, the portal, a failed payment's grace period, and cancelling back to Free.
+
+```bash
+node test/e2e/fake-llm.mjs 4999 &
+STRIPE_API_BASE=http://localhost:4995 PORT=4000 npx tsx src/index.ts &
+node test/e2e/billing.e2e.mjs
+```
+
 ## Web push (`push.e2e.mjs`)
 
 The script runs a fake push service on port 4996 that plays the browser vendor: it decrypts each push (RFC 8291) and checks

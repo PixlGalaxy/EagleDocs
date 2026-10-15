@@ -40,9 +40,17 @@ export class DiskWorkspace implements WorkspacePort {
     private settings: SettingsService,
   ) {}
 
-  limits(): Record<Area, number> {
+  /** The student's workspace size (their plan); the admin default when no plan source is set. */
+  private quotaMb?: (userId: string) => Promise<number>;
+
+  setQuotaSource(source: (userId: string) => Promise<number>): void {
+    this.quotaMb = source;
+  }
+
+  async limits(userId: string): Promise<Record<Area, number>> {
+    const workspaceMb = this.quotaMb ? await this.quotaMb(userId) : this.settings.getNumber('sandbox.default_disk_mb', 5120);
     return {
-      workspace: this.settings.getNumber('sandbox.default_disk_mb', 5120) * MB,
+      workspace: workspaceMb * MB,
       temp: this.settings.getNumber('storage.temp_mb', 10240) * MB,
     };
   }
@@ -163,7 +171,7 @@ export class DiskWorkspace implements WorkspacePort {
   async assertFits(userId: string, area: Area, extra: number): Promise<void> {
     if (extra <= 0) return;
     const used = await this.areaBytes(userId, area);
-    const limit = this.limits()[area];
+    const limit = (await this.limits(userId))[area];
     if (used + extra > limit) {
       const free = Math.max(0, limit - used);
       throw new QuotaError(
@@ -190,7 +198,7 @@ export class DiskWorkspace implements WorkspacePort {
     const r = this.resolve(userId, path);
     if (!r.rel) throw new Error('A file name is required');
     await this.assertNoLinks(r);
-    const free = this.limits()[r.area] - (await this.areaBytes(userId, r.area));
+    const free = (await this.limits(userId))[r.area] - (await this.areaBytes(userId, r.area));
     const cap = Math.min(maxBytes, free);
     await fs.mkdir(dirname(r.abs), { recursive: true });
     const partial = `${r.abs}.${process.pid}.part`;
@@ -258,7 +266,7 @@ export class DiskWorkspace implements WorkspacePort {
   }
 
   async usage(userId: string): Promise<StorageArea[]> {
-    const limits = this.limits();
+    const limits = await this.limits(userId);
     return [
       { name: 'workspace', usedBytes: await this.areaBytes(userId, 'workspace'), limitBytes: limits.workspace },
       {

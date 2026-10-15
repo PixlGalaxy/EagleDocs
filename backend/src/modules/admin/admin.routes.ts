@@ -44,6 +44,8 @@ export function createAdminRoutes(deps: {
   users: UsersAdminService;
   t: Translate;
   builtinSkills: BuiltinSkills;
+  /** A plan given by hand applies at once (the plan cache forgets this student). */
+  onUserChanged?: (userId: string) => void;
 }): Router {
   const { db, config, settings, mail, institutions, users, t, builtinSkills } = deps;
   const startedAt = Date.now();
@@ -154,6 +156,7 @@ export function createAdminRoutes(deps: {
     const id = routeParam(req.params.id);
     const body = (req.body ?? {}) as Record<string, unknown>;
     const updated = await users.update(id, req.user!.id, body);
+    deps.onUserChanged?.(id);
     logger.system.info(`"${req.user!.username}" updated user "${updated.username}" (${Object.keys(body).join(', ')})`);
     await audit(req, 'user.update', id, { fields: Object.keys(body) });
     res.json(updated);
@@ -215,8 +218,6 @@ export function createAdminRoutes(deps: {
       })),
     ),
   );
-  // Tiers arrive with billing (phase 6); the users form already asks for them.
-  router.get('/tiers', (_req, res) => res.json([]));
 
   // ------------------------------------------------------------ email
 
