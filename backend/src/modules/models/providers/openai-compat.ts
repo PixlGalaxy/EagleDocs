@@ -23,6 +23,15 @@ function toOpenAI(messages: ChatMessage[]) {
         tool_calls: m.toolCalls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: JSON.stringify(c.args) } })),
       };
     }
+    if (m.role === 'user' && m.images?.length) {
+      return {
+        role: 'user',
+        content: [
+          ...(m.content ? [{ type: 'text', text: m.content }] : []),
+          ...m.images.map((img) => ({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${img.data}` } })),
+        ],
+      };
+    }
     return { role: m.role, content: m.content };
   });
 }

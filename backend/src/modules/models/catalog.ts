@@ -131,7 +131,7 @@ export class ModelCatalog {
             source_label: 'ChatGPT',
             tags: guessTags(model),
             supports_tools: true,
-            supports_vision: false,
+            supports_vision: true,
           });
         }
       } else if (conn.kind === 'api_key') {
@@ -256,6 +256,7 @@ export class ModelCatalog {
           label: withAuto(m.display_name),
           ref,
           supportsTools: m.supports_tools,
+          supportsVision: m.supports_vision,
           contextWindow: m.context_window,
         },
       };
@@ -273,7 +274,7 @@ export class ModelCatalog {
       );
       return {
         isEagleDocs: false,
-        model: { provider, model: parsed.model, label: withAuto(`ChatGPT ${parsed.model}`), ref, supportsTools: true, contextWindow: CODEX_CONTEXT_WINDOW },
+        model: { provider, model: parsed.model, label: withAuto(`ChatGPT ${parsed.model}`), ref, supportsTools: true, supportsVision: true, contextWindow: CODEX_CONTEXT_WINDOW },
       };
     }
 
@@ -288,14 +289,22 @@ export class ModelCatalog {
         label: withAuto(parsed.model),
         ref,
         supportsTools: true,
+        supportsVision: anthropic || guessTags(parsed.model).includes('vision'),
         contextWindow: anthropic ? 200_000 : 128_000,
       },
     };
   }
 
+  /** The student's daily EagleDocs-model turns (their plan); the admin default when unset. */
+  private dailyLimit?: (userId: string) => Promise<number>;
+
+  setDailyLimitSource(source: (userId: string) => Promise<number>): void {
+    this.dailyLimit = source;
+  }
+
   /** Daily EagleDocs-model allowance; 0 means unlimited. Throws when used up. */
   async assertQuota(userId: string): Promise<void> {
-    const limit = this.settings.getNumber(K.eagledocsDailyMessages, 50);
+    const limit = this.dailyLimit ? await this.dailyLimit(userId) : this.settings.getNumber(K.eagledocsDailyMessages, 50);
     if (limit <= 0) return;
     const row = await maybe<{ used: number }>(
       this.db,

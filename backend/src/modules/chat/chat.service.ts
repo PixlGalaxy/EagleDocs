@@ -2,6 +2,7 @@ import type { ChatMessage, ToolCallRequest, ToolCallView } from 'pixlai-engine';
 import type { Db, Queryable } from '../../db/pool.js';
 import { many, maybe } from '../../db/pool.js';
 import { notFound } from '../../errors.js';
+import type { Attachment } from './attachments.js';
 
 export interface ChatRow {
   id: string;
@@ -28,6 +29,9 @@ interface MessageRow {
     failed?: string;
     silent?: boolean;
     background?: BackgroundInfo;
+    attachments?: Attachment[];
+    /** Final answers: estimated prompt tokens of the last model call, and the window. */
+    context?: { used: number; window: number };
   };
   model_ref: string | null;
   model_label: string | null;
@@ -45,6 +49,8 @@ export interface MessageView {
   steer?: boolean;
   /** Reports of helper agents that worked in the background (shown as a card, not as the user's words). */
   background?: BackgroundInfo;
+  /** Files and pictures the student attached (workspace paths). */
+  attachments?: Attachment[];
   created_at: Date;
 }
 
@@ -65,6 +71,7 @@ export function toMessageView(row: MessageRow): MessageView {
     tool_calls: row.meta.tool_views ?? [],
     ...(row.meta.steer && { steer: true }),
     ...(row.meta.background && { background: row.meta.background }),
+    ...(row.meta.attachments?.length && { attachments: row.meta.attachments }),
     created_at: row.created_at,
   };
 }
@@ -127,14 +134,14 @@ export class ChatService {
   }
 
   /** What the model sees: everything, tool calls and results included, oldest first. */
-  async history(chatId: string): Promise<ChatMessage[]> {
+  async history(chatId: string): Promise<(ChatMessage & { attachments?: Attachment[] })[]> {
     const rows = await many<MessageRow>(this.db, 'SELECT * FROM messages WHERE chat_id = $1 ORDER BY seq', [chatId]);
     return rows
       .filter((r) => !(r.role === 'assistant' && !r.content && !r.tool_calls?.length))
       .map((r): ChatMessage => {
         if (r.role === 'tool') return { role: 'tool', content: r.content, toolCallId: r.tool_call_id ?? '', name: r.tool_name ?? '' };
         if (r.role === 'assistant') return { role: 'assistant', content: r.content, ...(r.tool_calls?.length && { toolCalls: r.tool_calls }) };
-        return { role: 'user', content: r.content, ...(r.meta.steer && { steer: true }) };
+        return { role: 'user', content: r.content, ...(r.meta.steer && { steer: true }), ...(r.meta.attachments?.length && { attachments: r.meta.attachments }) };
       });
   }
 
@@ -198,6 +205,16 @@ export class ChatService {
     } finally {
       client.release();
     }
+  }
+
+  /** How full the model's context was in the last answer, for the meter in the composer. */
+  async lastContext(chatId: string): Promise<{ used: number; window: number } | null> {
+    const row = await maybe<{ context: { used: number; window: number } | null }>(
+      this.db,
+      `SELECT meta->'context' AS context FROM messages WHERE chat_id = $1 AND role = 'assistant' AND meta ? 'context' ORDER BY seq DESC LIMIT 1`,
+      [chatId],
+    );
+    return row?.context ?? null;
   }
 
   /** Helper agents working in the background for this chat. */

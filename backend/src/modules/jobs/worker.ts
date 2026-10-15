@@ -17,13 +17,13 @@ import type { SchoolService } from '../school/school.service.js';
 import type { PushService } from '../push/push.service.js';
 import type { BuiltinSkills } from '../skills/builtin.js';
 import type { CourseFolders } from '../canvas/course-folders.js';
+import type { TiersService } from '../billing/tiers.service.js';
+import { withAttachments } from '../chat/attachments.js';
 
 const POLL_MS = 2000;
 const HEARTBEAT_MS = 15_000;
 /** Queued jobs prefer the replica named in `preferred_node` for this long (sandbox affinity, phase 4). */
 const AFFINITY_SECONDS = 5;
-/** Jobs one student runs at once; more wait in the queue (per-tier limits come with phase 6). */
-const MAX_RUNNING_PER_USER = 2;
 /** Background helper jobs per chat at once. */
 const MAX_BACKGROUND_PER_CHAT = 2;
 
@@ -89,6 +89,7 @@ export interface WorkerDeps {
   push: PushService;
   builtinSkills: BuiltinSkills;
   courseFolders: CourseFolders;
+  tiers: TiersService;
   t: Translate;
   concurrency: number;
 }
@@ -160,11 +161,13 @@ export class JobWorker {
            AND (q.preferred_node IS NULL OR q.preferred_node = $1 OR q.queued_at < now() - make_interval(secs => $2))
            AND NOT EXISTS (SELECT 1 FROM jobs a WHERE a.chat_id = q.chat_id AND a.id <> q.id
                            AND a.status IN ('running', 'waiting_approval', 'waiting_mfa'))
+           -- Each plan allows some jobs at once; more wait in the queue.
            AND (SELECT COUNT(*) FROM jobs u WHERE u.user_id = q.user_id
-                AND u.status IN ('running', 'waiting_approval', 'waiting_mfa')) < $3
+                AND u.status IN ('running', 'waiting_approval', 'waiting_mfa'))
+               < COALESCE((SELECT t.max_background_jobs FROM tiers t WHERE t.id = effective_tier(q.user_id)), 2)
          ORDER BY q.queued_at FOR UPDATE SKIP LOCKED LIMIT 1
        ) RETURNING id, user_id, chat_id, kind, payload, cancel_requested`,
-      [this.deps.config.NODE_ID, AFFINITY_SECONDS, MAX_RUNNING_PER_USER],
+      [this.deps.config.NODE_ID, AFFINITY_SECONDS],
     );
   }
 
@@ -173,6 +176,11 @@ export class JobWorker {
     await this.deps.db
       .query('UPDATE jobs SET heartbeat_at = now() WHERE id = ANY($1::uuid[])', [[...this.running.keys()]])
       .catch((err: Error) => logger.warn(`Job heartbeat failed: ${err.message}`));
+  }
+
+  private async planLimits(userId: string) {
+    const plan = await this.deps.tiers.limitsFor(userId);
+    return { maxParallelSubagents: plan.maxParallelSubagents, maxSubagentDepth: plan.maxSubagentDepth, maxSchedules: plan.maxSchedules };
   }
 
   /** A browser follows this job's stream right now (its SSE heartbeat keeps watched_at fresh). */
@@ -238,7 +246,7 @@ export class JobWorker {
       }
 
       const tasks = job.kind === 'delegate' ? (job.payload.tasks ?? []) : [];
-      const history = job.kind === 'delegate' ? [] : await chats.history(chatId);
+      const history = job.kind === 'delegate' ? [] : await withAttachments(this.deps.workspace, user.id, await chats.history(chatId));
       const latest =
         job.kind === 'delegate' ? tasks.map((task) => task.goal).join('\n') : ([...history].reverse().find((m) => m.role === 'user')?.content ?? '');
       const historyChars = history.slice(-8).reduce((n, m) => n + m.content.length, 0);
@@ -263,6 +271,8 @@ export class JobWorker {
           ...(user.major ? [`Major: ${user.major}`] : []),
         ],
       }, {
+        // The plan decides how many helpers, how deep, and how many schedules.
+        limits: await this.planLimits(user.id),
         host: {
           canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace, folders: this.deps.courseFolders },
           school: { service: this.deps.school, userId: user.id, workspace: this.deps.workspace },
@@ -306,6 +316,8 @@ export class JobWorker {
 
       // The visible answer is the text after the last tool step; kept to save a partial answer if stopped.
       let liveText = '';
+      // The last context estimate, kept on the answer for the composer's meter.
+      let context: { used: number; window: number } | undefined;
       const result = await agent.run({
         runId: job.id,
         model: resolution.model,
@@ -319,6 +331,7 @@ export class JobWorker {
           emit: (event: EngineEvent) => {
             if (isNoise(event)) return;
             this.pushFor(event, job, chatId, user);
+            if (event.type === 'context') context = { used: event.used, window: event.window };
             if (event.type === 'delta') liveText += event.text;
             if (event.type === 'tool_call' || event.type === 'interrupted') liveText = '';
             // Waiting on the student's phone (Duo) or back to work: the job row shows it (Admin, Chats list).
@@ -355,6 +368,7 @@ export class JobWorker {
             ...(status === 'cancelled' && { stopped: true }),
             ...(status === 'failed' && { failed: result.error }),
             ...(silent && { silent: true }),
+            ...(context && { context }),
           },
         },
       });

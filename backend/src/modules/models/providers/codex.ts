@@ -18,7 +18,7 @@ function identityHeaders(version: string): Record<string, string> {
 export type TokenSource = () => Promise<string>;
 
 type InputItem =
-  | { type: 'message'; role: 'user'; content: { type: 'input_text'; text: string }[] }
+  | { type: 'message'; role: 'user'; content: ({ type: 'input_text'; text: string } | { type: 'input_image'; image_url: string })[] }
   | { type: 'message'; role: 'assistant'; status: 'completed'; content: { type: 'output_text'; text: string }[] }
   | { type: 'function_call'; call_id: string; name: string; arguments: string }
   | { type: 'function_call_output'; call_id: string; output: string };
@@ -30,7 +30,16 @@ function toInput(messages: ChatMessage[]): { instructions: string; input: InputI
   const callId = (id: string) => id.slice(0, 64);
   for (const m of messages) {
     if (m.role === 'system') continue;
-    if (m.role === 'user') input.push({ type: 'message', role: 'user', content: [{ type: 'input_text', text: m.content }] });
+    if (m.role === 'user') {
+      input.push({
+        type: 'message',
+        role: 'user',
+        content: [
+          { type: 'input_text', text: m.content },
+          ...(m.images ?? []).map((img) => ({ type: 'input_image' as const, image_url: `data:${img.mediaType};base64,${img.data}` })),
+        ],
+      });
+    }
     else if (m.role === 'tool') input.push({ type: 'function_call_output', call_id: callId(m.toolCallId ?? ''), output: m.content });
     else {
       if (m.content) input.push({ type: 'message', role: 'assistant', status: 'completed', content: [{ type: 'output_text', text: m.content }] });

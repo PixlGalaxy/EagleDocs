@@ -8,7 +8,8 @@ const MAX_TOKENS = 8192;
 type Block =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> }
-  | { type: 'tool_result'; tool_use_id: string; content: string };
+  | { type: 'tool_result'; tool_use_id: string; content: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
 
 interface AnthropicMessage {
   role: 'user' | 'assistant';
@@ -38,7 +39,10 @@ function toAnthropic(messages: ChatMessage[]): { system: string; messages: Anthr
         ...(m.toolCalls ?? []).map((c) => ({ type: 'tool_use' as const, id: c.id, name: c.name, input: c.args })),
       ]);
     } else {
-      add('user', [{ type: 'text', text: m.content }]);
+      add('user', [
+        ...(m.images ?? []).map((img) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: img.mediaType, data: img.data } })),
+        ...(m.content ? [{ type: 'text' as const, text: m.content }] : []),
+      ]);
     }
   }
   return { system, messages: out };

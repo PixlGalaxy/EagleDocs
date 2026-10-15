@@ -26,6 +26,8 @@ function toOllama(messages: ChatMessage[]) {
         tool_calls: m.toolCalls.map((c) => ({ function: { name: c.name, arguments: c.args } })),
       };
     }
+    // Ollama takes images as bare base64 next to the text.
+    if (m.role === 'user' && m.images?.length) return { role: 'user', content: m.content, images: m.images.map((img) => img.data) };
     return { role: m.role, content: m.content };
   });
 }

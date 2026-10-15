@@ -66,6 +66,7 @@ const BACKEND_KEYS = [
   'chat.notRunning',
   'chat.tooManySteers',
   'chat.notRetryable',
+  'chat.badAttachments',
   'models.keyRejected',
   'models.codexFailed',
   'models.codexOff',
@@ -98,6 +99,18 @@ const BACKEND_KEYS = [
   'pushMsg.approvalTitle',
   'pushMsg.doneTitle',
   'pushMsg.failedTitle',
+  'tiers.nameRequired',
+  'tiers.invalidLimit',
+  'tiers.invalidPrice',
+  'tiers.needsDefault',
+  'tiers.priceTaken',
+  'billing.off',
+  'billing.notForSale',
+  'billing.alreadySubscribed',
+  'billing.noSubscription',
+  'billing.stripeFailed',
+  'billing.invalidKey',
+  'billing.keysFirst',
 ] as const;
 
 export type TranslationKey = (typeof BACKEND_KEYS)[number];

@@ -23,7 +23,11 @@ const server = http.createServer(async (req, res) => {
   const request = JSON.parse(body || '{}');
   const messages = request.messages ?? [];
   const last = messages[messages.length - 1] ?? {};
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content ?? '';
+  // Vision requests send the user turn as parts: text plus image_url.
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
+  const parts = Array.isArray(lastUserMessage?.content) ? lastUserMessage.content : null;
+  const lastUser = parts ? parts.filter((p) => p.type === 'text').map((p) => p.text).join('\n') : (lastUserMessage?.content ?? '');
+  const imagesSeen = parts ? parts.filter((p) => p.type === 'image_url' && /^data:image\/png;base64,/.test(p.image_url?.url ?? '')).length : 0;
 
   res.writeHead(200, { 'content-type': 'text/event-stream' });
   const send = (obj) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
@@ -66,6 +70,10 @@ const server = http.createServer(async (req, res) => {
   if (loadSkill && request.tools) return call('skills_load', { slug: loadSkill[1] });
   const note = /\[note ([a-z0-9-]+) ([^\]]+)\]/.exec(lastUser);
   if (note && request.tools) return call('skills_note', { slug: note[1], note: note[2] });
+  if (lastUser.includes('[echoimages]')) {
+    text(`images=${imagesSeen} | ${lastUser.replace(/\s+/g, ' ').slice(0, 300)}`);
+    return done();
+  }
   if (lastUser.includes('[whatcanido]')) {
     const system = messages.find((m) => m.role === 'system')?.content ?? '';
     const skills = (/## Skills\n[^\n]*\n([\s\S]*?)(\n\n|$)/.exec(system)?.[1] ?? '').split('\n').map((l) => l.replace(/^- ([a-z0-9-]+):.*/, '$1'));

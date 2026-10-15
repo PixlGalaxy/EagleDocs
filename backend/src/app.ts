@@ -40,6 +40,9 @@ import { createPushRoutes, latestBroadcast } from './modules/push/push.routes.js
 import type { PushService } from './modules/push/push.service.js';
 import type { BuiltinSkills } from './modules/skills/builtin.js';
 import type { CourseFolders } from './modules/canvas/course-folders.js';
+import { createBillingRoutes } from './modules/billing/billing.routes.js';
+import type { BillingService } from './modules/billing/billing.service.js';
+import type { TiersService } from './modules/billing/tiers.service.js';
 
 export interface AppDeps {
   db: Db;
@@ -65,10 +68,12 @@ export interface AppDeps {
   push: PushService;
   builtinSkills: BuiltinSkills;
   courseFolders: CourseFolders;
+  tiers: TiersService;
+  billing: BillingService;
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseFolders } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseFolders, tiers, billing } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -76,6 +81,9 @@ export function createApp(deps: AppDeps): express.Application {
   app.set('trust proxy', config.TRUST_PROXY);
   app.disable('x-powered-by');
   app.use(requestLogger);
+  // Stripe webhooks: raw body for the signature, and no CSRF token (Stripe cannot send one).
+  const billingRoutes = createBillingRoutes({ billing, tiers, settings });
+  app.use('/api/billing/webhook', billingRoutes.webhook);
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
   app.use(createSessionMiddleware(auth));
@@ -101,7 +109,7 @@ export function createApp(deps: AppDeps): express.Application {
       registrationEnabled: settings.getBoolean(K.registrationEnabled, true),
       emailConfigured: mail.isConfigured(),
       institutions: await institutions.listPublic(),
-      billingEnabled: false,
+      billingEnabled: billing.enabled(),
       codexEnabled: catalog.codexAvailable(),
       mcpEnabled: settings.getBoolean(K.mcpEnabled, false),
       vapidPublicKey: push.publicKey(),
@@ -111,7 +119,7 @@ export function createApp(deps: AppDeps): express.Application {
 
   app.use('/api/auth', createAuthRoutes(db, config, auth, register, sessionTtlHours));
   app.use('/api/avatars', createAvatarsRoutes(db, config.AVATARS_DIR));
-  const { chatsRouter, jobsRouter, approvalsRouter } = createChatRoutes(db, bus, chats);
+  const { chatsRouter, jobsRouter, approvalsRouter } = createChatRoutes(db, bus, chats, workspace);
   app.use('/api/chats', chatsRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/approvals', approvalsRouter);
@@ -125,7 +133,7 @@ export function createApp(deps: AppDeps): express.Application {
   // Canvas/SSO/Degree Works cards first, then the generic connection routes.
   app.use('/api/connections', connectionRouter);
   app.use('/api/connections', conns);
-  const agentData = createAgentDataRoutes(db, builtinSkills);
+  const agentData = createAgentDataRoutes(db, builtinSkills, tiers);
   app.use('/api/memories', agentData.memories);
   app.use('/api/schedules', agentData.schedules);
   app.use('/api/skills', agentData.skills);
@@ -133,13 +141,15 @@ export function createApp(deps: AppDeps): express.Application {
 
   const pushRoutes = createPushRoutes({ db, push, settings, t });
   app.use('/api/push', pushRoutes.user);
+  app.use('/api/billing', billingRoutes.user);
+  app.use('/api/admin', billingRoutes.admin);
   app.use('/api/admin', pushRoutes.admin);
   app.use('/api/admin/logs', createLogsRoutes(db));
   app.use('/api/admin/models', createAdminModelRoutes(db, secrets));
   app.use('/api/admin', createSandboxAdminRoutes({ db, bus, config, settings, sandboxes, workspace }));
   app.use(
     '/api/admin',
-    createAdminRoutes({ db, config, settings, mail, institutions, users: new UsersAdminService(db, institutions), t, builtinSkills }),
+    createAdminRoutes({ db, config, settings, mail, institutions, users: new UsersAdminService(db, institutions), t, builtinSkills, onUserChanged: (id) => tiers.forget(id) }),
   );
 
   app.use(createNotFoundHandler(t));

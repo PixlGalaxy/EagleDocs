@@ -163,6 +163,41 @@ check('partial answer kept', /word0/.test(events.at(-1).message?.content ?? ''),
 r = await user.req(B, 'GET', '/jobs');
 check('job list shows cancelled', r.json[0].status === 'cancelled', r.json[0].status);
 
+// ---------------------------------------------------------------- photos and files attached to a message
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+const upload = async (name, bytes, type) => {
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type }), name);
+  const res = await fetch(`${A}/files/upload?path=${encodeURIComponent('Chat uploads/e2e')}`, { method: 'POST', headers: { cookie: user.headers('GET').cookie, 'x-csrf-token': decodeURIComponent(user.jar.csrf) }, body: form });
+  return res.json();
+};
+await upload('board.png', PNG, 'image/png');
+await upload('notes.txt', Buffer.from('Exam on Thursday'), 'text/plain');
+const attachChat = (await user.req(A, 'POST', '/chats', {})).json.id;
+r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '[echoimages]', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png', 'Chat uploads/e2e/notes.txt'] });
+check('a message can carry a photo and a file', r.status === 201 && r.json.message.attachments?.map((a) => a.kind).join(',') === 'image,file', JSON.stringify(r.json.message?.attachments));
+events = await user.stream(B, attachChat, r.json.job_id);
+let said = events.at(-1).message?.content ?? '';
+check('a model without vision gets a note with the file path instead', /^images=0/.test(said) && /Image attached: Chat uploads\/e2e\/board\.png/.test(said) && /notes\.txt \(file/.test(said), said);
+check('the stream reports the context size', events.some((e) => e.type === 'context' && e.used > 0 && e.window > 0));
+for (const m of [smart, mini]) await admin.req(A, 'PATCH', `/admin/models/${m.id}`, { supports_vision: true });
+r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '[echoimages]', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png'] });
+events = await user.stream(B, attachChat, r.json.job_id);
+said = events.at(-1).message?.content ?? '';
+check('a vision model receives the picture itself', /^images=1/.test(said), said.slice(0, 120));
+r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png'] });
+check('a photo alone is a valid message', r.status === 201, r.json?.error);
+await user.stream(B, attachChat, r.json.job_id);
+r = await user.req(A, 'GET', `/chats/${attachChat}`);
+check('the chat keeps the attachments and the last context size', r.json.messages[0]?.attachments?.length === 2 && r.json.context?.window > 0, JSON.stringify(r.json.context));
+r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: 'x', model_ref: 'auto', attachments: ['../../etc/passwd'] });
+check('attachments must be files in the student\'s workspace', r.status === 400, String(r.status));
+let res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e2e/board.png')}&inline=1`, { headers: { cookie: user.headers('GET').cookie } });
+check('pictures preview inline, sandboxed', res.headers.get('content-type') === 'image/png' && /sandbox/.test(res.headers.get('content-security-policy') ?? '') && !/attachment/.test(res.headers.get('content-disposition') ?? ''), `${res.headers.get('content-type')} ${res.headers.get('content-disposition')}`);
+res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e2e/notes.txt')}&inline=1`, { headers: { cookie: user.headers('GET').cookie } });
+check('other files always download', /attachment/.test(res.headers.get('content-disposition') ?? ''), res.headers.get('content-disposition'));
+for (const m of [smart, mini]) await admin.req(A, 'PATCH', `/admin/models/${m.id}`, { supports_vision: false });
+
 // ---------------------------------------------------------------- at most 2 running jobs per student
 const limitJobs = [];
 for (let i = 0; i < 3; i++) {
@@ -223,15 +258,16 @@ check('second message while busy is refused', r.status === 409, r.json?.error);
 await user.req(A, 'POST', `/jobs/${busyJob}/cancel`);
 await user.stream(A, chatId, busyJob);
 
-// ---------------------------------------------------------------- daily quota
-await admin.req(A, 'PATCH', '/admin/settings', { eagledocs_daily_messages: 1 });
+// ---------------------------------------------------------------- daily quota (from the student's plan)
+const freePlan = (await admin.req(A, 'GET', '/admin/tiers')).json.find((t) => t.is_default);
+await admin.req(A, 'PUT', `/admin/tiers/${freePlan.id}`, { daily_messages: 1 });
 await sleep(300);
 r = await user.req(B, 'POST', '/chats', {});
 const quotaChat = r.json.id;
 r = await user.req(B, 'POST', `/chats/${quotaChat}/messages`, { content: 'hola', model_ref: 'auto' });
 events = await user.stream(A, quotaChat, r.json.job_id);
 check('quota reached gives a clear error', events.at(-1).type === 'error' && /today/i.test(events.at(-1).error), events.at(-1).error);
-await admin.req(A, 'PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await admin.req(A, 'PUT', `/admin/tiers/${freePlan.id}`, { daily_messages: 0 });
 await sleep(300);
 // The failed turn runs again from the Tasks panel, without retyping it.
 const failedJob = (await user.req(A, 'GET', '/jobs')).json.find((j) => j.chat_id === quotaChat && j.status === 'failed');

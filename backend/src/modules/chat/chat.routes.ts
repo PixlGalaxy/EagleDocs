@@ -8,6 +8,8 @@ import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAuth } from '../auth/session.middleware.js';
 import { titleFrom, type ChatService } from './chat.service.js';
+import type { DiskWorkspace } from '../../engine/workspace.js';
+import { resolveAttachments } from './attachments.js';
 
 const MAX_MESSAGE_CHARS = 20_000;
 const MAX_STEER_CHARS = 2000;
@@ -21,7 +23,7 @@ function text(value: unknown, max: number): string {
   return value.trim();
 }
 
-export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
+export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace: DiskWorkspace) {
   const chatsRouter = Router();
   const jobsRouter = Router();
   const approvalsRouter = Router();
@@ -52,6 +54,7 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
       messages: await chats.visibleMessages(chat.id),
       pending_approvals: await chats.pendingApprovals(chat.id),
       background_jobs: await chats.backgroundJobs(chat.id),
+      context: await chats.lastContext(chat.id),
     });
   });
 
@@ -71,15 +74,17 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
     const userId = req.user!.id;
     const chat = await chats.get(userId, routeParam(req.params.id));
     if (chat.active_job_id) throw conflict('chat.busy');
-    const body = (req.body ?? {}) as { content?: unknown; model_ref?: unknown };
-    const content = text(body.content, MAX_MESSAGE_CHARS);
+    const body = (req.body ?? {}) as { content?: unknown; model_ref?: unknown; attachments?: unknown };
+    const attachments = await resolveAttachments(workspace, userId, body.attachments);
+    // A picture alone is a valid message.
+    const content = attachments.length && (typeof body.content !== 'string' || !body.content.trim()) ? '' : text(body.content, MAX_MESSAGE_CHARS);
     const modelRef = typeof body.model_ref === 'string' && body.model_ref ? body.model_ref : null;
 
     const { message, jobId } = await withTx(db, async (client) => {
-      const msg = await chats.addUserMessage(client, chat.id, content);
+      const msg = await chats.addUserMessage(client, chat.id, content, attachments.length ? { attachments } : {});
       await client.query(
         "UPDATE chats SET model_ref = $2, title = CASE WHEN title = '' THEN $3 ELSE title END WHERE id = $1",
-        [chat.id, modelRef, titleFrom(content)],
+        [chat.id, modelRef, titleFrom(content || attachments.map((a) => a.name).join(', '))],
       );
       const { rows } = await client.query<{ id: string }>(
         "INSERT INTO jobs (user_id, chat_id, kind, payload) VALUES ($1, $2, 'chat', $3) RETURNING id",

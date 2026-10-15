@@ -5,6 +5,7 @@ import { badRequest, notFound, withDetail } from '../../errors.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAuth } from '../auth/session.middleware.js';
+import { IMAGE_TYPES } from '../chat/attachments.js';
 import { QuotaError, TEMP, TEMP_TTL_MS, type DiskWorkspace } from '../../engine/workspace.js';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -72,7 +73,17 @@ export function createFilesRoutes(workspace: DiskWorkspace) {
     if (!stat || stat.type !== 'file') throw notFound();
     const { abs } = workspace.resolve(req.user!.id, path);
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    // Always as a download: user files must never render as pages on our origin.
+    // Pictures may show inline (chat thumbnails), with their own type and a sandbox: nothing can run from them.
+    const inlineType = req.query.inline === '1' ? IMAGE_TYPES[stat.name.split('.').pop()?.toLowerCase() ?? ''] : undefined;
+    if (inlineType) {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      res.setHeader('Cache-Control', 'private, max-age=300');
+      res.type(inlineType).sendFile(abs, { dotfiles: 'allow' }, (err) => {
+        if (err && !res.headersSent) next(notFound());
+      });
+      return;
+    }
+    // Everything else as a download: user files must never render as pages on our origin.
     res.download(abs, stat.name, { dotfiles: 'allow' }, (err) => {
       if (err && !res.headersSent) next(notFound());
     });
