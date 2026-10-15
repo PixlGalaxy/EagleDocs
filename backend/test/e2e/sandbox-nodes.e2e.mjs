@@ -124,8 +124,11 @@ try {
   const inst = (await admin.req('GET', '/admin/institutions')).json.find((i) => i.slug === 'dev-university');
   await admin.req('PUT', `/admin/institutions/${inst.id}`, { ...inst, outlook_url: `${SCHOOL}/mail/`, degreeworks_url: `${SCHOOL}/dw/` });
   const sandboxSettings = (await admin.req('GET', '/admin/sandbox')).json;
-  r = await admin.req('PUT', '/admin/sandbox', { ...sandboxSettings, default_mem_mb: 512, max_active_per_node: 4 });
-  check('sandbox memory set to 512 MB', r.status === 200, JSON.stringify(r.json).slice(0, 160));
+  r = await admin.req('PUT', '/admin/sandbox', { ...sandboxSettings, max_active_per_node: 4 });
+  // The memory a sandbox gets comes from the student's plan (phase 6), not from the sandbox settings.
+  const freePlan = (await admin.req('GET', '/admin/tiers')).json.find((t) => t.is_default);
+  const plan = await admin.req('PUT', `/admin/tiers/${freePlan.id}`, { mem_mb: 512 });
+  check('sandbox memory set to 512 MB', r.status === 200 && plan.status === 200, JSON.stringify(plan.json).slice(0, 160));
 
   const userChat = (await user.req('POST', '/chats', {})).json.id;
   const adminChat = (await admin.req('POST', '/chats', {})).json.id;
