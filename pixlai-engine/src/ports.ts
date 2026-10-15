@@ -29,18 +29,19 @@ export interface RunStore {
   waitForApproval(approvalId: string, timeoutMs: number, signal: AbortSignal): Promise<ApprovalDecision>;
 }
 
-export interface MemoryItem {
-  id: string;
-  content: string;
-  createdAt: string;
-}
+/**
+ * The agent's markdown files for one user, in the style of Hermes Agent:
+ * SOUL.md (its personality), USER.md (who the user is) and MEMORY.md (its own
+ * notes). All three go into every conversation; the agent edits them with
+ * memory_update and the user can edit them too.
+ */
+export type MemoryDoc = 'soul' | 'user' | 'notes';
+export type MemoryDocs = Record<MemoryDoc, string>;
 
 export interface MemoryStore {
-  add(userId: string, content: string, source: 'agent' | 'user'): Promise<MemoryItem>;
-  remove(userId: string, id: string): Promise<boolean>;
-  search(userId: string, query: string, limit: number): Promise<MemoryItem[]>;
-  /** What goes into the system prompt: the most useful memories for this message. */
-  forPrompt(userId: string, latestUserMessage: string, limit: number): Promise<MemoryItem[]>;
+  /** Empty strings for files that do not exist yet. */
+  read(userId: string): Promise<MemoryDocs>;
+  write(userId: string, doc: MemoryDoc, content: string): Promise<void>;
 }
 
 export interface SkillSummary {

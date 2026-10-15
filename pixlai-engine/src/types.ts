@@ -166,6 +166,10 @@ export interface Limits {
   maxTokens: number;
   /** 0 disables delegation. */
   maxSubagentDepth: number;
+  /** Characters of SOUL.md, USER.md and MEMORY.md (they go into every prompt, so they stay small). */
+  soulChars: number;
+  userChars: number;
+  notesChars: number;
   maxParallelSubagents: number;
   /** Schedules a user may have. */
   maxSchedules: number;
@@ -178,6 +182,9 @@ export const DEFAULT_LIMITS: Limits = {
   maxSteps: 20,
   maxTokens: 0,
   maxSubagentDepth: 2,
+  soulChars: 3000,
+  userChars: 1500,
+  notesChars: 2500,
   maxParallelSubagents: 3,
   maxSchedules: 10,
   toolTimeoutMs: 60_000,

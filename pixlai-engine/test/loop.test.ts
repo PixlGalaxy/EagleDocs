@@ -35,7 +35,7 @@ test('calls a tool, then answers with its result in context', async () => {
 test('unknown tools and tool errors come back as results, not crashes', async () => {
   const { agent, sink } = setup();
   const provider = new ScriptedProvider([
-    () => [...toolCall('nope', {}, 'a'), ...toolCall('memory_remove', {}, 'b'), ...toolCall('time_now', { timezone: 'Mars/Base' }, 'c')],
+    () => [...toolCall('nope', {}, 'a'), ...toolCall('memory_update', {}, 'b'), ...toolCall('time_now', { timezone: 'Mars/Base' }, 'c')],
     () => text('ok'),
   ]);
   const result = await agent.run({ runId: 'r1', model: model(provider), history: [user('x')], sink });
@@ -177,7 +177,7 @@ test('each user has their own memory', async () => {
   const { engine, sink } = setup();
   const ana = engine.forUser({ id: 'ana', name: 'Ana', language: 'es', timezone: 'UTC' });
   const leo = engine.forUser({ id: 'leo', name: 'Leo', language: 'en', timezone: 'UTC' });
-  const saving = new ScriptedProvider([() => toolCall('memory_add', { content: 'Ana prefers mornings' }), () => text('ok')]);
+  const saving = new ScriptedProvider([() => toolCall('memory_update', { target: 'user', action: 'add', content: 'Ana prefers mornings' }), () => text('ok')]);
   await ana.run({ runId: 'a', model: model(saving), history: [user('remember')], sink });
   const anaNext = new ScriptedProvider([() => text('ok')]);
   await ana.run({ runId: 'a2', model: model(anaNext), history: [user('hi')], sink });

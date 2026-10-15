@@ -223,9 +223,8 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     if (depth === 0) await emit({ type: 'model', model_ref: model.ref, model_label: model.label });
 
     const canUseTools = model.supportsTools && tools.list().length > 0;
-    const latestUser = [...input.history].reverse().find((m) => m.role === 'user')?.content ?? '';
-    const [memories, skills, workspaceNote, sandboxNote] = await Promise.all([
-      input.kind === 'subagent' ? Promise.resolve([]) : services.memory.forPrompt(user.id, latestUser, 20),
+    const [docs, skills, workspaceNote, sandboxNote] = await Promise.all([
+      input.kind === 'subagent' ? Promise.resolve(null) : services.memory.read(user.id),
       input.kind === 'subagent' || !canUseTools ? Promise.resolve([]) : services.skills.list(user.id),
       canUseTools && services.workspace ? services.workspace.describe(user.id) : Promise.resolve(undefined),
       // Must be cheap: the host answers from its config, it does not start a sandbox for this.
@@ -234,7 +233,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     const system = buildSystemPrompt({
       basePrompt: input.kind === 'subagent' ? SUBAGENT_PROMPT : input.basePrompt,
       user,
-      memories,
+      ...(docs && { memory: { docs, limits, editable: canUseTools && Boolean(tools.get('memory_update')) } }),
       skills,
       canUseTools,
       extra:

@@ -1,4 +1,6 @@
-import type { MemoryItem, SkillSummary } from '../ports.js';
+import type { MemoryDocs, SkillSummary } from '../ports.js';
+import { entriesOf, usageLine } from '../tools/memory.js';
+import type { Limits } from '../types.js';
 import type { ChatMessage, UserProfile } from '../types.js';
 
 const STEER_OPEN = '[OUT-OF-BAND USER MESSAGE: sent by the user while you were working, delivered once at this point]';
@@ -24,7 +26,8 @@ export function toProviderMessages(messages: ChatMessage[]): ChatMessage[] {
 export interface PromptParts {
   basePrompt: string;
   user: UserProfile;
-  memories: MemoryItem[];
+  /** SOUL.md, USER.md and MEMORY.md; absent for helpers. */
+  memory?: { docs: MemoryDocs; limits: Limits; editable: boolean };
   skills: SkillSummary[];
   canUseTools: boolean;
   /** Extra instructions for this kind of run (subagent, scheduled task). */
@@ -40,6 +43,8 @@ export interface PromptParts {
 export function buildSystemPrompt(parts: PromptParts): string {
   const { user } = parts;
   const sections: string[] = [parts.basePrompt.trim()];
+  const docs = parts.memory?.docs;
+  if (docs?.soul.trim()) sections.push(`## Your personality (SOUL.md)\n${docs.soul.trim()}`);
 
   const about = [
     `- Name: ${user.name}`,
@@ -49,12 +54,21 @@ export function buildSystemPrompt(parts: PromptParts): string {
   ];
   sections.push(`## About the user\n${about.join('\n')}`);
 
-  if (parts.memories.length > 0) {
-    sections.push(
-      '## What you remember about the user\n' +
-        'Saved in earlier conversations. Treat them as true unless the user corrects them (then fix them with the memory tools).\n' +
-        parts.memories.map((m) => `- [${m.id}] ${m.content}`).join('\n'),
-    );
+  if (parts.memory) {
+    const { limits, editable } = parts.memory;
+    const list = (text: string) => entriesOf(text).map((e) => `- ${e.replace(/\n/g, '\n  ')}`).join('\n');
+    const userEntries = list(docs!.user);
+    const notes = list(docs!.notes);
+    if (userEntries) sections.push(`## What you know about the user (USER.md)\n${userEntries}`);
+    if (notes) sections.push(`## Your notes (MEMORY.md)\n${notes}`);
+    if (editable) {
+      sections.push(
+        '## Your memory\n' +
+          'USER.md, MEMORY.md and SOUL.md are yours and reach every future conversation. When you learn something lasting ' +
+          '(who the user is, how they like things, a convention that works), save it with memory_update; fix entries the ' +
+          `user corrects. Keep them short. Now: ${usageLine(docs!, limits)} characters.`,
+      );
+    }
   }
 
   if (parts.canUseTools && parts.skills.length > 0) {

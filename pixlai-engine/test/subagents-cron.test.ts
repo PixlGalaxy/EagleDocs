@@ -25,7 +25,7 @@ test('delegates tasks to parallel subagents with read-only tools', async () => {
   const childTools = childRequests[0]!.tools!.map((t) => t.name);
   assert.ok(childTools.includes('time_now'));
   assert.ok(childTools.includes('agent_delegate'), 'depth 1 may still delegate when maxSubagentDepth is 2');
-  for (const banned of ['memory_add', 'cron_create', 'email_send', 'skills_note']) assert.ok(!childTools.includes(banned), banned);
+  for (const banned of ['memory_update', 'cron_create', 'email_send', 'skills_note']) assert.ok(!childTools.includes(banned), banned);
   assert.doesNotMatch(childRequests[0]!.messages[0]!.content, /study-plan/, 'children do not get the skills index');
 
   const toolResult = provider.requests.at(-1)!.messages.at(-1)!;

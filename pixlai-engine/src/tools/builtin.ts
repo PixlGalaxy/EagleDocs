@@ -1,4 +1,5 @@
 import { defineTool, type Tool } from './tool.js';
+import { memoryUpdate } from './memory.js';
 
 /** Wall clock in the user's timezone: models do not know what day it is. */
 export const timeNow = defineTool<{ timezone?: string }>({
@@ -23,58 +24,6 @@ export const timeNow = defineTool<{ timezone?: string }>({
   },
 });
 
-export const memoryAdd = defineTool<{ content: string }>({
-  name: 'memory_add',
-  description:
-    'Save a durable fact about the user for future conversations (preferences, goals, recurring context). ' +
-    'One fact per call, written in third person. Do not save secrets, passwords or one-off details.',
-  parameters: {
-    type: 'object',
-    properties: { content: { type: 'string', description: 'The fact, max 500 characters' } },
-    required: ['content'],
-  },
-  sideEffect: 'none',
-  mainAgentOnly: true,
-  async run(args, ctx) {
-    const content = String(args.content ?? '').trim();
-    if (!content) throw new Error('content is empty');
-    if (content.length > 500) throw new Error('content is longer than 500 characters');
-    const item = await ctx.memory.add(ctx.user.id, content, 'agent');
-    return { saved: true, id: item.id };
-  },
-});
-
-export const memorySearch = defineTool<{ query: string }>({
-  name: 'memory_search',
-  description: 'Search what you remember about the user.',
-  parameters: {
-    type: 'object',
-    properties: { query: { type: 'string' } },
-    required: ['query'],
-  },
-  sideEffect: 'none',
-  parallelSafe: true,
-  async run(args, ctx) {
-    const items = await ctx.memory.search(ctx.user.id, String(args.query ?? ''), 10);
-    return items.map((item) => ({ id: item.id, content: item.content, saved_at: item.createdAt }));
-  },
-});
-
-export const memoryRemove = defineTool<{ id: string }>({
-  name: 'memory_remove',
-  description: 'Forget a saved fact that is wrong or outdated (use memory_search to find its id).',
-  parameters: {
-    type: 'object',
-    properties: { id: { type: 'string' } },
-    required: ['id'],
-  },
-  sideEffect: 'none',
-  mainAgentOnly: true,
-  async run(args, ctx) {
-    return { removed: await ctx.memory.remove(ctx.user.id, String(args.id ?? '')) };
-  },
-});
-
 export const skillsLoad = defineTool<{ slug: string }>({
   name: 'skills_load',
   description: 'Load the full instructions of one of your skills before doing a task it covers.',
@@ -88,7 +37,8 @@ export const skillsLoad = defineTool<{ slug: string }>({
   async run(args, ctx) {
     const skill = await ctx.skills.load(ctx.user.id, String(args.slug ?? ''));
     if (!skill) throw new Error(`No skill "${String(args.slug)}" is available`);
-    return { name: skill.name, instructions: skill.body, lessons_learned: skill.notes };
+    // Lessons first: they are short, personal, and must survive any cut of a long skill.
+    return { name: skill.name, lessons_learned: skill.notes, instructions: skill.body };
   },
 });
 
@@ -112,4 +62,4 @@ export const skillsNote = defineTool<{ slug: string; note: string }>({
   },
 });
 
-export const BUILTIN_TOOLS: Tool[] = [timeNow, memoryAdd, memorySearch, memoryRemove, skillsLoad, skillsNote];
+export const BUILTIN_TOOLS: Tool[] = [timeNow, memoryUpdate, skillsLoad, skillsNote];

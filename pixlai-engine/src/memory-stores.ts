@@ -4,7 +4,8 @@ import type {
   FileEntry,
   StorageArea,
   WorkspacePort,
-  MemoryItem,
+  MemoryDoc,
+  MemoryDocs,
   MemoryStore,
   PendingSteer,
   RunStore,
@@ -80,30 +81,14 @@ export class InMemoryRunStore implements RunStore {
 }
 
 export class InMemoryMemoryStore implements MemoryStore {
-  private items = new Map<string, MemoryItem[]>();
+  private docs = new Map<string, MemoryDocs>();
 
-  async add(userId: string, content: string): Promise<MemoryItem> {
-    const item = { id: randomUUID().slice(0, 8), content, createdAt: new Date().toISOString() };
-    this.items.set(userId, [...(this.items.get(userId) ?? []), item]);
-    return item;
+  async read(userId: string): Promise<MemoryDocs> {
+    return { ...(this.docs.get(userId) ?? { soul: '', user: '', notes: '' }) };
   }
 
-  async remove(userId: string, id: string): Promise<boolean> {
-    const list = this.items.get(userId) ?? [];
-    const kept = list.filter((item) => item.id !== id);
-    this.items.set(userId, kept);
-    return kept.length !== list.length;
-  }
-
-  async search(userId: string, query: string, limit: number): Promise<MemoryItem[]> {
-    const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-    return (this.items.get(userId) ?? [])
-      .filter((item) => words.some((word) => item.content.toLowerCase().includes(word)))
-      .slice(0, limit);
-  }
-
-  async forPrompt(userId: string, _latest: string, limit: number): Promise<MemoryItem[]> {
-    return (this.items.get(userId) ?? []).slice(-limit);
+  async write(userId: string, doc: MemoryDoc, content: string): Promise<void> {
+    this.docs.set(userId, { ...(await this.read(userId)), [doc]: content });
   }
 }
 
