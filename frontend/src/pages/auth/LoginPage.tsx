@@ -70,6 +70,7 @@ const LoginPage = () => {
               id={id}
               aria-describedby={describedBy}
               autoComplete="username"
+              maxLength={254}
               value={identity}
               onChange={(e) => setIdentity(e.target.value)}
               className={authInput}

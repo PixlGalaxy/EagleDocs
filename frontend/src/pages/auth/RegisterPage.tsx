@@ -93,12 +93,12 @@ const RegisterPage = () => {
           )}
 
           <Field label={t('auth.displayName')} error={show('displayName')}>
-            {(id, d) => <input id={id} aria-describedby={d} aria-invalid={!!show('displayName')} autoComplete="name" value={form.displayName} onChange={set('displayName')} className={authInput} />}
+            {(id, d) => <input id={id} aria-describedby={d} aria-invalid={!!show('displayName')} autoComplete="name" maxLength={80} value={form.displayName} onChange={set('displayName')} className={authInput} />}
           </Field>
 
           <Field label={t('auth.username')} hint={t('auth.usernameHint')} error={show('username')}>
             {(id, d) => (
-              <input id={id} aria-describedby={d} aria-invalid={!!show('username')} autoComplete="username" spellCheck={false} value={form.username} onChange={set('username')} className={authInput} />
+              <input id={id} aria-describedby={d} aria-invalid={!!show('username')} autoComplete="username" spellCheck={false} maxLength={32} value={form.username} onChange={set('username')} className={authInput} />
             )}
           </Field>
 
@@ -108,7 +108,7 @@ const RegisterPage = () => {
             error={show('email')}
           >
             {(id, d) => (
-              <input id={id} type="email" aria-describedby={d} aria-invalid={!!show('email')} autoComplete="email" spellCheck={false} value={form.email} onChange={set('email')} className={authInput} />
+              <input id={id} type="email" aria-describedby={d} aria-invalid={!!show('email')} autoComplete="email" spellCheck={false} maxLength={254} value={form.email} onChange={set('email')} className={authInput} />
             )}
           </Field>
 

@@ -45,7 +45,8 @@ export const PasswordInput = (props: InputHTMLAttributes<HTMLInputElement>) => {
   const [show, setShow] = useState(false);
   return (
     <div className="relative">
-      <input {...props} type={show ? 'text' : 'password'} className={`${input} py-2.5 pr-11`} />
+      {/* The server refuses longer passwords (256): stop typing there. */}
+      <input maxLength={256} {...props} type={show ? 'text' : 'password'} className={`${input} py-2.5 pr-11`} />
       <button
         type="button"
         onClick={() => setShow((s) => !s)}

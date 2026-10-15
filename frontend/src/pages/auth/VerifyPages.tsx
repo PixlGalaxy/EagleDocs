@@ -88,7 +88,7 @@ export const CheckEmailPage = () => {
 
         {!params.get('email') && (
           <Field label={t('auth.schoolEmail')}>
-            {(id) => <input id={id} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={authInput} required />}
+            {(id) => <input id={id} type="email" autoComplete="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} className={authInput} required />}
           </Field>
         )}
 
@@ -212,7 +212,7 @@ export const ForgotPasswordPage = () => {
             </Notice>
           )}
           <Field label={t('auth.schoolEmail')}>
-            {(id) => <input id={id} type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className={authInput} required />}
+            {(id) => <input id={id} type="email" autoComplete="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} className={authInput} required />}
           </Field>
           <button type="submit" disabled={busy || !email} className={authSubmit}>
             {busy && <Loader2 size={18} className="animate-spin" aria-hidden="true" />}

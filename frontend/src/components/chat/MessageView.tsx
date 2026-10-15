@@ -26,7 +26,14 @@ interface Props {
   attachments?: MessageAttachment[];
 }
 
-/** Answers and reports share it: links always open in a new tab. */
+/** Only the student's own files load as pictures by themselves. */
+const isOwnFile = (src: unknown) => typeof src === 'string' && src.startsWith('/api/files/');
+
+/**
+ * Answers and reports share it: links always open in a new tab. Outside
+ * pictures become links: an image loads without a click, so injected text
+ * could otherwise send data away in its address.
+ */
 export const MarkdownBody = memo(({ text }: { text: string }) => (
   <Markdown
     remarkPlugins={[remarkGfm]}
@@ -36,6 +43,14 @@ export const MarkdownBody = memo(({ text }: { text: string }) => (
           {children}
         </a>
       ),
+      img: ({ src, alt }) =>
+        isOwnFile(src) ? (
+          <img src={src as string} alt={alt ?? ''} loading="lazy" />
+        ) : (
+          <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer">
+            {alt || 'image'}
+          </a>
+        ),
     }}
   >
     {text}
