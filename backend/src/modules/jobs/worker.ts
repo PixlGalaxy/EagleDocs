@@ -15,11 +15,15 @@ import type { DiskWorkspace } from '../../engine/workspace.js';
 import type { AdminEmbeddings } from '../../engine/documents.js';
 import type { SchoolService } from '../school/school.service.js';
 import type { PushService } from '../push/push.service.js';
+import type { BuiltinSkills } from '../skills/builtin.js';
+import type { CourseFolders } from '../canvas/course-folders.js';
 
 const POLL_MS = 2000;
 const HEARTBEAT_MS = 15_000;
 /** Queued jobs prefer the replica named in `preferred_node` for this long (sandbox affinity, phase 4). */
 const AFFINITY_SECONDS = 5;
+/** Jobs one student runs at once; more wait in the queue (per-tier limits come with phase 6). */
+const MAX_RUNNING_PER_USER = 2;
 /** Background helper jobs per chat at once. */
 const MAX_BACKGROUND_PER_CHAT = 2;
 
@@ -83,6 +87,8 @@ export interface WorkerDeps {
   embeddings: AdminEmbeddings;
   school: SchoolService;
   push: PushService;
+  builtinSkills: BuiltinSkills;
+  courseFolders: CourseFolders;
   t: Translate;
   concurrency: number;
 }
@@ -143,7 +149,7 @@ export class JobWorker {
     }
   }
 
-  /** One queued job, skipping chats that already have a job in progress (answers stay in order). */
+  /** One queued job, skipping chats that already have a job in progress (answers stay in order) and students at their limit. */
   private claim(): Promise<JobRow | undefined> {
     return maybe<JobRow>(
       this.deps.db,
@@ -154,9 +160,11 @@ export class JobWorker {
            AND (q.preferred_node IS NULL OR q.preferred_node = $1 OR q.queued_at < now() - make_interval(secs => $2))
            AND NOT EXISTS (SELECT 1 FROM jobs a WHERE a.chat_id = q.chat_id AND a.id <> q.id
                            AND a.status IN ('running', 'waiting_approval', 'waiting_mfa'))
+           AND (SELECT COUNT(*) FROM jobs u WHERE u.user_id = q.user_id
+                AND u.status IN ('running', 'waiting_approval', 'waiting_mfa')) < $3
          ORDER BY q.queued_at FOR UPDATE SKIP LOCKED LIMIT 1
        ) RETURNING id, user_id, chat_id, kind, payload, cancel_requested`,
-      [this.deps.config.NODE_ID, AFFINITY_SECONDS],
+      [this.deps.config.NODE_ID, AFFINITY_SECONDS, MAX_RUNNING_PER_USER],
     );
   }
 
@@ -256,7 +264,7 @@ export class JobWorker {
         ],
       }, {
         host: {
-          canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace },
+          canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace, folders: this.deps.courseFolders },
           school: { service: this.deps.school, userId: user.id, workspace: this.deps.workspace },
         },
       });
@@ -264,6 +272,9 @@ export class JobWorker {
       await this.deps.embeddings.refresh();
       // The agent can match each helper to a model the user has (fast for lookups, smart for analysis).
       const helperModels = await catalog.helperModels(user.id, resolution.model.ref);
+      // Email or Degree Works tools only where the institution offers them and has not switched them off.
+      const hidden = await this.deps.builtinSkills.hiddenTools(user.id);
+      const toolFilter = (tool: { name: string }) => !hidden(tool.name);
 
       if (job.kind === 'delegate') {
         const { reports, usage } = await agent.runSubagents({
@@ -271,6 +282,7 @@ export class JobWorker {
           model: resolution.model,
           tasks,
           helperModels,
+          toolFilter,
           signal: controller.signal,
           sink: {
             emit: (event: EngineEvent) => {
@@ -301,6 +313,7 @@ export class JobWorker {
         signal: controller.signal,
         kind: job.kind === 'scheduled' ? 'scheduled' : 'chat',
         helperModels,
+        toolFilter,
         ...(job.kind === 'chat' && { startBackground: (list: DelegateTask[]) => this.queueBackground(job, chatId, user.id, list) }),
         sink: {
           emit: (event: EngineEvent) => {

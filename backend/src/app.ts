@@ -38,6 +38,8 @@ import type { SchoolService } from './modules/school/school.service.js';
 import type { AppRequest } from './types/index.js';
 import { createPushRoutes, latestBroadcast } from './modules/push/push.routes.js';
 import type { PushService } from './modules/push/push.service.js';
+import type { BuiltinSkills } from './modules/skills/builtin.js';
+import type { CourseFolders } from './modules/canvas/course-folders.js';
 
 export interface AppDeps {
   db: Db;
@@ -61,10 +63,12 @@ export interface AppDeps {
   sandbox: SandboxTools | undefined;
   school: SchoolService;
   push: PushService;
+  builtinSkills: BuiltinSkills;
+  courseFolders: CourseFolders;
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseFolders } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -112,7 +116,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/jobs', jobsRouter);
   app.use('/api/approvals', approvalsRouter);
   const { models, conns } = createModelRoutes(db, catalog, connections, school);
-  const { canvasRouter, connectionRouter } = createCanvasRoutes(canvas, connections);
+  const { canvasRouter, connectionRouter } = createCanvasRoutes(canvas, connections, courseFolders);
   app.use('/api/models', models);
   app.use('/api/canvas', canvasRouter);
   const { files, rags } = createFilesRoutes(workspace);
@@ -121,7 +125,7 @@ export function createApp(deps: AppDeps): express.Application {
   // Canvas/SSO/Degree Works cards first, then the generic connection routes.
   app.use('/api/connections', connectionRouter);
   app.use('/api/connections', conns);
-  const agentData = createAgentDataRoutes(db);
+  const agentData = createAgentDataRoutes(db, builtinSkills);
   app.use('/api/memories', agentData.memories);
   app.use('/api/schedules', agentData.schedules);
   app.use('/api/skills', agentData.skills);
@@ -135,7 +139,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/admin', createSandboxAdminRoutes({ db, bus, config, settings, sandboxes, workspace }));
   app.use(
     '/api/admin',
-    createAdminRoutes({ db, config, settings, mail, institutions, users: new UsersAdminService(db, institutions), t }),
+    createAdminRoutes({ db, config, settings, mail, institutions, users: new UsersAdminService(db, institutions), t, builtinSkills }),
   );
 
   app.use(createNotFoundHandler(t));

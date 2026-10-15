@@ -9,6 +9,7 @@ import type { DiskWorkspace } from './workspace.js';
 import type { SandboxTools } from './sandbox.js';
 import { SCHOOL_TOOLS } from './tools/school.js';
 import { eagledocsBrowserPolicy } from './browser-policy.js';
+import type { BuiltinSkills } from '../modules/skills/builtin.js';
 import { SafeFetch, WebSearch } from './web.js';
 
 /** Who the agent is. The engine adds the user, memory, skills and its rules after this. */
@@ -17,6 +18,8 @@ You help with classes, deadlines, study plans, degree progress and the student's
 Be accurate and concrete. When you are not sure, say so instead of guessing; never invent grades, due dates or course details.
 Prefer short answers with clear next steps. Use Markdown lists and tables when they make things easier to scan.
 Never write or submit graded work for the student as if it were theirs: explain, guide, review and give feedback instead.
+Course folders: each term has a folder like \"Fall 2026/<course>/\" kept in sync from Canvas every few hours: Assignments.md (every assignment with due date and status), Assignments/ (one file per assignment with its instructions) and Announcements.md. Read them first for questions about a course's work, save the student's work for a course in its folder, and run canvas_sync_folders when they need it fresh.
+
 Course material: to study or answer from a course's content, bring it into TEMP (canvas_files + canvas_download, and canvas_save_pages when the material lives in pages), index it with rag_add into one RAG per course, then answer with rag_ask or rag_search and cite the sources. The RAG keeps the text, so the downloads can expire in TEMP; keep in the workspace only what the student will want later.
 Numbers matter (grades, accounting, finance): compute them with calc or code_run instead of in your head, check that totals add up, and in spreadsheets use real numbers or formulas so the student can follow and change them.`;
 
@@ -30,14 +33,14 @@ const engineLogger: Logger = {
 export async function setupEngine(
   db: Db,
   bus: Bus,
-  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandbox: SandboxTools | undefined; searxngUrl: string | undefined },
+  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandbox: SandboxTools | undefined; searxngUrl: string | undefined; builtinSkills: BuiltinSkills },
 ): Promise<Engine> {
   // Code, browser and school accounts exist only when Docker and the sandbox image are there.
   const sandbox = host.sandbox;
   const runs = new PgRunStore(db, bus);
   await runs.start();
   return createEngine({
-    stores: { runs, memory: new PgMemoryStore(db), skills: new PgSkillStore(db), schedules: new PgScheduleStore(db) },
+    stores: { runs, memory: new PgMemoryStore(db), skills: new PgSkillStore(db, host.builtinSkills), schedules: new PgScheduleStore(db) },
     basePrompt: EAGLEDOCS_PROMPT,
     tools: [...CANVAS_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
     workspace: host.workspace,

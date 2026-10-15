@@ -1,6 +1,7 @@
 import { defineTool, type Tool, type ToolContext } from 'pixlai-engine';
 import { AppError } from '../../errors.js';
 import type { CanvasService } from '../../modules/canvas/canvas.service.js';
+import type { CourseFolders } from '../../modules/canvas/course-folders.js';
 import type { DiskWorkspace } from '../workspace.js';
 
 /** What the worker puts in `host.canvas` for each run. */
@@ -8,6 +9,7 @@ export interface CanvasHost {
   service: CanvasService;
   userId: string;
   workspace: DiskWorkspace;
+  folders: CourseFolders;
 }
 
 function canvasOf(ctx: ToolContext): CanvasHost {
@@ -279,7 +281,24 @@ export const canvasSavePages = defineTool<{ course_id: number; folder?: string; 
   },
 });
 
+export const canvasSyncFolders = defineTool({
+  name: 'canvas_sync_folders',
+  description:
+    "Refresh the student's \"<Term>/<Course>/\" folders from Canvas now (Assignments.md, one file per assignment with its " +
+    'instructions, Announcements.md). They also refresh by themselves every few hours; use this when the student asks or ' +
+    'right after they say something changed in Canvas.',
+  parameters: { type: 'object', properties: {} },
+  sideEffect: 'none',
+  timeoutMs: 3 * 60_000,
+  async run(_args, ctx) {
+    const { folders, service, userId } = canvasOf(ctx);
+    service.forget(userId);
+    return call(() => folders.sync(userId));
+  },
+});
+
 export const CANVAS_TOOLS: Tool[] = [
+  canvasSyncFolders,
   canvasCourses,
   canvasUpcoming,
   canvasCourse,

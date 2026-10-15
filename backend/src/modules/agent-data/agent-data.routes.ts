@@ -1,11 +1,13 @@
 import { Router } from 'express';
-import { planSchedule } from 'pixlai-engine';
+import { DEFAULT_LIMITS, planSchedule, type MemoryDoc } from 'pixlai-engine';
 import type { Db } from '../../db/pool.js';
 import { many, maybe } from '../../db/pool.js';
 import { badRequest, notFound, withDetail } from '../../errors.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
+import type { BuiltinSkills } from '../skills/builtin.js';
 import { requireAuth } from '../auth/session.middleware.js';
+import { PgMemoryStore, writeAgentDoc } from '../../engine/stores.js';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 const id = (req: AppRequest) => {
@@ -15,7 +17,7 @@ const id = (req: AppRequest) => {
 };
 
 /** Settings -> Memory, Schedules and Skills: what the agent keeps per user, visible and editable. */
-export function createAgentDataRoutes(db: Db) {
+export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills) {
   const memories = Router();
   const schedules = Router();
   const skills = Router();
@@ -23,28 +25,21 @@ export function createAgentDataRoutes(db: Db) {
 
   // ---------------------------------------------------------------- memory
 
+  // SOUL.md, USER.md and MEMORY.md: the student reads and edits what the agent keeps (it can only write them while memory is on).
+  const docLimits = { soul: DEFAULT_LIMITS.soulChars, user: DEFAULT_LIMITS.userChars, notes: DEFAULT_LIMITS.notesChars };
   memories.get('/', async (req: AppRequest, res) => {
-    const rows = await many(db, 'SELECT id, content, source, created_at FROM memories WHERE user_id = $1 ORDER BY created_at DESC', [req.user!.id]);
+    const docs = await new PgMemoryStore(db).read(req.user!.id);
     const user = await maybe<{ memory_paused: boolean }>(db, 'SELECT memory_paused FROM users WHERE id = $1', [req.user!.id]);
-    res.json({ memories: rows, paused: user?.memory_paused ?? false });
+    res.json({ docs, limits: docLimits, paused: user?.memory_paused ?? false });
   });
 
-  memories.patch('/:id', async (req: AppRequest, res) => {
+  memories.put('/docs/:doc', async (req: AppRequest, res) => {
+    const doc = routeParam(req.params.doc) as MemoryDoc;
+    if (!(doc in docLimits)) throw notFound();
     const content = (req.body as { content?: unknown })?.content;
-    if (typeof content !== 'string' || !content.trim() || content.length > 500) throw badRequest('error.invalidInput');
-    const row = await maybe(
-      db,
-      'UPDATE memories SET content = $3, source = $4, updated_at = now() WHERE id = $1 AND user_id = $2 RETURNING id, content, source, created_at',
-      [id(req), req.user!.id, content.trim(), 'user'],
-    );
-    if (!row) throw notFound();
-    res.json(row);
-  });
-
-  memories.delete('/:id', async (req: AppRequest, res) => {
-    const result = await db.query('DELETE FROM memories WHERE id = $1 AND user_id = $2', [id(req), req.user!.id]);
-    if (result.rowCount === 0) throw notFound();
-    res.status(204).end();
+    if (typeof content !== 'string' || content.length > docLimits[doc]) throw badRequest('error.invalidInput');
+    await writeAgentDoc(db, req.user!.id, doc, content.replace(/\r\n/g, '\n').trim());
+    res.json({ docs: await new PgMemoryStore(db).read(req.user!.id), limits: docLimits });
   });
 
   memories.put('/paused', async (req: AppRequest, res) => {
@@ -119,7 +114,7 @@ export function createAgentDataRoutes(db: Db) {
     res.status(204).end();
   });
 
-  // ---------------------------------------------------------------- personal skills (built-ins arrive in phase 5)
+  // ---------------------------------------------------------------- skills: built-in (offered by the institution) and personal
 
   const skillView = async (userId: string) => {
     const rows = await many<{ slug: string; name: string; description: string; body_md: string; enabled: boolean }>(
@@ -132,11 +127,11 @@ export function createAgentDataRoutes(db: Db) {
       'SELECT id, skill_slug, note, created_at FROM skill_notes WHERE user_id = $1 ORDER BY created_at DESC',
       [userId],
     );
-    return rows.map((s) => ({
-      ...s,
-      builtin: false,
-      notes: notes.filter((n) => n.skill_slug === s.slug).map(({ id: noteId, note, created_at }) => ({ id: noteId, note, created_at })),
-    }));
+    const notesOf = (slug: string) => notes.filter((n) => n.skill_slug === slug).map(({ id: noteId, note, created_at }) => ({ id: noteId, note, created_at }));
+    const builtin = (await builtins.forUser(userId))
+      .filter((s) => s.offered)
+      .map((s) => ({ slug: s.slug, name: s.name, description: s.description, body_md: s.body, enabled: s.enabled, builtin: true, notes: notesOf(s.slug) }));
+    return [...builtin, ...rows.filter((s) => !builtins.get(s.slug)).map((s) => ({ ...s, builtin: false, notes: notesOf(s.slug) }))];
   };
 
   const parseSkill = (body: Record<string, unknown>) => {
@@ -153,7 +148,7 @@ export function createAgentDataRoutes(db: Db) {
   skills.post('/', async (req: AppRequest, res) => {
     const input = parseSkill((req.body ?? {}) as Record<string, unknown>);
     let slug = slugify(input.name);
-    const taken = await maybe(db, 'SELECT 1 FROM user_skills WHERE user_id = $1 AND slug = $2', [req.user!.id, slug]);
+    const taken = builtins.get(slug) || (await maybe(db, 'SELECT 1 FROM user_skills WHERE user_id = $1 AND slug = $2', [req.user!.id, slug]));
     if (taken) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
     await db.query('INSERT INTO user_skills (user_id, slug, name, description, body_md) VALUES ($1, $2, $3, $4, $5)', [
       req.user!.id,
@@ -182,6 +177,17 @@ export function createAgentDataRoutes(db: Db) {
   skills.put('/:slug/enabled', async (req: AppRequest, res) => {
     const slug = routeParam(req.params.slug);
     const enabled = (req.body as { enabled?: unknown })?.enabled === true;
+    if (builtins.get(slug)) {
+      await db.query(
+        `INSERT INTO user_skill_prefs (user_id, skill_slug, enabled) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, skill_slug) DO UPDATE SET enabled = $3`,
+        [req.user!.id, slug, enabled],
+      );
+      const view = (await skillView(req.user!.id)).find((s) => s.slug === slug);
+      if (!view) throw notFound();
+      res.json(view);
+      return;
+    }
     const result = await db.query('UPDATE user_skills SET enabled = $3 WHERE user_id = $1 AND slug = $2', [req.user!.id, slug, enabled]);
     if (result.rowCount === 0) throw notFound();
     res.json((await skillView(req.user!.id)).find((s) => s.slug === slug));

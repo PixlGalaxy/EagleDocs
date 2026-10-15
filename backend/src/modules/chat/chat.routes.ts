@@ -205,11 +205,33 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService) {
     res.json(
       await many(
         db,
-        `SELECT j.id, c.id AS chat_id, c.title AS chat_title, j.kind, j.status, j.started_at, j.finished_at, j.error
+        `SELECT j.id, c.id AS chat_id, c.title AS chat_title, j.kind, j.status, j.queued_at, j.started_at, j.finished_at, j.error
          FROM jobs j LEFT JOIN chats c ON c.id = COALESCE(j.chat_id, (j.payload->>'chat_id')::uuid) WHERE j.user_id = $1 ORDER BY j.queued_at DESC LIMIT 50`,
         [req.user!.id],
       ),
     );
+  });
+
+  /** Runs a stopped turn again (its replica died or it failed) without the student retyping it. */
+  jobsRouter.post('/:id/retry', async (req: AppRequest, res) => {
+    const job = await ownJob(req);
+    const row = await maybe<{ kind: string; payload: Record<string, unknown> }>(db, 'SELECT kind, payload FROM jobs WHERE id = $1', [job.id]);
+    if (!job.chat_id || !row || !['chat', 'scheduled'].includes(row.kind) || !['interrupted', 'failed'].includes(job.status)) {
+      throw conflict('chat.notRetryable');
+    }
+    const chat = await chats.get(req.user!.id, job.chat_id);
+    if (chat.active_job_id) throw conflict('chat.busy');
+    const jobId = await withTx(db, async (client) => {
+      // Hidden from the chat, read by the model: the history must end with something to answer.
+      await chats.addUserMessage(client, job.chat_id!, '[The previous attempt stopped before it finished. Continue the task where it left off.]', { internal: true, retry_of: job.id });
+      const { rows } = await client.query<{ id: string }>(
+        "INSERT INTO jobs (user_id, chat_id, kind, payload) VALUES ($1, $2, 'chat', $3) RETURNING id",
+        [req.user!.id, job.chat_id, { model_ref: row.payload.model_ref ?? null }],
+      );
+      return rows[0]!.id;
+    });
+    await bus.publish('job_queued', { jobId });
+    res.status(201).json({ job_id: jobId, chat_id: job.chat_id });
   });
 
   jobsRouter.post('/:id/cancel', async (req: AppRequest, res) => {

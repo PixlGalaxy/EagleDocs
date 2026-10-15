@@ -107,6 +107,26 @@ check('unknown course is 404', r.status === 404);
 r = await user.req('POST', `/connections/${canvasConnId}/test`);
 check('test connection', r.status === 200 && r.json.status === 'ok');
 
+// ---------------------------------------------------------------- term and course folders in the student's files
+r = await user.req('POST', '/canvas/folders/sync');
+check('course folders sync for the current term', r.json?.term === 'Fall 2026' && r.json.courses?.length === 2, JSON.stringify(r.json)?.slice(0, 200));
+r = await user.req('GET', `/files?path=${encodeURIComponent('Fall 2026')}`);
+const courseDirs = (r.json?.entries ?? []).map((e) => e.name).sort();
+check('one folder per current course (no organization pages)', courseDirs.join(',') === 'ACG 2021 Financial Accounting,MAC 2311 Calculus I', courseDirs.join(','));
+const acg = 'Fall 2026/ACG 2021 Financial Accounting';
+r = await fetch(`${A}/files/download?path=${encodeURIComponent(acg + '/Assignments.md')}`, { headers: user.headers('GET') });
+let md = await r.text();
+check('Assignments.md lists every assignment with status', md.includes('| Due | Assignment | Points | Status |') && /Chapter 4 Homework/.test(md) && md.split('](<Assignments/').length - 1 === 110, md.slice(0, 160));
+r = await user.req('GET', `/files?path=${encodeURIComponent(acg + '/Assignments')}`);
+const hwFile = (r.json?.entries ?? []).find((e) => /Chapter 4 Homework/.test(e.name));
+r = await fetch(`${A}/files/download?path=${encodeURIComponent(hwFile?.path ?? '')}`, { headers: user.headers('GET') });
+md = await r.text();
+check('each assignment has its own file with the instructions', /Solve problems 1-10 & show work/.test(md) && /- Points: 20/.test(md), md.slice(0, 200));
+r = await user.req('POST', '/canvas/folders/sync');
+check('nothing is rewritten when Canvas did not change', r.json?.written === 0, String(r.json?.written));
+r = await user.req('GET', '/canvas/folders');
+check('the last sync is shown', r.json?.term === 'Fall 2026' && r.json.courses === 2 && r.json.synced_at, JSON.stringify(r.json));
+
 // ---------------------------------------------------------------- the agent uses Canvas
 r = await admin.req('POST', '/admin/models/endpoints', { kind: 'openai_compat', name: 'Fake GPU', base_url: LLM });
 const ep = r.json;

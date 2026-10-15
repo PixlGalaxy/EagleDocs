@@ -1,6 +1,7 @@
-import type { ApprovalDecision, MemoryItem, MemoryStore, PendingSteer, RunStore, Schedule, ScheduleStore, SkillStore, SkillSummary } from 'pixlai-engine';
+import type { ApprovalDecision, MemoryDoc, MemoryDocs, MemoryStore, PendingSteer, RunStore, Schedule, ScheduleStore, SkillStore, SkillSummary } from 'pixlai-engine';
 import type { Bus } from '../bus/bus.js';
 import type { Db } from '../db/pool.js';
+import type { BuiltinSkills } from '../modules/skills/builtin.js';
 import { many, maybe } from '../db/pool.js';
 
 /**
@@ -91,71 +92,61 @@ export class PgRunStore implements RunStore {
   }
 }
 
-/** Facts the agent saved about the user. Search uses Postgres full-text search with a substring fallback. */
+/** SOUL.md, USER.md and MEMORY.md per student (agent_docs). The agent cannot write while the student paused memory. */
 export class PgMemoryStore implements MemoryStore {
   constructor(private db: Db) {}
 
-  async add(userId: string, content: string, source: 'agent' | 'user'): Promise<MemoryItem> {
+  async read(userId: string): Promise<MemoryDocs> {
+    const rows = await many<{ doc: MemoryDoc; content: string }>(this.db, 'SELECT doc, content FROM agent_docs WHERE user_id = $1', [userId]);
+    const docs: MemoryDocs = { soul: '', user: '', notes: '' };
+    for (const row of rows) docs[row.doc] = row.content;
+    return docs;
+  }
+
+  async write(userId: string, doc: MemoryDoc, content: string): Promise<void> {
     const paused = await maybe<{ memory_paused: boolean }>(this.db, 'SELECT memory_paused FROM users WHERE id = $1', [userId]);
-    if (paused?.memory_paused) throw new Error('The user turned off saving memories. Do not try again.');
-    const count = await maybe<{ n: number }>(this.db, 'SELECT COUNT(*) AS n FROM memories WHERE user_id = $1', [userId]);
-    if ((count?.n ?? 0) >= 200) throw new Error('Memory is full (200 facts). Remove outdated facts first.');
-    const { rows } = await this.db.query<{ id: string; content: string; created_at: Date }>(
-      'INSERT INTO memories (user_id, content, source) VALUES ($1, $2, $3) RETURNING id, content, created_at',
-      [userId, content, source],
-    );
-    return { id: rows[0]!.id, content: rows[0]!.content, createdAt: rows[0]!.created_at.toISOString() };
-  }
-
-  async remove(userId: string, id: string): Promise<boolean> {
-    if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
-    const result = await this.db.query('DELETE FROM memories WHERE id = $1 AND user_id = $2', [id, userId]);
-    return (result.rowCount ?? 0) > 0;
-  }
-
-  async search(userId: string, query: string, limit: number): Promise<MemoryItem[]> {
-    const rows = await many<{ id: string; content: string; created_at: Date }>(
-      this.db,
-      `SELECT id, content, created_at FROM memories
-       WHERE user_id = $1 AND (tsv @@ plainto_tsquery('simple', $2) OR content ILIKE '%' || $2 || '%')
-       ORDER BY ts_rank(tsv, plainto_tsquery('simple', $2)) DESC, created_at DESC LIMIT $3`,
-      [userId, query, limit],
-    );
-    return rows.map((r) => ({ id: r.id, content: r.content, createdAt: r.created_at.toISOString() }));
-  }
-
-  /** The most recent facts plus the ones that match the new message. */
-  async forPrompt(userId: string, latest: string, limit: number): Promise<MemoryItem[]> {
-    const recent = await many<{ id: string; content: string; created_at: Date }>(
-      this.db,
-      'SELECT id, content, created_at FROM memories WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
-      [userId, limit],
-    );
-    const related = latest.trim() ? await this.search(userId, latest.slice(0, 500), 5) : [];
-    const seen = new Set<string>();
-    const out: MemoryItem[] = [];
-    for (const item of [...related, ...recent.map((r) => ({ id: r.id, content: r.content, createdAt: r.created_at.toISOString() }))]) {
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      out.push(item);
-    }
-    return out.slice(0, limit);
+    if (paused?.memory_paused) throw new Error('The user turned memory off. Do not try again; tell them if it matters.');
+    await writeAgentDoc(this.db, userId, doc, content);
   }
 }
 
-/** Personal skills for now; built-in and institution skills join in phase 5. */
-export class PgSkillStore implements SkillStore {
-  constructor(private db: Db) {}
+export async function writeAgentDoc(db: Db, userId: string, doc: MemoryDoc, content: string): Promise<void> {
+  await db.query(
+    `INSERT INTO agent_docs (user_id, doc, content, updated_at) VALUES ($1, $2, $3, now())
+     ON CONFLICT (user_id, doc) DO UPDATE SET content = $3, updated_at = now()`,
+    [userId, doc, content],
+  );
+}
 
-  list(userId: string): Promise<SkillSummary[]> {
-    return many<SkillSummary>(
+/** Built-in skills the student's institution offers (placeholders filled for them), then their own. */
+export class PgSkillStore implements SkillStore {
+  constructor(
+    private db: Db,
+    private builtins: BuiltinSkills,
+  ) {}
+
+  async list(userId: string): Promise<SkillSummary[]> {
+    const own = await many<SkillSummary>(
       this.db,
       'SELECT slug, name, description FROM user_skills WHERE user_id = $1 AND enabled ORDER BY name',
       [userId],
     );
+    const builtin = (await this.builtins.available(userId)).map(({ slug, name, description }) => ({ slug, name, description }));
+    return [...builtin, ...own.filter((s) => !this.builtins.get(s.slug))];
   }
 
   async load(userId: string, slug: string) {
+    const notesOf = async () =>
+      (
+        await many<{ note: string }>(
+          this.db,
+          'SELECT note FROM skill_notes WHERE user_id = $1 AND skill_slug = $2 ORDER BY created_at DESC LIMIT 20',
+          [userId, slug],
+        )
+      ).map((n) => n.note);
+    const builtin = (await this.builtins.available(userId)).find((s) => s.slug === slug);
+    if (builtin) return { name: builtin.name, body: await this.builtins.render(userId, builtin), notes: await notesOf() };
+    if (this.builtins.get(slug)) return null; // Built-in but not offered to this student.
     const skill = await maybe<{ name: string; body_md: string }>(
       this.db,
       'SELECT name, body_md FROM user_skills WHERE user_id = $1 AND slug = $2 AND enabled',

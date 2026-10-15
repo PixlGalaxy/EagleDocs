@@ -333,6 +333,33 @@ export class CanvasService {
     };
   }
 
+  /** Everything the course folders need in two calls: assignments with their instructions, and recent announcements. */
+  async courseSnapshot(userId: string, courseId: number) {
+    return this.cached(userId, `snapshot:${courseId}`, async (client) => {
+      const [assignments, announcements] = await Promise.all([
+        client.assignments(courseId),
+        client.announcements([courseId], new Date(Date.now() - 30 * 86_400_000)).catch(() => []),
+      ]);
+      return {
+        assignments: assignments.map((a) => ({
+          id: a.id,
+          title: a.name ?? 'Assignment',
+          due_at: a.due_at ?? null,
+          points: a.points_possible ?? null,
+          submitted: Boolean(a.submission?.submitted_at),
+          missing: Boolean(a.submission?.missing),
+          score: a.submission?.score ?? null,
+          submission_types: (a.submission_types ?? []).filter((t) => t !== 'none'),
+          url: a.html_url ?? '',
+          description: stripHtml(a.description).slice(0, 20_000),
+        })),
+        announcements: announcements
+          .map((a) => ({ title: a.title ?? 'Announcement', posted_at: a.posted_at ?? null, html_url: a.html_url ?? '', text: stripHtml(a.message).slice(0, 4000) }))
+          .sort((a, b) => (b.posted_at ?? '').localeCompare(a.posted_at ?? '')),
+      };
+    });
+  }
+
   // ---------------------------------------------------------------- for the agent
 
   async announcements(userId: string, courseId: number | null, days: number) {

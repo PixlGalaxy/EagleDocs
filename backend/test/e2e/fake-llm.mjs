@@ -1,6 +1,6 @@
 // A fake OpenAI-compatible server for end-to-end tests. Behaviour by keyword in the last user message:
 //   [time]   -> calls time_now, then answers with what the tool said
-//   [memory] -> calls memory_add
+//   [memory] -> saves a line to USER.md with memory_update
 //   [canvas] -> calls canvas_briefing
 //   [pages]  -> calls canvas_save_pages for course 101
 //   [slow]   -> streams 40 words, 120 ms apart (for steer/cancel tests)
@@ -59,8 +59,19 @@ const server = http.createServer(async (req, res) => {
   if (lastUser.includes('[time]') && request.tools) return call('time_now', {});
   if (lastUser.includes('[canvas]') && request.tools) return call('canvas_briefing', { days: 7 });
   if (lastUser.includes('[pages]') && request.tools) return call('canvas_save_pages', { course_id: 101 });
-  if (lastUser.includes('[memory]') && request.tools) return call('memory_add', { content: 'Likes end-to-end tests' });
+  if (lastUser.includes('[memory]') && request.tools) return call('memory_update', { target: 'user', action: 'add', content: 'Likes end-to-end tests' });
   // Sandbox: [code] runs Python that prints and writes a file; [browse URL] opens it; [click REF] / [type REF] act on it.
+  // Skills: [skill slug] loads one, [note slug text] saves a learned note, [whatcanido] lists the tools and skills it was given.
+  const loadSkill = /\[skill ([a-z0-9-]+)\]/.exec(lastUser);
+  if (loadSkill && request.tools) return call('skills_load', { slug: loadSkill[1] });
+  const note = /\[note ([a-z0-9-]+) ([^\]]+)\]/.exec(lastUser);
+  if (note && request.tools) return call('skills_note', { slug: note[1], note: note[2] });
+  if (lastUser.includes('[whatcanido]')) {
+    const system = messages.find((m) => m.role === 'system')?.content ?? '';
+    const skills = (/## Skills\n[^\n]*\n([\s\S]*?)(\n\n|$)/.exec(system)?.[1] ?? '').split('\n').map((l) => l.replace(/^- ([a-z0-9-]+):.*/, '$1'));
+    text(JSON.stringify({ tools: (request.tools ?? []).map((t) => t.function?.name ?? t.name), skills }));
+    return done();
+  }
   // [py] <code>: runs the rest of the message as Python.
   const py = /\[py\]\s*([\s\S]+)$/.exec(lastUser);
   if (py && request.tools) return call('code_run', { language: 'python', code: py[1] });

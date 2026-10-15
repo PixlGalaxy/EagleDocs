@@ -65,6 +65,7 @@ const BACKEND_KEYS = [
   'chat.busy',
   'chat.notRunning',
   'chat.tooManySteers',
+  'chat.notRetryable',
   'models.keyRejected',
   'models.codexFailed',
   'models.codexOff',

@@ -6,9 +6,10 @@ import type { AppRequest } from '../../types/index.js';
 import { requireAuth } from '../auth/session.middleware.js';
 import { toView, type ConnectionsService } from '../connections/connections.service.js';
 import type { CanvasService } from './canvas.service.js';
+import type { CourseFolders } from './course-folders.js';
 
 /** The Courses page (read-only Canvas views) and the Canvas/SSO/Degree Works cards in Settings -> Connections. */
-export function createCanvasRoutes(canvas: CanvasService, connections: ConnectionsService) {
+export function createCanvasRoutes(canvas: CanvasService, connections: ConnectionsService, folders: CourseFolders) {
   const canvasRouter = Router();
   const connectionRouter = Router();
   canvasRouter.use(requireAuth);
@@ -35,6 +36,17 @@ export function createCanvasRoutes(canvas: CanvasService, connections: Connectio
     res.status(204).end();
   });
 
+  /** "<Term>/<Course>/" folders in the student's files: last sync, and sync now. */
+  canvasRouter.get('/folders', async (req: AppRequest, res) => {
+    res.json((await folders.status(req.user!.id)) ?? { synced_at: null, term: null, courses: 0, error: null });
+  });
+
+  canvasRouter.post('/folders/sync', async (req: AppRequest, res) => {
+    canvas.forget(req.user!.id);
+    const result = await folders.sync(req.user!.id);
+    res.json(result);
+  });
+
   connectionRouter.put('/canvas', async (req: AppRequest, res) => {
     const body = (req.body ?? {}) as { token?: unknown; base_url?: unknown };
     const token = typeof body.token === 'string' ? body.token.trim() : '';
@@ -51,6 +63,8 @@ export function createCanvasRoutes(canvas: CanvasService, connections: Connectio
     }
     const row = await canvas.saveToken(req.user!.id, token, baseUrl);
     logger.system.info(`"${req.user!.username}" connected Canvas`);
+    // First look at Canvas: lay out this term's course folders right away.
+    void folders.sync(req.user!.id).catch((err: Error) => logger.warn(`Course folders after connecting Canvas: ${err.message}`));
     res.json(toView(row));
   });
 

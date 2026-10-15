@@ -122,7 +122,13 @@ check('tool steps hidden from the chat', r.json.messages.length === 4, String(r.
 r = await user.req(A, 'POST', `/chats/${chatId}/messages`, { content: 'remember this [memory] explain', model_ref: 'auto' });
 await user.stream(A, chatId, r.json.job_id);
 r = await user.req(B, 'GET', '/memories');
-check('agent saved a memory', r.json.memories.some((m) => m.content === 'Likes end-to-end tests'));
+check('agent saved it to USER.md', r.json.docs?.user.includes('Likes end-to-end tests'), JSON.stringify(r.json?.docs));
+r = await user.req(B, 'PUT', '/memories/docs/soul', { content: 'You are Eagle, a calm study partner who answers in short steps.' });
+check('the student edits SOUL.md', r.status === 200 && /calm study partner/.test(r.json.docs.soul));
+r = await user.req(B, 'PUT', '/memories/docs/notes', { content: 'x'.repeat(r.json.limits.notes + 1) });
+check('files keep their size limit', r.status === 400);
+r = await user.req(B, 'PUT', '/memories/docs/password', { content: 'x' });
+check('only the three files exist', r.status === 404);
 
 // ---------------------------------------------------------------- steer mid-answer (job on one replica, steer sent to the other)
 r = await user.req(B, 'POST', `/chats/${chatId}/messages`, { content: 'write a lot [slow] explain', model_ref: 'auto' });
@@ -156,6 +162,19 @@ check('cancel stops the job', events.some((e) => e.type === 'status' && e.status
 check('partial answer kept', /word0/.test(events.at(-1).message?.content ?? ''), (events.at(-1).message?.content ?? '').slice(0, 40));
 r = await user.req(B, 'GET', '/jobs');
 check('job list shows cancelled', r.json[0].status === 'cancelled', r.json[0].status);
+
+// ---------------------------------------------------------------- at most 2 running jobs per student
+const limitJobs = [];
+for (let i = 0; i < 3; i++) {
+  const c = (await user.req(A, 'POST', '/chats', {})).json.id;
+  limitJobs.push((await user.req(A, 'POST', `/chats/${c}/messages`, { content: `limit ${i} [slow] explain`, model_ref: 'auto' })).json.job_id);
+}
+await sleep(3000);
+r = await user.req(A, 'GET', '/jobs');
+const limitStates = limitJobs.map((id) => r.json.find((j) => j.id === id)?.status);
+check('a third job waits while two run', limitStates.filter((st) => st === 'running').length === 2 && limitStates.includes('queued'), limitStates.join(','));
+for (const id of limitJobs) await user.req(A, 'POST', `/jobs/${id}/cancel`);
+await sleep(1500);
 
 // ---------------------------------------------------------------- delegation (waiting, then in the background)
 r = await user.req(A, 'POST', '/chats', {});
@@ -213,6 +232,17 @@ r = await user.req(B, 'POST', `/chats/${quotaChat}/messages`, { content: 'hola',
 events = await user.stream(A, quotaChat, r.json.job_id);
 check('quota reached gives a clear error', events.at(-1).type === 'error' && /today/i.test(events.at(-1).error), events.at(-1).error);
 await admin.req(A, 'PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await sleep(300);
+// The failed turn runs again from the Tasks panel, without retyping it.
+const failedJob = (await user.req(A, 'GET', '/jobs')).json.find((j) => j.chat_id === quotaChat && j.status === 'failed');
+r = await user.req(A, 'POST', `/jobs/${failedJob?.id}/retry`);
+check('a failed turn can run again', r.status === 201 && r.json.chat_id === quotaChat, JSON.stringify(r.json));
+events = await user.stream(B, quotaChat, r.json.job_id);
+check('the retry answers', events.at(-1).type === 'done', events.at(-1).error);
+r = await user.req(A, 'GET', `/chats/${quotaChat}`);
+check('the retry note stays hidden from the chat', !r.json.messages.some((m) => m.role === 'user' && /previous attempt/.test(m.content)), JSON.stringify(r.json.messages.map((m) => m.content.slice(0, 40))));
+r = await user.req(A, 'POST', `/jobs/${limitJobs[0]}/retry`);
+check('only stopped or failed turns can run again', r.status === 409, r.json?.error);
 
 // ---------------------------------------------------------------- schedules
 r = await user.req(A, 'POST', '/schedules', { name: 'Check', cron: '0 8 * * 1', prompt: 'Weekly check [SILENT]' });

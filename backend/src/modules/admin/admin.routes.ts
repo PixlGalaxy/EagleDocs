@@ -14,6 +14,7 @@ import { parseInstitutionInput, type InstitutionsService } from '../institutions
 import type { MailService } from '../mail/mail.service.js';
 import { normalizeEmail } from '../users/users.service.js';
 import { SETTINGS_KEYS as K } from './settings-keys.js';
+import type { BuiltinSkills } from '../skills/builtin.js';
 import type { UsersAdminService } from './users-admin.service.js';
 
 const activePause = (until: string | null) => (until && new Date(until).getTime() > Date.now() ? until : null);
@@ -42,8 +43,9 @@ export function createAdminRoutes(deps: {
   institutions: InstitutionsService;
   users: UsersAdminService;
   t: Translate;
+  builtinSkills: BuiltinSkills;
 }): Router {
-  const { db, config, settings, mail, institutions, users, t } = deps;
+  const { db, config, settings, mail, institutions, users, t, builtinSkills } = deps;
   const startedAt = Date.now();
   const router = Router();
   router.use(requireAdmin);
@@ -202,8 +204,17 @@ export function createAdminRoutes(deps: {
     res.status(204).end();
   });
 
-  // Built-in skills arrive in phase 5; the institutions form already asks for them.
-  router.get('/skills', (_req, res) => res.json([]));
+  // Built-in skills for the institution toggles. Canvas is every institution's, so only Outlook and Degree Works gate a skill.
+  router.get('/skills', (_req, res) =>
+    res.json(
+      builtinSkills.all.map(({ slug, name, description, requires }) => ({
+        slug,
+        name,
+        description,
+        ...(requires && requires !== 'canvas' && { requires }),
+      })),
+    ),
+  );
   // Tiers arrive with billing (phase 6); the users form already asks for them.
   router.get('/tiers', (_req, res) => res.json([]));
 
