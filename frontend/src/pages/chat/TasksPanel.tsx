@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Ban, Bot, CalendarClock, Check, ChevronRight, CircleAlert, Hourglass, ListChecks, Loader2, RotateCcw, Smartphone, Square } from 'lucide-react';
 import { chatApi } from '../../api/chat';
+import { useConfirm } from '../../components/ui/confirm';
 import type { Job } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
@@ -36,6 +37,7 @@ const STATUS_LABEL: Record<Job['status'], TranslationKey> = {
 const TasksPanel = ({ onNavigate }: { onNavigate?: () => void }) => {
   const { t } = useI18n();
   const navigate = useNavigate();
+  const ask = useConfirm();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
@@ -115,7 +117,14 @@ const TasksPanel = ({ onNavigate }: { onNavigate?: () => void }) => {
                   <button
                     type="button"
                     disabled={busy === job.id}
-                    onClick={() => void act(job, 'cancel')}
+                    // Stopping loses what the agent was doing: ask first.
+                    onClick={() =>
+                      ask(() => void act(job, 'cancel'), {
+                        title: t('tasks.stopTitle'),
+                        body: t('tasks.stopBody', { chat: job.kind === 'delegate' ? t('tasks.helpers', { chat: job.chat_title ?? '' }) : job.chat_title || t('chat.untitled') }),
+                        confirmLabel: t('tasks.stop'),
+                      })
+                    }
                     aria-label={t('tasks.stop')}
                     title={t('tasks.stop')}
                     className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-rose-600 disabled:opacity-50 dark:hover:bg-slate-700"

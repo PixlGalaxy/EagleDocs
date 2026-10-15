@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Box, Check, ChevronDown, Plus, Wand2 } from 'lucide-react';
+import { Box, Check, ChevronDown, Plus, Wand2, type LucideIcon } from 'lucide-react';
 import type { ModelOption } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import Popover from './Popover';
@@ -12,10 +12,12 @@ interface Props {
   value: string;
   onChange: (ref: string) => void;
   disabled?: boolean;
+  /** Opens from this button instead of the current model's (e.g. "Try again with..."). */
+  trigger?: { label: string; icon: LucideIcon };
 }
 
 /** "Auto" first, then every model grouped by where it comes from (EagleDocs, ChatGPT, API keys). */
-const ModelPicker = ({ options, value, onChange, disabled }: Props) => {
+const ModelPicker = ({ options, value, onChange, disabled, trigger: custom }: Props) => {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -60,16 +62,21 @@ const ModelPicker = ({ options, value, onChange, disabled }: Props) => {
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={shown}
-        aria-label={`${t('models.pick')}: ${current}`}
-        title={disabled ? t('chat.modelLocked') : current}
+        aria-label={custom ? custom.label : `${t('models.pick')}: ${current}`}
+        title={custom ? custom.label : disabled ? t('chat.modelLocked') : current}
         className={`${toolbarButton} max-w-[14rem] gap-1.5 px-2 font-medium`}
       >
-        {value === 'auto' ? (
+        {custom ? (
+          <>
+            <custom.icon size={15} className="shrink-0" aria-hidden="true" />
+            <span className="truncate">{custom.label}</span>
+          </>
+        ) : value === 'auto' ? (
           <Wand2 size={16} className="shrink-0 text-[var(--accent-600)] dark:text-[var(--accent-300)]" aria-hidden="true" />
         ) : (
           <Box size={16} className="shrink-0" aria-hidden="true" />
         )}
-        <span className="hidden truncate sm:inline">{current}</span>
+        {!custom && <span className="hidden truncate sm:inline">{current}</span>}
         <ChevronDown size={14} className="shrink-0 opacity-70" aria-hidden="true" />
       </button>
 

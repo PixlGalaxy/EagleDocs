@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState, type ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Info, Loader2, MessageSquarePlus, Pencil, Search, Trash2, X } from 'lucide-react';
+import { CornerDownRight, GitBranch, Info, Loader2, MessageSquarePlus, Pencil, Search, Trash2, X } from 'lucide-react';
 import type { Chat } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { Skeleton } from '../../components/ui/kit';
@@ -14,6 +14,8 @@ interface Props {
   onRename: (chat: Chat) => void;
   /** Opens the chat's info card (tokens, messages, files...). */
   onInfo?: (chat: Chat) => void;
+  /** Forks the chat as it is (up to its last answer). */
+  onFork?: (chat: Chat) => void;
   onDelete: (chat: Chat) => void;
   onClose?: () => void;
 }
@@ -25,7 +27,7 @@ function bucket(iso: string): 'today' | 'week' | 'older' {
   return 'older';
 }
 
-const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onInfo, onDelete, onClose }: Props) => {
+const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onInfo, onFork, onDelete, onClose }: Props) => {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const helpersLabel = (count: number) => (count === 1 ? t('chat.helperOne') : t('chat.helpersCount', { count }));
@@ -40,9 +42,143 @@ const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onInfo, onDele
     });
 
   const grouped = useMemo(() => {
-    const filtered = chats.filter((chat) => chat.title.toLowerCase().includes(query.trim().toLowerCase()));
+    const searching = Boolean(query.trim());
+    const ids = new Set(chats.map((c) => c.id));
+    const filtered = searching
+      ? chats.filter((chat) => chat.title.toLowerCase().includes(query.trim().toLowerCase()))
+      : chats.filter((chat) => !chat.parent_id || !ids.has(chat.parent_id));
     return (['today', 'week', 'older'] as const).map((key) => ({ key, items: filtered.filter((chat) => bucket(chat.updated_at) === key) })).filter((group) => group.items.length);
   }, [chats, query]);
+
+  /** Forks under their chat, in order (2 before 10). */
+  const forksOf = useMemo(() => {
+    const map = new Map<string, Chat[]>();
+    for (const chat of chats) if (chat.parent_id) (map.get(chat.parent_id) ?? map.set(chat.parent_id, []).get(chat.parent_id)!).push(chat);
+    for (const list of map.values()) list.sort((a, b) => (a.fork_label ?? '').localeCompare(b.fork_label ?? '', undefined, { numeric: true }));
+    return map;
+  }, [chats]);
+
+  const renderRow = (chat: Chat, depth: number): ReactNode => {
+    const working = Boolean(chat.working || chat.active_job_id);
+    const helpers = chat.helpers ?? [];
+    const open = expanded.has(chat.id);
+    // The dot is for answers waiting to be read; the chat being looked at is read already.
+    const unread = !working && chat.unread && chat.id !== activeId;
+    return (
+      <li key={chat.id} className="group">
+        {/* One line, nothing on top of anything: the name, the helpers badge, the unread dot, and the actions on hover. */}
+        <div
+          className={`flex items-center rounded-lg transition ${
+            chat.id === activeId
+              ? 'bg-[var(--accent-50)] font-medium text-[var(--accent-800)] dark:bg-[var(--accent-500)]/15 dark:text-[var(--accent-200)]'
+              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+          }`}
+        >
+          <NavLink
+            to={`/chat/${chat.id}`}
+            onClick={onClose}
+            style={{ paddingLeft: `${0.75 + depth * 0.9}rem` }}
+            className="flex min-w-0 flex-1 items-center gap-2 py-2 pr-2 text-sm"
+          >
+            {chat.fork_label && (
+              <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-slate-400" title={t('chat.forkOf', { label: chat.fork_label })}>
+                <CornerDownRight size={12} aria-hidden="true" />
+                {t('chat.forkLabel', { label: chat.fork_label })}
+              </span>
+            )}
+            {/* Working: a spinner before the name (it takes the unread dot's place until the answer is in). */}
+            {working && <Loader2 size={14} className="shrink-0 animate-spin text-[var(--accent-500)] motion-reduce:animate-none" aria-label={t('chat.working')} />}
+            <span className={`truncate ${unread ? 'font-medium text-slate-900 dark:text-white' : ''}`}>{chat.title}</span>
+            {unread && <span className="sr-only">{t('chat.unread')}</span>}
+          </NavLink>
+          {helpers.length > 0 && (
+            <button
+              type="button"
+              onClick={() => toggle(chat.id)}
+              aria-expanded={open}
+              className="mr-1.5 shrink-0 whitespace-nowrap rounded-full bg-[var(--accent-50)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent-700)] transition hover:bg-[var(--accent-100)] dark:bg-[var(--accent-500)]/15 dark:text-[var(--accent-200)]"
+            >
+              {helpersLabel(helpers.length)}
+            </button>
+          )}
+          {/* Answered while away; the actions take its place on hover. */}
+          {unread && (
+            <span className="mr-3 h-2 w-2 shrink-0 rounded-full bg-emerald-500 group-focus-within:hidden group-hover:hidden [@media(hover:none)]:hidden" aria-hidden="true" />
+          )}
+          {/* Shown on hover; always on touch screens, which have no hover to reveal them. */}
+          <div className="hidden shrink-0 gap-0.5 pr-1.5 group-focus-within:flex group-hover:flex [@media(hover:none)]:flex">
+            {onFork && (
+              <button
+                type="button"
+                onClick={() => onFork(chat)}
+                aria-label={t('chat.forkChat')}
+                title={t('chat.forkChat')}
+                className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white"
+              >
+                <GitBranch size={14} />
+              </button>
+            )}
+            {onInfo && (
+              <button
+                type="button"
+                onClick={() => onInfo(chat)}
+                aria-label={t('chat.info')}
+                title={t('chat.info')}
+                className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white"
+              >
+                <Info size={14} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onRename(chat)}
+              aria-label={t('chat.rename')}
+              className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onDelete(chat)}
+              aria-label={t('chat.delete')}
+              className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-rose-600 dark:hover:bg-slate-700 dark:hover:text-rose-400"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        </div>
+        {open && helpers.length > 0 && (
+          <ul className="mb-1 ml-5 border-l border-slate-200 py-0.5 pl-2 dark:border-slate-700" aria-label={helpersLabel(helpers.length)}>
+            {helpers.map((h, i) => (
+              <li key={i}>
+                <NavLink
+                  to={`/chat/${chat.id}`}
+                  onClick={onClose}
+                  title={h.goal}
+                  className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                >
+                  {h.running ? (
+                    <Loader2 size={11} className="shrink-0 animate-spin text-[var(--accent-500)] motion-reduce:animate-none" aria-label={t('chat.working')} />
+                  ) : (
+                    <span aria-hidden="true">-&gt;</span>
+                  )}
+                  <span className="truncate">{h.goal}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        )}
+      </li>
+    );
+  };
+
+  /** A chat and, while not searching, its forks under it at every level. */
+  const renderTree = (chat: Chat, depth: number): ReactNode => (
+    <Fragment key={chat.id}>
+      {renderRow(chat, depth)}
+      {!query.trim() && (forksOf.get(chat.id) ?? []).map((fork) => renderTree(fork, depth + 1))}
+    </Fragment>
+  );
 
   const groupLabel = { today: t('chat.groupToday'), week: t('chat.groupWeek'), older: t('chat.groupOlder') };
 
@@ -91,99 +227,7 @@ const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onInfo, onDele
           grouped.map((group) => (
             <div key={group.key} className="mt-3 first:mt-1">
               <p className="px-3 pb-1 text-xs font-medium text-slate-500 dark:text-slate-400">{groupLabel[group.key]}</p>
-              <ul>
-                {group.items.map((chat) => {
-                  const working = Boolean(chat.working || chat.active_job_id);
-                  const helpers = chat.helpers ?? [];
-                  const open = expanded.has(chat.id);
-                  // The dot is for answers waiting to be read; the chat being looked at is read already.
-                  const unread = !working && chat.unread && chat.id !== activeId;
-                  return (
-                    <li key={chat.id} className="group">
-                      {/* One line, nothing on top of anything: the name, the helpers badge, the unread dot, and the actions on hover. */}
-                      <div
-                        className={`flex items-center rounded-lg transition ${
-                          chat.id === activeId
-                            ? 'bg-[var(--accent-50)] font-medium text-[var(--accent-800)] dark:bg-[var(--accent-500)]/15 dark:text-[var(--accent-200)]'
-                            : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                        }`}
-                      >
-                        <NavLink to={`/chat/${chat.id}`} onClick={onClose} className="flex min-w-0 flex-1 items-center gap-2 py-2 pl-3 pr-2 text-sm">
-                          {/* Working: a spinner before the name (it takes the unread dot's place until the answer is in). */}
-                          {working && <Loader2 size={14} className="shrink-0 animate-spin text-[var(--accent-500)] motion-reduce:animate-none" aria-label={t('chat.working')} />}
-                          <span className={`truncate ${unread ? 'font-medium text-slate-900 dark:text-white' : ''}`}>{chat.title}</span>
-                          {unread && <span className="sr-only">{t('chat.unread')}</span>}
-                        </NavLink>
-                        {helpers.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => toggle(chat.id)}
-                            aria-expanded={open}
-                            className="mr-1.5 shrink-0 whitespace-nowrap rounded-full bg-[var(--accent-50)] px-2 py-0.5 text-[11px] font-medium text-[var(--accent-700)] transition hover:bg-[var(--accent-100)] dark:bg-[var(--accent-500)]/15 dark:text-[var(--accent-200)]"
-                          >
-                            {helpersLabel(helpers.length)}
-                          </button>
-                        )}
-                        {/* Answered while away; the actions take its place on hover. */}
-                        {unread && (
-                          <span className="mr-3 h-2 w-2 shrink-0 rounded-full bg-emerald-500 group-focus-within:hidden group-hover:hidden [@media(hover:none)]:hidden" aria-hidden="true" />
-                        )}
-                        {/* Shown on hover; always on touch screens, which have no hover to reveal them. */}
-                        <div className="hidden shrink-0 gap-0.5 pr-1.5 group-focus-within:flex group-hover:flex [@media(hover:none)]:flex">
-                          {onInfo && (
-                            <button
-                              type="button"
-                              onClick={() => onInfo(chat)}
-                              aria-label={t('chat.info')}
-                              title={t('chat.info')}
-                              className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white"
-                            >
-                              <Info size={14} />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => onRename(chat)}
-                            aria-label={t('chat.rename')}
-                            className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onDelete(chat)}
-                            aria-label={t('chat.delete')}
-                            className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-rose-600 dark:hover:bg-slate-700 dark:hover:text-rose-400"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      {open && helpers.length > 0 && (
-                        <ul className="mb-1 ml-5 border-l border-slate-200 py-0.5 pl-2 dark:border-slate-700" aria-label={helpersLabel(helpers.length)}>
-                          {helpers.map((h, i) => (
-                            <li key={i}>
-                              <NavLink
-                                to={`/chat/${chat.id}`}
-                                onClick={onClose}
-                                title={h.goal}
-                                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                              >
-                                {h.running ? (
-                                  <Loader2 size={11} className="shrink-0 animate-spin text-[var(--accent-500)] motion-reduce:animate-none" aria-label={t('chat.working')} />
-                                ) : (
-                                  <span aria-hidden="true">-&gt;</span>
-                                )}
-                                <span className="truncate">{h.goal}</span>
-                              </NavLink>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+              <ul>{group.items.map((chat) => renderTree(chat, 0))}</ul>
             </div>
           ))
         )}

@@ -16,6 +16,15 @@ export const chatApi = {
   rename: (id: string, title: string) => api.patch<Chat>(`/chats/${id}`, { title }),
   remove: (id: string) => api.del<void>(`/chats/${id}`),
   info: (id: string) => api.get<ChatInfo>(`/chats/${id}/info`),
+  /** A fork of the chat up to an answer (the last finished one without `message_id`), with a copy of its files. */
+  fork: (id: string, messageId?: string) => api.post<Chat>(`/chats/${id}/fork`, messageId ? { message_id: messageId } : {}),
+  /** Edits one of the student's messages; the agent answers the new text (the old version stays reachable). */
+  editMessage: (id: string, messageId: string, body: { content: string; model_ref?: string; reasoning?: string }) =>
+    api.post<{ job_id: string; message_id: string }>(`/chats/${id}/messages/${messageId}/edit`, body),
+  /** Shows another version of an edited message. */
+  switchVersion: (id: string, messageId: string, version: number) => api.post<void>(`/chats/${id}/messages/${messageId}/version`, { version }),
+  /** Answers the last message again (the last answer is replaced), with another model when given. */
+  regenerate: (id: string, body: { model_ref?: string; reasoning?: string }) => api.post<{ job_id: string }>(`/chats/${id}/regenerate`, body),
   /**
    * Queues a job and returns its id; the answer arrives through `stream`.
    * `attachments`: workspace paths (max 10) sent with the message; the text may then be empty.

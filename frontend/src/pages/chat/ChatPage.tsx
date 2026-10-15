@@ -490,6 +490,72 @@ const ChatPage = () => {
     if (busyMode === 'interrupt') void stop();
   };
 
+  /** While a fork is being made (its files copied): a popup that blocks other clicks. */
+  const [forking, setForking] = useState(false);
+
+  /** A fork of a chat (up to an answer, or its last one) opens right away. */
+  const forkChat = async (id: string, messageId?: string) => {
+    if (forking) return;
+    setError('');
+    setForking(true);
+    try {
+      const forked = await chatApi.fork(id, messageId);
+      refreshChats();
+      navigate(`/chat/${forked.id}`);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    } finally {
+      setForking(false);
+    }
+  };
+
+  /** Edits one of the student's messages: the chat continues from the new text (the old version stays reachable). */
+  const editMessage = async (messageId: string, content: string) => {
+    if (!chatId || live || sending.current) return;
+    sending.current = true;
+    setError('');
+    try {
+      await chatApi.editMessage(chatId, messageId, { content, model_ref: modelRef, ...(effort ? { reasoning: effort } : {}) });
+      // The reload shows the new version and follows its answer.
+      await reload(chatId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    } finally {
+      sending.current = false;
+    }
+  };
+
+  /** < n/m >: shows another version of an edited message. */
+  const switchVersion = async (messageId: string, version: number) => {
+    if (!chatId || live) return;
+    try {
+      await chatApi.switchVersion(chatId, messageId, version);
+      await reload(chatId);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    }
+  };
+
+  /** Try again: the last answer is replaced by a new one, by `retryModel` when given (this answer only). */
+  const regenerate = async (retryModel?: string) => {
+    if (!chatId || live || sending.current) return;
+    sending.current = true;
+    setError('');
+    try {
+      const { job_id } = await chatApi.regenerate(chatId, { ...(retryModel && { model_ref: retryModel }), ...(effort ? { reasoning: effort } : {}) });
+      // The old answer goes: everything after the student's last message.
+      setMessages((prev) => {
+        const lastUser = prev.map((m) => m.role).lastIndexOf('user');
+        return lastUser >= 0 ? prev.slice(0, lastUser + 1) : prev;
+      });
+      attach(chatId, job_id);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    } finally {
+      sending.current = false;
+    }
+  };
+
   /** Sends the draft as a correction to the running answer. */
   const steer = async () => {
     const content = draft.trim();
@@ -627,7 +693,7 @@ const ChatPage = () => {
           label={t('chat.resizeList')}
           className="hidden border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block"
         >
-          <ChatSidebar chats={chats} loading={loadingChats} activeId={chatId} onNew={() => navigate('/chat')} onRename={setRenaming} onInfo={setInfoFor} onDelete={setDeleting} />
+          <ChatSidebar chats={chats} loading={loadingChats} activeId={chatId} onNew={() => navigate('/chat')} onRename={setRenaming} onInfo={setInfoFor} onFork={(c) => void forkChat(c.id)} onDelete={setDeleting} />
         </ResizableDock>
       )}
 
@@ -646,6 +712,10 @@ const ChatPage = () => {
               }}
               onRename={setRenaming}
               onInfo={setInfoFor}
+              onFork={(c) => {
+                setSidebarOpen(false);
+                void forkChat(c.id);
+              }}
               onDelete={setDeleting}
               onClose={() => setSidebarOpen(false)}
             />
@@ -733,10 +803,18 @@ const ChatPage = () => {
                     modelLabel={m.model_label}
                     toolCalls={m.tool_calls}
                     attachments={m.attachments}
+                    sentAt={m.created_at}
                     questions={m.questions}
                     // Only the newest question card can be answered, and not while the agent works.
                     questionsAnswered={i < messages.length - 1 || !!live}
                     onAnswer={(answer) => void send(answer)}
+                    // The student's messages can be edited (not while the agent works), with < n/m > between versions.
+                    {...(m.role === 'user' && !m.steer && !live && chatId && { onEdit: (text: string) => void editMessage(m.id, text) })}
+                    {...(m.role === 'user' && m.version && m.versions && m.versions > 1 && { version: { current: m.version, total: m.versions, onSwitch: (v: number) => void switchVersion(m.id, v) } })}
+                    // Every finished answer can start a fork; the last one can also be tried again.
+                    {...(m.role === 'assistant' && !m.background && !(live && i === messages.length - 1) && chatId && { onFork: () => void forkChat(chatId, m.id) })}
+                    // The last answer, once finished, can be tried again.
+                    {...(i === messages.length - 1 && m.role === 'assistant' && !live && !m.questions?.length && { onRetry: (ref?: string) => void regenerate(ref), retryOptions: options ?? [] })}
                     displays={m.displays?.map((d, n) => ({ title: d.title, src: apiUrl(`/chats/${chatId}/messages/${m.id}/displays/${n}`) }))}
                     steer={m.steer ? 'applied' : undefined}
                     // A saved correction comes right after the part of the answer the agent had done.
@@ -956,6 +1034,14 @@ const ChatPage = () => {
         </Modal>
       )}
 
+      {forking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" role="alertdialog" aria-modal="true" aria-live="polite" aria-label={t('chat.forking')}>
+          <div className="flex items-center gap-3 rounded-xl bg-white px-5 py-4 text-sm font-medium text-slate-700 shadow-2xl dark:bg-slate-900 dark:text-slate-200">
+            <Loader2 size={18} className="animate-spin text-[var(--accent-600)] motion-reduce:animate-none" aria-hidden="true" />
+            {t('chat.forking')}
+          </div>
+        </div>
+      )}
       {infoFor && <ChatInfoDialog chat={infoFor} onClose={() => setInfoFor(null)} />}
       {deleting && (
         <Modal title={t('chat.deleteTitle')} onClose={() => setDeleting(null)}>

@@ -116,6 +116,9 @@ export interface Chat {
   working?: boolean;
   /** The list: an answer arrived since the student last opened it. */
   unread?: boolean;
+  /** A fork: the chat it was copied from, and its number under it ("1", "2.1"). */
+  parent_id?: string | null;
+  fork_label?: string | null;
   /** The list: helpers (children) of its latest delegation. */
   helpers?: { goal: string; running: boolean }[];
 }
@@ -163,6 +166,10 @@ export interface Message {
   attachments?: MessageAttachment[];
   /** The agent asked these with options (ask_user); answered with the next message. */
   questions?: UserQuestion[];
+  /** An edited message of the student: this is version `version` of `versions`. */
+  version_group?: string;
+  version?: number;
+  versions?: number;
   /** Interactive pages the agent showed (show_html), loaded by index from their own URL. */
   displays?: { kind: 'html'; title: string }[];
   created_at: string;
