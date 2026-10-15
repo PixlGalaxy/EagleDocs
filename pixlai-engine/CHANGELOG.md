@@ -12,6 +12,7 @@ All notable changes to PixlAI-Engine. The engine is pre-1.0: minor versions can 
 
 ### Added
 
+- `BrowserPort.read(userId, url, signal)` (optional): reads a page in a tab of its own and closes it, so parallel helpers never step on each other or start a browser each. `web_fetch` uses it when present.
 - **Questions with options.** `ask_user` takes 1 to 4 `questions`, each with 2 to 4 options (`multi_select` optional); `RunResult.questions` and a `questions` event let hosts show them as choices. `content` keeps a text version. The free-text `question` still works.
 - **`show_html`** (with `EngineOptions.displays: ['html']`): the agent shows an interactive page in the conversation; pages come in `RunResult.displays` and a `display` event.
 - Tool cards are smaller: `ToolCallView.args` clips texts over 2,000 characters, and a tool's optional `view(args)` decides what its card shows.

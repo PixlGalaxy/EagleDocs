@@ -257,6 +257,12 @@ export interface BrowserPort {
   /** URL of the open page, or null when the profile has no page open. */
   currentUrl(userId: string, profile: string): Promise<string | null>;
   close(userId: string, profile: string): Promise<void>;
+  /**
+   * Optional: reads a page in a tab of its own and closes it, apart from every profile, so several reads can
+   * run at once (helpers in parallel) without stepping on each other. web_fetch uses it for pages that need a
+   * browser; without it, it opens and closes a "reader" profile.
+   */
+  read?(userId: string, url: string, signal: AbortSignal): Promise<BrowserPage>;
 }
 
 /**

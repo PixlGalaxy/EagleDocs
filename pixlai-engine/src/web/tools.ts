@@ -62,6 +62,10 @@ const READER_PROFILE = 'reader';
  */
 async function renderInBrowser(browser: BrowserPort | undefined, ctx: ToolContext, url: string): Promise<{ url: string; title: string; text: string } | null> {
   if (!browser) return null;
+  if (browser.read) {
+    const view = await browser.read(ctx.user.id, url, ctx.signal).catch(() => null);
+    return view && { url: view.url, title: view.title, text: view.snapshot };
+  }
   try {
     const view = await browser.open(ctx.user.id, READER_PROFILE, url, ctx.signal);
     return { url: view.url, title: view.title, text: view.snapshot };

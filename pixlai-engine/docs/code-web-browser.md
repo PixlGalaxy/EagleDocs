@@ -103,6 +103,8 @@ interface BrowserPort {
   screenshot(userId, profile, signal): Promise<{ path: string }>;
   currentUrl(userId, profile): Promise<string | null>;
   close(userId, profile): Promise<void>;
+  // Optional: a page read in a tab of its own and closed, so parallel reads share no profile and start no extra browser.
+  read?(userId, url, signal): Promise<BrowserPage>;
 }
 type BrowserAction =
   | { kind: 'click'; ref: string }
