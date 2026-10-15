@@ -1,4 +1,6 @@
-import { createWriteStream, promises as fs } from 'fs';
+import { randomBytes } from 'crypto';
+import { constants as fsc, promises as fs } from 'fs';
+import type { FileHandle } from 'fs/promises';
 import { dirname, join, relative, resolve, sep } from 'path';
 import { pipeline } from 'stream/promises';
 import type { Readable } from 'stream';
@@ -12,6 +14,9 @@ export const TEMP_TTL_MS = 24 * 60 * 60 * 1000;
 export const BROWSER_DIR = '.browser';
 const USAGE_TTL_MS = 30_000;
 const MB = 1024 * 1024;
+// The sandbox shares these folders and can swap a file or folder for a link at any moment:
+// files are opened without following a final link and then checked through the open descriptor.
+const NOFOLLOW = fsc.O_NOFOLLOW ?? 0;
 
 type Area = 'workspace' | 'temp';
 
@@ -34,6 +39,8 @@ export class QuotaError extends Error {}
  */
 export class DiskWorkspace implements WorkspacePort {
   private usageCache = new Map<string, { at: number; bytes: number }>();
+  /** Bytes of uploads still streaming, per user and area: parallel uploads cannot each count the same free space. */
+  private inFlight = new Map<string, number>();
 
   constructor(
     private dataRoot: string,
@@ -88,6 +95,43 @@ export class DiskWorkspace implements WorkspacePort {
       if (!stat) return;
       if (stat.isSymbolicLink()) throw new Error('Links are not allowed in the workspace');
     }
+  }
+
+  /**
+   * Opens a file without following a link at its name, then confirms where the
+   * open descriptor really points (on Linux, /proc/self/fd), so a folder swapped
+   * for a link after the checks above cannot lead outside the user's root.
+   * Never pass O_TRUNC: truncate after the check.
+   */
+  private async openConfined(r: Resolved, flags: number): Promise<FileHandle> {
+    const handle = await fs.open(r.abs, flags | NOFOLLOW, 0o644).catch((err: NodeJS.ErrnoException) => {
+      if (err.code === 'ELOOP') throw new Error('Links are not allowed in the workspace');
+      throw err;
+    });
+    try {
+      const real = process.platform === 'linux' ? await fs.readlink(`/proc/self/fd/${handle.fd}`) : await fs.realpath(r.abs);
+      const root = await fs.realpath(r.root);
+      if (real !== root && !real.startsWith(root + sep)) throw new Error('Links are not allowed in the workspace');
+    } catch (err) {
+      await handle.close();
+      throw err;
+    }
+    return handle;
+  }
+
+  /** A file opened for reading inside the user's roots (downloads stream from it). */
+  async openRead(userId: string, path: string): Promise<{ handle: FileHandle; size: number }> {
+    const r = this.resolve(userId, path);
+    await this.assertNoLinks(r);
+    const handle = await this.openConfined(r, fsc.O_RDONLY).catch(() => {
+      throw new Error(`Not found: ${path}`);
+    });
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      await handle.close();
+      throw new Error(`Not found: ${path}`);
+    }
+    return { handle, size: stat.size };
   }
 
   private async ensureRoot(userId: string, area: Area): Promise<void> {
@@ -164,7 +208,12 @@ export class DiskWorkspace implements WorkspacePort {
     if (!stat) throw new Error(`Not found: ${path}`);
     if (stat.isDirectory()) throw new Error(`${path} is a folder`);
     if (stat.size > 200 * MB) throw new Error('File is too large to read here (over 200 MB)');
-    return fs.readFile(r.abs);
+    const handle = await this.openConfined(r, fsc.O_RDONLY);
+    try {
+      return await handle.readFile();
+    } finally {
+      await handle.close();
+    }
   }
 
   /** Throws QuotaError when `extra` bytes would not fit in the area. */
@@ -188,8 +237,13 @@ export class DiskWorkspace implements WorkspacePort {
     const previous = options?.append ? 0 : ((await fs.stat(r.abs).catch(() => null))?.size ?? 0);
     await this.assertFits(userId, r.area, bytes - previous);
     await fs.mkdir(dirname(r.abs), { recursive: true });
-    if (options?.append) await fs.appendFile(r.abs, data);
-    else await fs.writeFile(r.abs, data);
+    const handle = await this.openConfined(r, fsc.O_WRONLY | fsc.O_CREAT | (options?.append ? fsc.O_APPEND : 0));
+    try {
+      if (!options?.append) await handle.truncate(0);
+      await handle.writeFile(data);
+    } finally {
+      await handle.close();
+    }
     this.forgetUsage(userId);
   }
 
@@ -198,30 +252,40 @@ export class DiskWorkspace implements WorkspacePort {
     const r = this.resolve(userId, path);
     if (!r.rel) throw new Error('A file name is required');
     await this.assertNoLinks(r);
-    const free = (await this.limits(userId))[r.area] - (await this.areaBytes(userId, r.area));
+    const flightKey = `${userId}:${r.area}`;
+    const free = (await this.limits(userId))[r.area] - (await this.areaBytes(userId, r.area)) - (this.inFlight.get(flightKey) ?? 0);
     const cap = Math.min(maxBytes, free);
     await fs.mkdir(dirname(r.abs), { recursive: true });
-    const partial = `${r.abs}.${process.pid}.part`;
+    // A fresh random name opened with O_EXCL: a link planted at that name is refused, never followed.
+    const partialPath = `${r.abs}.${randomBytes(8).toString('hex')}.part`;
+    const partial = { ...r, abs: partialPath };
+    const handle = await this.openConfined(partial, fsc.O_WRONLY | fsc.O_CREAT | fsc.O_EXCL);
     let written = 0;
+    const inFlight = this.inFlight;
     try {
       await pipeline(
         stream,
         async function* limit(source: AsyncIterable<Buffer>) {
           for await (const chunk of source) {
             written += chunk.length;
+            inFlight.set(flightKey, (inFlight.get(flightKey) ?? 0) + chunk.length);
             if (written > cap) {
               throw new QuotaError(written > maxBytes ? 'The file is too large' : 'Not enough space for this file. Delete files first.');
             }
             yield chunk;
           }
         },
-        createWriteStream(partial),
+        handle.createWriteStream(),
       );
-      await fs.rename(partial, r.abs);
+      await fs.rename(partialPath, r.abs);
     } catch (err) {
-      await fs.rm(partial, { force: true }).catch(() => undefined);
+      await handle.close().catch(() => undefined);
+      await fs.rm(partialPath, { force: true }).catch(() => undefined);
       throw err;
     } finally {
+      const left = (this.inFlight.get(flightKey) ?? 0) - written;
+      if (left > 0) this.inFlight.set(flightKey, left);
+      else this.inFlight.delete(flightKey);
       this.forgetUsage(userId);
     }
     return written;
@@ -307,7 +371,9 @@ async function dirBytes(dir: string): Promise<number> {
 
 async function touchTree(path: string): Promise<void> {
   const now = new Date();
-  const stat = await fs.stat(path);
+  const stat = await fs.lstat(path);
+  // Links (the sandbox can make them) are left alone, never followed.
+  if (stat.isSymbolicLink()) return;
   if (stat.isDirectory()) {
     for (const entry of await fs.readdir(path)) await touchTree(join(path, entry));
   }
@@ -319,7 +385,8 @@ async function touchTree(path: string): Promise<void> {
  * folders. Runs over every user's TEMP on the shared storage.
  */
 export async function sweepTemp(dataRoot: string, now = Date.now()): Promise<{ files: number; bytes: number }> {
-  const base = join(dataRoot, 'temp');
+  // Real path, so the per-folder link checks below compare like with like.
+  const base = await fs.realpath(join(dataRoot, 'temp')).catch(() => join(dataRoot, 'temp'));
   let files = 0;
   let bytes = 0;
   const visit = async (dir: string, isUserRoot: boolean): Promise<boolean> => {
@@ -327,13 +394,19 @@ export async function sweepTemp(dataRoot: string, now = Date.now()): Promise<{ f
     let empty = true;
     for (const entry of entries) {
       const abs = join(dir, entry.name);
+      // Re-checked right before use: the sandbox may have swapped the folder for a link since readdir.
       if (entry.isDirectory()) {
+        if ((await fs.realpath(abs).catch(() => '')) !== abs) {
+          empty = false;
+          continue;
+        }
         if (await visit(abs, false)) await fs.rmdir(abs).catch(() => undefined);
         else empty = false;
         continue;
       }
       const stat = await fs.lstat(abs).catch(() => null);
       if (stat && now - stat.mtimeMs > TEMP_TTL_MS) {
+        if ((await fs.realpath(dir).catch(() => '')) !== dir) return false;
         await fs.rm(abs, { force: true });
         files++;
         bytes += stat.size;

@@ -1,4 +1,5 @@
 import type { Db } from '../../db/pool.js';
+import { assertPublicUrl } from '../../engine/web.js';
 import { maybe } from '../../db/pool.js';
 import { AppError, withDetail } from '../../errors.js';
 import type { ConnectionsService } from '../connections/connections.service.js';
@@ -146,7 +147,8 @@ export class CanvasService {
     );
     const baseUrl = row?.meta.base_url || row?.canvas_base_url;
     if (!row?.secret_enc || !baseUrl) throw new AppError(412, 'canvas.notConnected');
-    return { client: new CanvasClient(baseUrl, this.connections.secretOf(row as never)), connectionId: row.id };
+    const guard = row.meta.base_url ? assertPublicUrl : undefined;
+    return { client: new CanvasClient(baseUrl, this.connections.secretOf(row as never), guard), connectionId: row.id };
   }
 
   /** Clears this user's cached answers (new token, or a manual refresh). */
@@ -483,7 +485,7 @@ export class CanvasService {
     if (!baseUrl) throw new AppError(400, 'canvas.noBaseUrl');
     let profile: { name?: string };
     try {
-      profile = await new CanvasClient(baseUrl, token).profile();
+      profile = await new CanvasClient(baseUrl, token, baseUrlOverride ? assertPublicUrl : undefined).profile();
     } catch (err) {
       if (err instanceof CanvasError && err.kind === 'auth') throw new AppError(400, 'canvas.tokenRejected');
       throw withDetail(new AppError(502, 'canvas.unavailable'), (err as Error).message);

@@ -14,7 +14,7 @@ const REQUEST_TTL_MS = 10 * 60_000;
 /** An OAuth error with the RFC 6749 code clients understand. */
 export class OAuthError extends Error {
   constructor(
-    readonly code: 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unauthorized_client' | 'unsupported_grant_type' | 'invalid_scope' | 'invalid_redirect_uri' | 'invalid_client_metadata' | 'access_denied',
+    readonly code: 'invalid_request' | 'invalid_client' | 'invalid_grant' | 'unauthorized_client' | 'unsupported_grant_type' | 'invalid_scope' | 'invalid_redirect_uri' | 'invalid_client_metadata' | 'access_denied' | 'unsupported_response_type',
     message: string,
     readonly status = 400,
   ) {
@@ -33,6 +33,7 @@ function sameHash(a: string, b: string): boolean {
 
 /** Redirect URIs must be https, or http on this machine for local clients (MCP Inspector, desktop apps). */
 function validRedirect(uri: string): boolean {
+  if (uri.length > 2000) return false;
   try {
     const url = new URL(uri);
     if (url.hash) return false;
@@ -159,7 +160,11 @@ export class OAuthService {
     const client = clientId ? await this.client(clientId) : undefined;
     if (!client) throw new OAuthError('invalid_client', 'Unknown client_id');
     if (!client.redirect_uris.includes(redirectUri)) throw new OAuthError('invalid_redirect_uri', 'redirect_uri is not registered for this client');
-    const back = (error: string, description: string) => ({ redirect: this.withParams(redirectUri, { error, error_description: description, state: q.state, iss: this.issuer }) });
+    // Errors before consent show our page instead of redirecting: anyone can register a client, so redirecting
+    // from here would turn this URL into an open redirect (RFC 9700 4.11.2).
+    const back = (error: OAuthError['code'], description: string): never => {
+      throw new OAuthError(error, description);
+    };
     if (q.response_type !== 'code') return back('unsupported_response_type', 'Only response_type=code');
     const challenge = String(q.code_challenge ?? '');
     if (q.code_challenge_method !== 'S256' || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) return back('invalid_request', 'PKCE with S256 is required');
@@ -224,8 +229,12 @@ export class OAuthService {
     let secret = typeof body.client_secret === 'string' ? body.client_secret : '';
     if (authorization?.startsWith('Basic ')) {
       const [user, pass] = Buffer.from(authorization.slice(6), 'base64').toString('utf8').split(':');
-      id = decodeURIComponent(user ?? '');
-      secret = decodeURIComponent(pass ?? '');
+      try {
+        id = decodeURIComponent(user ?? '');
+        secret = decodeURIComponent(pass ?? '');
+      } catch {
+        throw new OAuthError('invalid_client', 'Malformed client credentials', 401);
+      }
     }
     const client = id ? await this.client(id) : undefined;
     if (!client) throw new OAuthError('invalid_client', 'Unknown client', 401);

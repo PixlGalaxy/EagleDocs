@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { pipeline } from 'stream/promises';
 import busboy from 'busboy';
 import { RAG_DIR, UserRags } from 'pixlai-engine';
 import { badRequest, notFound, withDetail } from '../../errors.js';
@@ -10,6 +11,9 @@ import { QuotaError, TEMP, TEMP_TTL_MS, type DiskWorkspace } from '../../engine/
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 const MB = 1048576;
+
+/** Files the workspace preview may save as text: the same list the chat previews as text. */
+const EDITABLE_TEXT = /\.(txt|md|markdown|csv|tsv|json|jsonl|ya?ml|toml|ini|log|xml|html?|css|scss|js|jsx|ts|tsx|mjs|cjs|py|java|c|h|cpp|hpp|cs|go|rs|rb|php|sh|ps1|bat|sql|r|m|tex|bib)$/i;
 
 function pathParam(value: unknown): string {
   const path = typeof value === 'string' ? value.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') : '';
@@ -71,22 +75,36 @@ export function createFilesRoutes(workspace: DiskWorkspace) {
     const path = pathParam(req.query.path);
     const stat = await workspace.stat(req.user!.id, path).catch(asHttp);
     if (!stat || stat.type !== 'file') throw notFound();
-    const { abs } = workspace.resolve(req.user!.id, path);
+    // Streamed from a descriptor opened inside the user's folders (no link can redirect it).
+    const { handle, size } = await workspace.openRead(req.user!.id, path).catch(asHttp);
+    const stream = handle.createReadStream();
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Length', String(size));
     // Pictures may show inline (chat thumbnails), with their own type and a sandbox: nothing can run from them.
     const inlineType = req.query.inline === '1' ? IMAGE_TYPES[stat.name.split('.').pop()?.toLowerCase() ?? ''] : undefined;
     if (inlineType) {
       res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
       res.setHeader('Cache-Control', 'private, max-age=300');
-      res.type(inlineType).sendFile(abs, { dotfiles: 'allow' }, (err) => {
-        if (err && !res.headersSent) next(notFound());
-      });
+      res.type(inlineType);
+      await pipeline(stream, res).catch(() => undefined);
       return;
     }
     // Everything else as a download: user files must never render as pages on our origin.
-    res.download(abs, stat.name, { dotfiles: 'allow' }, (err) => {
-      if (err && !res.headersSent) next(notFound());
-    });
+    res.attachment(stat.name).type('application/octet-stream');
+    await pipeline(stream, res).catch(() => undefined);
+  });
+
+  // Saves a text file edited in the chat's workspace preview; only files that already exist, and only text ones.
+  files.put('/content', async (req: AppRequest, res) => {
+    const body = req.body as { path?: unknown; content?: unknown };
+    const path = pathParam(body?.path);
+    if (!path || typeof body.content !== 'string') throw badRequest('files.invalidPath');
+    if (!EDITABLE_TEXT.test(path)) throw badRequest('files.notEditable');
+    const stat = await workspace.stat(req.user!.id, path).catch(asHttp);
+    if (!stat || stat.type !== 'file') throw notFound();
+    await workspace.write(req.user!.id, path, body.content).catch(asHttp);
+    const saved = await workspace.stat(req.user!.id, path);
+    res.json({ name: saved!.name, path: saved!.path, type: 'file', size: saved!.size, modified_at: saved!.modifiedAt });
   });
 
   files.post('/upload', (req: AppRequest, res, next) => {

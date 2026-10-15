@@ -43,6 +43,17 @@ async function publicAddress(hostname: string): Promise<{ address: string; famil
 }
 
 /**
+ * For addresses a student types (their own model API): refuses internal hosts.
+ * Checked when saved and before every request, so a later DNS change cannot
+ * point it inside; those requests also refuse redirects.
+ */
+export async function assertPublicUrl(rawUrl: string): Promise<void> {
+  const url = new URL(rawUrl);
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('Only http and https URLs are supported');
+  await publicAddress(url.hostname);
+}
+
+/**
  * The engine's FetchPort: downloads public http(s) URLs only. Every hop of a
  * redirect is resolved and checked, and the connection goes to the address that
  * was checked (no second DNS answer can swap in an internal one).

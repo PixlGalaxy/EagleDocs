@@ -28,6 +28,9 @@ interface SubscriptionRow {
 }
 
 /** Web push for every replica: VAPID keys live in app_settings (the private one encrypted). */
+/** Devices (browsers) per student. */
+export const MAX_DEVICES = 10;
+
 export class PushService {
   constructor(
     private db: Db,
@@ -86,6 +89,12 @@ export class PushService {
       `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, kinds) VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (endpoint) DO UPDATE SET user_id = $1, p256dh = $3, auth = $4, kinds = $5`,
       [userId, target.endpoint, target.keys.p256dh, target.keys.auth, kinds],
+    );
+    // A handful of devices per student: older ones go first (each notification is sent to all of them).
+    await this.db.query(
+      `DELETE FROM push_subscriptions WHERE user_id = $1 AND id NOT IN
+         (SELECT id FROM push_subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2)`,
+      [userId, MAX_DEVICES],
     );
   }
 

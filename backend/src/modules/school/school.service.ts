@@ -227,7 +227,8 @@ export class SchoolService {
           continue;
         case 'pick_account': {
           // Our account's tile when Microsoft lists it, otherwise "Use another account" (then the email step).
-          const email = (await credentials()).email;
+          // Quoted for the selector: a quote or backslash in the address must not change it.
+          const email = (await credentials()).email.replace(/[\\"]/g, '\\$&');
           await this.run(userId, 'tap', { profile, selector: `[data-test-id="${email}"], div[role="button"]:has-text("${email}"), div[role="listitem"]:has-text("${email}")` }, ctx.signal).catch(() =>
             this.run(userId, 'tap', { profile, selector: '#otherTile, div[role="button"]:has-text("Use another account")' }, ctx.signal),
           );

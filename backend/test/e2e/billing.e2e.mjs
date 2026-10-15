@@ -31,8 +31,8 @@ const stripe = http.createServer(async (req, res) => {
 await new Promise((resolve) => stripe.listen(STRIPE_PORT, resolve));
 
 let eventSeq = 0;
-async function webhook(type, object, { secret = WEBHOOK_SECRET, id } = {}) {
-  const body = JSON.stringify({ id: id ?? `evt_e2e_${++eventSeq}`, type, data: { object } });
+async function webhook(type, object, { secret = WEBHOOK_SECRET, id, created } = {}) {
+  const body = JSON.stringify({ id: id ?? `evt_e2e_${++eventSeq}`, type, ...(created && { created }), data: { object } });
   const t = Math.floor(Date.now() / 1000);
   const sig = `t=${t},v1=${createHmac('sha256', secret).update(`${t}.${body}`).digest('hex')}`;
   const res = await fetch(`${A}/billing/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': sig }, body });
@@ -150,6 +150,8 @@ check('checkout opens a Stripe subscription for Plus', r.json?.url === 'https://
 check('Stripe is called with the secret key', stripeCalls[0]?.auth === 'Bearer sk_test_e2eFakeKey1234567890');
 r = await webhook('checkout.session.completed', { client_reference_id: userRow.id, customer: 'cus_e2e1', subscription: 'sub_e2e1', metadata: { tier_id: plus.id } }, { secret: 'whsec_wrongSecret12345' });
 check('an unsigned webhook is refused', r.status === 400);
+r = await webhook('checkout.session.completed', { client_reference_id: userRow.id, customer: 'cus_e2e1', subscription: 'sub_e2e1', payment_status: 'unpaid', metadata: { tier_id: plus.id } });
+check('a checkout not paid yet does not grant the plan', r.json?.outcome === 'ignored', JSON.stringify(r.json));
 r = await webhook('checkout.session.completed', { client_reference_id: userRow.id, customer: 'cus_e2e1', subscription: 'sub_e2e1', metadata: { tier_id: plus.id } }, { id: 'evt_checkout' });
 check('the checkout webhook is processed', r.json?.outcome === 'processed', JSON.stringify(r.json));
 r = await user.req('GET', '/billing/plan');
@@ -173,6 +175,11 @@ check('cancelling in the portal keeps Plus until the period ends', r.json.tier?.
 await webhook('customer.subscription.deleted', { id: 'sub_e2e1', customer: 'cus_e2e1', status: 'canceled', items: { data: [{ price: { id: 'price_PlusE2E123' } }] } });
 r = await user.req('GET', '/billing/plan');
 check('at the end of the period the student is back on Free', r.json.tier?.name === 'Free' && r.json.subscription_status === 'canceled', JSON.stringify(r.json).slice(0, 160));
+// Stripe retries an older "active" event after the cancellation: it must not bring Plus back.
+r = await webhook('customer.subscription.updated', { id: 'sub_e2e1', customer: 'cus_e2e1', status: 'active', items: { data: [{ price: { id: 'price_PlusE2E123' } }] } }, { created: Math.floor(Date.now() / 1000) - 3600 });
+check('an old event arriving late is skipped', r.json?.outcome === 'stale', JSON.stringify(r.json));
+r = await user.req('GET', '/billing/plan');
+check('...and the student stays on Free', r.json.tier?.name === 'Free', r.json.tier?.name);
 
 await admin.req('PUT', `/admin/tiers/${free.id}`, { daily_messages: 100, max_schedules: 3 });
 await admin.req('PUT', '/admin/billing', { enabled: false });

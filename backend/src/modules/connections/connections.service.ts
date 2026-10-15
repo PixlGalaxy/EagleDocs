@@ -19,6 +19,7 @@ import {
 } from '../models/providers/codex-auth.js';
 import { listCodexModels } from '../models/providers/codex.js';
 import { listOpenAIModels } from '../models/providers/openai-compat.js';
+import { assertPublicUrl } from '../../engine/web.js';
 import { CanvasClient } from '../canvas/canvas.client.js';
 
 export type ConnectionKind = 'canvas' | 'sso' | 'degreeworks' | 'codex' | 'api_key';
@@ -71,6 +72,9 @@ export function toView(row: ConnectionRow) {
     meta,
   };
 }
+
+/** Personal API keys per student. */
+const MAX_API_KEYS = 10;
 
 export class ConnectionsService {
   constructor(private db: Db, private secrets: Secrets, private appVersion: string) {}
@@ -148,6 +152,8 @@ export class ConnectionsService {
     if (!spec) throw badRequest('error.invalidInput');
     const apiKey = typeof body.api_key === 'string' ? body.api_key.trim() : '';
     if (apiKey.length < 8 || apiKey.length > 500) throw badRequest('error.invalidInput');
+    const { rows: keys } = await this.db.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM connections WHERE user_id = $1 AND kind = 'api_key'", [userId]);
+    if ((keys[0]?.n ?? 0) >= MAX_API_KEYS) throw badRequest('error.invalidInput');
     let baseUrl = spec.baseUrl;
     if (provider === 'openai_compat') {
       try {
@@ -162,9 +168,10 @@ export class ConnectionsService {
 
     let models: string[];
     try {
-      models = spec.kind === 'anthropic' ? await listAnthropicModels(apiKey) : await listOpenAIModels(baseUrl!, apiKey);
+      models = spec.kind === 'anthropic' ? await listAnthropicModels(apiKey) : await listOpenAIModels(baseUrl!, apiKey, assertPublicUrl);
     } catch (err) {
-      throw withDetail(badRequest('models.keyRejected'), (err as Error).message);
+      // Never echo what an address the student typed answered: it could be an internal page.
+      throw withDetail(badRequest('models.keyRejected'), provider === 'openai_compat' ? 'The API did not accept the key or is not reachable' : (err as Error).message);
     }
     const meta = { key_hint: `...${apiKey.slice(-4)}`, base_url: baseUrl, models: curateModels(provider, models) };
     const { rows } = await this.db.query<ConnectionRow>(
@@ -183,7 +190,7 @@ export class ConnectionsService {
         const spec = KEY_PROVIDERS[row.provider ?? ''];
         const key = this.secretOf(row);
         const models =
-          spec?.kind === 'anthropic' ? await listAnthropicModels(key) : await listOpenAIModels(String(row.meta.base_url), key);
+          spec?.kind === 'anthropic' ? await listAnthropicModels(key) : await listOpenAIModels(String(row.meta.base_url), key, assertPublicUrl);
         await this.markOk(row.id, { ...row.meta, models: curateModels(row.provider ?? '', models) });
       } else if (row.kind === 'canvas') {
         const inst = await maybe<{ canvas_base_url: string | null }>(
@@ -193,7 +200,7 @@ export class ConnectionsService {
         );
         const baseUrl = String(row.meta.base_url ?? '') || inst?.canvas_base_url;
         if (!baseUrl) throw new Error('No Canvas address for your school');
-        const profile = await new CanvasClient(baseUrl, this.secretOf(row)).profile();
+        const profile = await new CanvasClient(baseUrl, this.secretOf(row), row.meta.base_url ? assertPublicUrl : undefined).profile();
         await this.markOk(row.id, { ...row.meta, name: profile.name ?? null });
       } else if (row.kind === 'codex') {
         const token = await this.codexAccessToken(row.id);

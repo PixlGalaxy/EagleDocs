@@ -286,7 +286,7 @@ export class McpServer {
       .query('INSERT INTO audit_log (actor_id, action, target, meta) VALUES ($1, $2, $3, $4)', [
         principal.userId,
         'mcp.tool',
-        name,
+        name.slice(0, 64),
         { client: principal.clientName, ms: Date.now() - started, error: result.isError },
       ])
       .catch((err: Error) => logger.warn(`MCP audit failed: ${err.message}`));

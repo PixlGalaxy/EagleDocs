@@ -1,6 +1,7 @@
 import type { BrowserAction, BrowserPage, BrowserPort, ExecRequest, ExecResult, SandboxPort } from 'pixlai-engine';
 import type { SandboxHandle, SandboxManager } from '../modules/sandbox/manager.js';
 import type { DiskWorkspace } from './workspace.js';
+import { assertPublicUrl } from './web.js';
 
 /** Request timeout on top of what the call itself is allowed to take. */
 const MARGIN_MS = 15_000;
@@ -89,7 +90,12 @@ export class SandboxTools implements SandboxPort, BrowserPort {
 
   // ---------------------------------------------------------------- BrowserPort
 
-  open(userId: string, profile: string, url: string, signal: AbortSignal): Promise<BrowserPage> {
+  /**
+   * The agent's browser only opens public sites (not the server's network or cloud metadata).
+   * A page can still redirect or link inward: the sandbox network filter is what closes that.
+   */
+  async open(userId: string, profile: string, url: string, signal: AbortSignal): Promise<BrowserPage> {
+    await assertPublicUrl(url);
     return this.call(userId, '/browser/open', { profile, url }, BROWSER_MS, signal);
   }
 

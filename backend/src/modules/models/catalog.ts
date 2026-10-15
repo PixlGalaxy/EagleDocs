@@ -11,6 +11,7 @@ import { AnthropicProvider } from './providers/anthropic.js';
 import { CODEX_CONTEXT_WINDOW, CodexProvider, isAccessBlock } from './providers/codex.js';
 import { OllamaProvider } from './providers/ollama.js';
 import { OpenAICompatProvider } from './providers/openai-compat.js';
+import { assertPublicUrl } from '../../engine/web.js';
 import { routeTier, TIER_FALLBACK, TIERS, type ModelTier, type RouteInput } from './router.js';
 
 export type ProviderKind = 'eagledocs' | 'codex' | 'openai_compat' | 'anthropic';
@@ -290,7 +291,7 @@ export class ModelCatalog {
 
     const key = this.connections.secretOf(conn);
     const anthropic = parsed.provider === 'anthropic';
-    const provider = anthropic ? new AnthropicProvider(key) : new OpenAICompatProvider(String(conn.meta.base_url), key, conn.label);
+    const provider = anthropic ? new AnthropicProvider(key) : new OpenAICompatProvider(String(conn.meta.base_url), key, conn.label, assertPublicUrl);
     return {
       isEagleDocs: false,
       model: {

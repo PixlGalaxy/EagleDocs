@@ -153,6 +153,8 @@ async function main() {
     await pruneJobEvents(db);
     // OAuth: unused requests and expired tokens are never needed again.
     await db.query("DELETE FROM oauth_requests WHERE expires_at < now() - interval '1 day'");
+    // Registered but never used (no grant) after a week: registration is open, so do not keep them forever.
+    await db.query("DELETE FROM oauth_clients c WHERE c.created_at < now() - interval '7 days' AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.id)");
     await db.query("DELETE FROM oauth_tokens WHERE expires_at < now() - interval '1 day'");
   });
   scheduleExclusive(db, 'scheduler', LOCKS.scheduler, 60 * 1000, () => runDueSchedules(db, bus));

@@ -91,7 +91,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/billing/webhook', billingRoutes.webhook);
   app.use(express.json({ limit: '1mb' }));
   // OAuth and MCP for ChatGPT, Claude and other clients: tokens instead of cookies, so before the session and CSRF.
-  const mcpRoutes = createMcpRoutes({ oauth, server: mcp, settings });
+  const mcpRoutes = createMcpRoutes({ db, oauth, server: mcp, settings });
   app.use(mcpRoutes.open);
   app.use(cookieParser());
   app.use(createSessionMiddleware(auth));

@@ -3,6 +3,7 @@
  * never changes anything in a student's Canvas. Ported from the canvas-lms
  * skill (per_page=100, `Link: rel="next"` pagination, 30 s timeout).
  */
+import { assertPublicUrl } from '../../engine/web.js';
 
 export class CanvasError extends Error {
   constructor(
@@ -122,7 +123,12 @@ export class CanvasClient {
   /** The school's Canvas, e.g. https://fgcu.instructure.com. */
   readonly origin: string;
 
-  constructor(baseUrl: string, private token: string) {
+  /**
+   * `guard` vets every address first: set when the student typed the Canvas
+   * address themselves (it could point inside the network). The school's own
+   * Canvas, set by an admin, is trusted.
+   */
+  constructor(baseUrl: string, private token: string, private guard?: (url: string) => Promise<void>) {
     this.origin = new URL(baseUrl).origin;
   }
 
@@ -149,6 +155,7 @@ export class CanvasClient {
   }
 
   private async fetchWithRetry(url: string): Promise<Response> {
+    await this.guard?.(url);
     for (let attempt = 0; ; attempt++) {
       let res: Response;
       try {
@@ -254,6 +261,15 @@ export class CanvasClient {
     let url = file.url;
     for (let hop = 0; hop < 5; hop++) {
       const sameOrigin = new URL(url).origin === this.origin;
+      // Off Canvas (its file store) only public https addresses, whoever set the Canvas address.
+      if (!sameOrigin && new URL(url).protocol !== 'https:') throw new CanvasError('This file cannot be downloaded', 'server');
+      if (!sameOrigin || this.guard) {
+        try {
+          await assertPublicUrl(url);
+        } catch {
+          throw new CanvasError('This file cannot be downloaded', 'server');
+        }
+      }
       const res = await fetch(url, {
         headers: sameOrigin ? { authorization: `Bearer ${this.token}` } : {},
         redirect: 'manual',

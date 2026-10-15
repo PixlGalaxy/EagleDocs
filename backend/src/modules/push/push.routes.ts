@@ -3,6 +3,7 @@ import type { Db } from '../../db/pool.js';
 import { maybe } from '../../db/pool.js';
 import type { SettingsService } from '../../db/settings.js';
 import { badRequest } from '../../errors.js';
+import { createRateLimiter } from '../../middleware/rate-limit.js';
 import type { Translate } from '../../i18n/index.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAdmin, requireAuth } from '../auth/session.middleware.js';
@@ -26,9 +27,11 @@ export function createPushRoutes(deps: { db: Db; push: PushService; settings: Se
   const user = Router();
   const admin = Router();
   user.use(requireAuth);
+  const perUser = (name: string, max: number) =>
+    createRateLimiter(db, { windowMs: 60 * 60_000, max, keyFn: (req) => `push:${name}:${(req as AppRequest).user!.id}`, describe: (req) => `push ${name} by "${(req as AppRequest).user!.username}"` });
   admin.use(requireAdmin);
 
-  user.post('/subscriptions', async (req: AppRequest, res) => {
+  user.post('/subscriptions', perUser('subscribe', 30), async (req: AppRequest, res) => {
     const body = (req.body ?? {}) as { subscription?: { endpoint?: unknown; keys?: { p256dh?: unknown; auth?: unknown } }; kinds?: unknown };
     const endpoint = str(body.subscription?.endpoint, 2000);
     const p256dh = str(body.subscription?.keys?.p256dh, 200);
@@ -43,7 +46,7 @@ export function createPushRoutes(deps: { db: Db; push: PushService; settings: Se
     res.status(204).end();
   });
 
-  user.post('/test', async (req: AppRequest, res) => {
+  user.post('/test', perUser('test', 20), async (req: AppRequest, res) => {
     const lang = req.user!.language;
     const sent = await push.notify(
       req.user!.id,

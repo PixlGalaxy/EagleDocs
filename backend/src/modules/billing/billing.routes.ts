@@ -6,7 +6,7 @@ import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAdmin, requireAuth } from '../auth/session.middleware.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
-import { verifyStripeSignature, type BillingService } from './billing.service.js';
+import { verifyStripeSignature, type BillingService, type StripeEvent } from './billing.service.js';
 import type { TiersService } from './tiers.service.js';
 
 /**
@@ -37,7 +37,7 @@ export function createBillingRoutes(deps: { billing: BillingService; tiers: Tier
       res.status(400).json({ error: 'Invalid signature' });
       return;
     }
-    let event: { id: string; type: string; data: { object: Record<string, unknown> } };
+    let event: StripeEvent;
     try {
       event = JSON.parse(raw.toString('utf8'));
     } catch {

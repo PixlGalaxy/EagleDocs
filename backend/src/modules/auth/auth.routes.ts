@@ -6,7 +6,7 @@ import { badRequest, forbidden, unauthorized } from '../../errors.js';
 import { logger } from '../../logger.js';
 import { clearRateLimit, createRateLimiter } from '../../middleware/rate-limit.js';
 import { THEME_MODES, THEME_SKINS, type AppRequest } from '../../types/index.js';
-import { getUserById, MAX_PASSWORD_LENGTH, optionalText, toPublicUser, validatePassword } from '../users/users.service.js';
+import { getUserById, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, optionalText, toPublicUser, validatePassword } from '../users/users.service.js';
 import type { AuthService } from './auth.service.js';
 import type { RegisterService } from './register.service.js';
 import { requireAuth, SESSION_COOKIE } from './session.middleware.js';
@@ -32,7 +32,8 @@ export function createAuthRoutes(
   const loginWindowMs = config.LOGIN_RATE_LIMIT_WINDOW_MINUTES * 60 * 1000;
   const loginAccountKey = (req: AppRequest) => {
     const value = (req.body as { usernameOrEmail?: unknown })?.usernameOrEmail;
-    return typeof value === 'string' && value.trim() ? `login:account:${value.trim().toLowerCase()}` : null;
+    // Over-long values are rejected by the handler; never store them as keys.
+    return typeof value === 'string' && value.trim() && value.length <= MAX_EMAIL_LENGTH ? `login:account:${value.trim().toLowerCase()}` : null;
   };
   // Both must pass: caps one IP hammering many accounts, and many IPs hammering one account.
   const loginIpLimiter = createRateLimiter(db, {
@@ -53,6 +54,13 @@ export function createAuthRoutes(
     keyFn: (req) => `register:ip:${req.ip}`,
     describe: (req) => `sign-ups from ${req.ip}`,
   });
+  // A stolen session must not be able to guess the current password.
+  const changePasswordLimiter = createRateLimiter(db, {
+    windowMs: loginWindowMs,
+    max: config.LOGIN_RATE_LIMIT_MAX,
+    keyFn: (req) => ((req as AppRequest).user ? `change-password:${(req as AppRequest).user!.id}` : null),
+    describe: (req) => `password changes by "${(req as AppRequest).user?.username}"`,
+  });
   const verifyLimiter = createRateLimiter(db, {
     windowMs: 15 * 60 * 1000,
     max: 30,
@@ -65,6 +73,7 @@ export function createAuthRoutes(
     if (typeof usernameOrEmail !== 'string' || typeof password !== 'string' || !usernameOrEmail || !password) {
       throw badRequest('auth.credentialsRequired');
     }
+    if (usernameOrEmail.length > MAX_EMAIL_LENGTH) throw unauthorized('auth.invalidCredentials');
     // No account can have a longer password, so skip argon2 and answer like any wrong guess.
     if (password.length > MAX_PASSWORD_LENGTH) throw unauthorized('auth.invalidCredentials');
 
@@ -127,7 +136,7 @@ export function createAuthRoutes(
     res.status(204).end();
   });
 
-  router.post('/change-password', requireAuth, async (req: AppRequest, res) => {
+  router.post('/change-password', requireAuth, changePasswordLimiter, async (req: AppRequest, res) => {
     const { currentPassword, newPassword } = req.body as { currentPassword?: unknown; newPassword?: unknown };
     if (typeof currentPassword !== 'string' || !currentPassword) throw badRequest('auth.passwordsRequired');
     if (currentPassword.length > MAX_PASSWORD_LENGTH) throw unauthorized('auth.currentPasswordIncorrect');

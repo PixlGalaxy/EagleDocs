@@ -3,7 +3,7 @@ import type { Bus } from '../../bus/bus.js';
 import type { Db } from '../../db/pool.js';
 import { many, maybe, one } from '../../db/pool.js';
 import { withTx } from '../../db/tx.js';
-import { badRequest, conflict, notFound } from '../../errors.js';
+import { badRequest, conflict, notFound, tooManyRequests } from '../../errors.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAuth } from '../auth/session.middleware.js';
@@ -12,6 +12,29 @@ import type { DiskWorkspace } from '../../engine/workspace.js';
 import { resolveAttachments } from './attachments.js';
 import { compactHistory, estimateTokens, type ReasoningLevel } from 'pixlai-engine';
 import type { ModelCatalog } from '../models/catalog.js';
+import { hitRateLimit } from '../../middleware/rate-limit.js';
+import type { Queryable } from '../../db/pool.js';
+
+/** "connection:<id>:<model>" or "eagledocs:<tier>": short; anything longer is not a model. */
+const MAX_MODEL_REF = 200;
+const modelRefOf = (value: unknown): string | null => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || value.length > MAX_MODEL_REF) throw badRequest('error.invalidInput');
+  return value;
+};
+
+/**
+ * Inside the transaction that queues a job: locks the chat row so two sends at
+ * the same moment cannot both start a job in it.
+ */
+async function assertChatIdle(client: Queryable, chatId: string): Promise<void> {
+  await client.query('SELECT id FROM chats WHERE id = $1 FOR UPDATE', [chatId]);
+  const { rows } = await client.query(
+    `SELECT 1 FROM jobs WHERE chat_id = $1 AND status IN ('queued', 'running', 'waiting_approval', 'waiting_mfa') LIMIT 1`,
+    [chatId],
+  );
+  if (rows.length) throw conflict('chat.busy');
+}
 
 const REASONING: ReasoningLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 
@@ -46,7 +69,7 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const chat = await chats.create(
       req.user!.id,
       typeof body.title === 'string' ? body.title.trim() : '',
-      typeof body.model_ref === 'string' ? body.model_ref : null,
+      modelRefOf(body.model_ref),
     );
     res.status(201).json({ ...chat, active_job_id: null });
   });
@@ -84,9 +107,10 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const attachments = await resolveAttachments(workspace, userId, body.attachments);
     // A picture alone is a valid message.
     const content = attachments.length && (typeof body.content !== 'string' || !body.content.trim()) ? '' : text(body.content, MAX_MESSAGE_CHARS);
-    const modelRef = typeof body.model_ref === 'string' && body.model_ref ? body.model_ref : null;
+    const modelRef = modelRefOf(body.model_ref);
 
     const { message, jobId } = await withTx(db, async (client) => {
+      await assertChatIdle(client, chat.id);
       const msg = await chats.addUserMessage(client, chat.id, content, attachments.length ? { attachments } : {});
       await client.query(
         "UPDATE chats SET model_ref = $2, title = CASE WHEN title = '' THEN $3 ELSE title END WHERE id = $1",
@@ -111,6 +135,10 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const userId = req.user!.id;
     const chat = await chats.get(userId, routeParam(req.params.id));
     if (chat.active_job_id) throw conflict('chat.busy');
+    // A summary is a full-context model call: one at a time per chat, and a few per hour.
+    const once = await hitRateLimit(db, `compact:chat:${chat.id}`, 60_000, 1);
+    const hourly = await hitRateLimit(db, `compact:user:${userId}`, 60 * 60_000, 20);
+    if (!once.allowed || !hourly.allowed) throw tooManyRequests(Math.max(once.allowed ? 0 : once.retryAfterSeconds, hourly.allowed ? 0 : hourly.retryAfterSeconds));
     const rows = await chats.historyRows(chat.id);
     const history = rows.map((r) => {
       const { attachments: _files, ...message } = r.message;
@@ -119,6 +147,8 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const resolution = await catalog.resolve(userId, chat.model_ref, { text: '', historyChars: 0 });
     if (resolution.isEagleDocs) await catalog.assertQuota(userId);
     const result = await compactHistory(history, resolution.model, AbortSignal.timeout(120_000));
+    // Counts toward the daily limit like any message (estimated: the summary call reports no usage here).
+    if (result) await catalog.recordUsage(userId, resolution.isEagleDocs, estimateTokens(history.slice(0, result.keepFrom)), estimateTokens([{ role: 'user', content: result.summary }]));
     const before = await chats.lastContext(chat.id);
     if (!result) {
       res.json({ summarized: 0, context: before });
@@ -263,6 +293,7 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const chat = await chats.get(req.user!.id, job.chat_id);
     if (chat.active_job_id) throw conflict('chat.busy');
     const jobId = await withTx(db, async (client) => {
+      await assertChatIdle(client, job.chat_id!);
       // Hidden from the chat, read by the model: the history must end with something to answer.
       await chats.addUserMessage(client, job.chat_id!, '[The previous attempt stopped before it finished. Continue the task where it left off.]', { internal: true, retry_of: job.id });
       const { rows } = await client.query<{ id: string }>(

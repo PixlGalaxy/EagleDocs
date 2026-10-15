@@ -89,7 +89,7 @@ const authorize = async (scope, { verifier, challenge }) => {
 };
 let p = pkce();
 let auth = await fetch(`${meta.authorization_endpoint}?${form({ response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, scope: 'memory' })}`, { redirect: 'manual' });
-check('authorize without PKCE goes back with an error', auth.status === 302 && /error=invalid_request/.test(auth.headers.get('location') ?? ''), auth.headers.get('location'));
+check('authorize without PKCE shows an error page, no redirect (no open redirect)', auth.status === 400 && !auth.headers.get('location') && /PKCE/.test(await auth.text()), auth.status);
 auth = await fetch(`${meta.authorization_endpoint}?${form({ response_type: 'code', client_id: clientId, redirect_uri: 'https://other.example/cb', code_challenge: p.challenge, code_challenge_method: 'S256' })}`, { redirect: 'manual' });
 check('an unregistered redirect URI is never redirected to', auth.status === 400, String(auth.status));
 let a = await authorize('canvas.read workspace memory', p);

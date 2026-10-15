@@ -45,6 +45,14 @@ export async function runDueSchedules(db: Db, bus: Bus): Promise<void> {
       ]);
 
       let chatId = due.chat_id;
+      // The previous run is still working (or waiting for approval): skip this one rather than pile up.
+      if (chatId) {
+        const { rows: busy } = await client.query(
+          `SELECT 1 FROM jobs WHERE chat_id = $1 AND status IN ('queued', 'running', 'waiting_approval', 'waiting_mfa') LIMIT 1`,
+          [chatId],
+        );
+        if (busy.length) continue;
+      }
       if (!chatId) {
         const { rows: chat } = await client.query<{ id: string }>(
           "INSERT INTO chats (user_id, title, model_ref, kind) VALUES ($1, $2, $3, 'scheduled') RETURNING id",

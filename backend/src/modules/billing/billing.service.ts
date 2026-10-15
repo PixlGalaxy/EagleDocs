@@ -53,6 +53,14 @@ export function verifyStripeSignature(rawBody: Buffer, header: string | undefine
  * or cancel, and webhooks that keep `subscriptions` and the student's plan in
  * sync. Off until the admin turns billing on and saves the Stripe keys.
  */
+export interface StripeEvent {
+  id: string;
+  type: string;
+  /** Unix seconds. */
+  created?: number;
+  data: { object: Record<string, unknown> };
+}
+
 export class BillingService {
   constructor(
     private db: Db,
@@ -172,19 +180,29 @@ export class BillingService {
    * A Stripe event, already verified. Each event id is processed once, even
    * if it reaches several replicas at the same time.
    */
-  async handleEvent(event: { id: string; type: string; data: { object: Record<string, unknown> } }): Promise<'processed' | 'duplicate' | 'ignored'> {
+  async handleEvent(event: StripeEvent): Promise<'processed' | 'duplicate' | 'ignored' | 'stale'> {
     const fresh = await this.db.query('INSERT INTO stripe_events (id, type) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [event.id, event.type]);
     if (!fresh.rowCount) return 'duplicate';
+    try {
+      return await this.apply(event);
+    } catch (err) {
+      // Not applied: forget the id so Stripe's retry is processed instead of skipped as a duplicate.
+      await this.db.query('DELETE FROM stripe_events WHERE id = $1', [event.id]).catch(() => undefined);
+      throw err;
+    }
+  }
+
+  private async apply(event: StripeEvent): Promise<'processed' | 'ignored' | 'stale'> {
     const obj = event.data.object;
+    // When Stripe created it (seconds); an event without one counts as now.
+    const at = new Date(typeof event.created === 'number' ? event.created * 1000 : Date.now());
     switch (event.type) {
       case 'checkout.session.completed':
-        await this.onCheckout(obj);
-        return 'processed';
+        return this.onCheckout(obj, at);
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
       case 'customer.subscription.deleted':
-        await this.onSubscription(obj, event.type.endsWith('deleted'));
-        return 'processed';
+        return this.onSubscription(obj, event.type.endsWith('deleted'), at);
       case 'invoice.payment_failed':
         await this.db.query(
           `UPDATE subscriptions SET grace_until = COALESCE(grace_until, now() + make_interval(days => $2)), updated_at = now()
@@ -206,22 +224,27 @@ export class BillingService {
     this.tiers.forget(userId);
   }
 
-  private async onCheckout(session: Record<string, unknown>): Promise<void> {
+  private async onCheckout(session: Record<string, unknown>, at: Date): Promise<'processed' | 'ignored' | 'stale'> {
     const userId = String(session.client_reference_id ?? '');
     const metadata = (session.metadata ?? {}) as Record<string, string>;
     const tier = metadata.tier_id ? await this.tiers.get(metadata.tier_id) : undefined;
-    if (!/^[0-9a-f-]{36}$/i.test(userId) || !tier) return;
-    await this.db.query(
-      `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, tier_id, status, updated_at)
-       VALUES ($1, $2, $3, $4, 'active', now())
+    if (!/^[0-9a-f-]{36}$/i.test(userId) || !tier) return 'ignored';
+    // Delayed payment methods complete the checkout before the money arrives: the subscription events grant the plan then.
+    if (session.payment_status !== undefined && !['paid', 'no_payment_required'].includes(String(session.payment_status))) return 'ignored';
+    const { rowCount } = await this.db.query(
+      `INSERT INTO subscriptions (user_id, stripe_customer_id, stripe_subscription_id, tier_id, status, last_event_at, updated_at)
+       VALUES ($1, $2, $3, $4, 'active', $5, now())
        ON CONFLICT (user_id) DO UPDATE SET stripe_customer_id = $2, stripe_subscription_id = $3, tier_id = $4, status = 'active',
-         grace_until = NULL, updated_at = now()`,
-      [userId, String(session.customer ?? ''), String(session.subscription ?? ''), tier.id],
+         grace_until = NULL, last_event_at = $5, updated_at = now()
+       WHERE subscriptions.last_event_at IS NULL OR subscriptions.last_event_at <= $5`,
+      [userId, String(session.customer ?? ''), String(session.subscription ?? ''), tier.id, at],
     );
+    if (!rowCount) return 'stale';
     await this.setPlan(userId, tier.id);
+    return 'processed';
   }
 
-  private async onSubscription(sub: Record<string, unknown>, deleted: boolean): Promise<void> {
+  private async onSubscription(sub: Record<string, unknown>, deleted: boolean, at: Date): Promise<'processed' | 'ignored' | 'stale'> {
     const id = String(sub.id ?? '');
     const customer = String(sub.customer ?? '');
     const row = await maybe<SubscriptionRow>(
@@ -229,23 +252,26 @@ export class BillingService {
       'SELECT * FROM subscriptions WHERE stripe_subscription_id = $1 OR stripe_customer_id = $2 ORDER BY (stripe_subscription_id = $1) DESC LIMIT 1',
       [id, customer],
     );
-    if (!row) return;
+    if (!row) return 'ignored';
     const items = ((sub.items as { data?: { price?: { id?: string }; current_period_end?: number }[] } | undefined)?.data ?? []);
     const priceId = items[0]?.price?.id;
     const tier = priceId ? await this.tiers.byStripePrice(priceId) : undefined;
     const periodEnd = Number(sub.current_period_end ?? items[0]?.current_period_end ?? 0);
     const status = deleted ? 'canceled' : String(sub.status ?? row.status);
-    await this.db.query(
+    // Only when nothing newer was applied already: an old retry must not undo a cancellation.
+    const { rowCount } = await this.db.query(
       `UPDATE subscriptions SET stripe_subscription_id = $2, status = $3, tier_id = COALESCE($4, tier_id),
-         current_period_end = $5, cancel_at_period_end = $6, updated_at = now(),
+         current_period_end = $5, cancel_at_period_end = $6, last_event_at = $7, updated_at = now(),
          grace_until = CASE WHEN $3 IN ('active', 'trialing') THEN NULL ELSE grace_until END
-       WHERE user_id = $1`,
-      [row.user_id, id, status, tier?.id ?? null, periodEnd ? new Date(periodEnd * 1000) : null, sub.cancel_at_period_end === true],
+       WHERE user_id = $1 AND (last_event_at IS NULL OR last_event_at <= $7)`,
+      [row.user_id, id, status, tier?.id ?? null, periodEnd ? new Date(periodEnd * 1000) : null, sub.cancel_at_period_end === true, at],
     );
+    if (!rowCount) return 'stale';
     const paidTier = tier?.id ?? row.tier_id;
     if (['active', 'trialing'].includes(status) && paidTier) await this.setPlan(row.user_id, paidTier);
     // Over: back to the default plan, unless the admin gave them another one meanwhile.
     else if (['canceled', 'incomplete_expired'].includes(status)) await this.dropPaidPlan(row.user_id, paidTier);
+    return 'processed';
   }
 
   private async dropPaidPlan(userId: string, paidTier: string | null): Promise<void> {

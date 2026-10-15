@@ -18,6 +18,9 @@ const id = (req: AppRequest) => {
 };
 
 /** Settings -> Memory, Schedules and Skills: what the agent keeps per user, visible and editable. */
+/** Personal skills per student (each up to 50 KB, all listed to the agent). */
+const MAX_USER_SKILLS = 50;
+
 export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills, tiers: TiersService) {
   const memories = Router();
   const schedules = Router();
@@ -69,7 +72,7 @@ export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills, tiers: Ti
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : '';
     const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
     const schedule = typeof body.cron === 'string' ? body.cron.trim() : '';
-    if (!name || !prompt || prompt.length > 2000) throw badRequest('schedules.invalid');
+    if (!name || !prompt || prompt.length > 2000 || schedule.length > 100) throw badRequest('schedules.invalid');
     const timezone = req.user!.timezone || 'America/New_York';
     const count = await maybe<{ n: number }>(db, 'SELECT COUNT(*) AS n FROM schedules WHERE user_id = $1', [req.user!.id]);
     if ((count?.n ?? 0) >= (await tiers.limitsFor(req.user!.id)).maxSchedules) throw badRequest('schedules.limit');
@@ -91,6 +94,7 @@ export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills, tiers: Ti
     if (!current) throw notFound();
     const body = (req.body ?? {}) as { name?: unknown; cron?: unknown; prompt?: unknown; enabled?: unknown };
     const schedule = typeof body.cron === 'string' ? body.cron.trim() : current.schedule;
+    if (schedule.length > 100) throw badRequest('schedules.invalid');
     const enabled = typeof body.enabled === 'boolean' ? body.enabled : current.enabled;
     const row = await maybe(
       db,
@@ -148,6 +152,8 @@ export function createAgentDataRoutes(db: Db, builtins: BuiltinSkills, tiers: Ti
 
   skills.post('/', async (req: AppRequest, res) => {
     const input = parseSkill((req.body ?? {}) as Record<string, unknown>);
+    const count = await maybe<{ n: number }>(db, 'SELECT COUNT(*)::int AS n FROM user_skills WHERE user_id = $1', [req.user!.id]);
+    if ((count?.n ?? 0) >= MAX_USER_SKILLS) throw badRequest('error.invalidInput');
     let slug = slugify(input.name);
     const taken = builtins.get(slug) || (await maybe(db, 'SELECT 1 FROM user_skills WHERE user_id = $1 AND slug = $2', [req.user!.id, slug]));
     if (taken) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;

@@ -1,5 +1,7 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
+import type { Db } from '../../db/pool.js';
 import type { SettingsService } from '../../db/settings.js';
+import { createRateLimiter, hitRateLimit } from '../../middleware/rate-limit.js';
 import { logger } from '../../logger.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
@@ -38,8 +40,16 @@ const errorPage = (message: string) =>
  * Public OAuth and MCP endpoints (no session, no CSRF: clients use tokens),
  * and the signed-in parts: the consent screen and Settings → Apps.
  */
-export function createMcpRoutes(deps: { oauth: OAuthService; server: McpServer; settings: SettingsService }) {
-  const { oauth, server, settings } = deps;
+/** JSON-RPC messages per POST: batches were dropped from MCP, so clients send one; a few is plenty. */
+const MAX_BATCH = 10;
+/** Every POST to /mcp counts (tools/list too), apart from the per-call tool limit. */
+const REQUESTS_PER_MINUTE = 240;
+
+export function createMcpRoutes(deps: { db: Db; oauth: OAuthService; server: McpServer; settings: SettingsService }) {
+  const { db, oauth, server, settings } = deps;
+  // Public endpoints, so by address: registrations write rows, authorize writes a pending request.
+  const perIp = (name: string, windowMs: number, max: number) =>
+    createRateLimiter(db, { windowMs, max, keyFn: (req) => `oauth:${name}:${req.ip}`, describe: (req) => `OAuth ${name} from ${req.ip}` });
   const enabled = () => settings.getBoolean(K.mcpEnabled, false);
   const open = Router();
   /** Mounted at /api/oauth and /api/mcp-apps only: requireAuth must not reach other /api routes. */
@@ -59,7 +69,7 @@ export function createMcpRoutes(deps: { oauth: OAuthService; server: McpServer; 
     res.json(oauth.serverMetadata());
   });
 
-  open.post('/oauth/register', async (req, res) => {
+  open.post('/oauth/register', perIp('register', 60 * 60_000, 20), async (req, res) => {
     if (!enabled()) return void res.status(404).end();
     try {
       res.status(201).json(await oauth.register((req.body ?? {}) as Record<string, unknown>));
@@ -68,7 +78,7 @@ export function createMcpRoutes(deps: { oauth: OAuthService; server: McpServer; 
     }
   });
 
-  open.get('/oauth/authorize', async (req, res) => {
+  open.get('/oauth/authorize', perIp('authorize', 60_000, 60), async (req, res) => {
     if (!enabled()) return void res.status(404).type('html').send(errorPage('EagleDocs apps are turned off on this server.'));
     try {
       const next = await oauth.authorize(req.query as Record<string, unknown>);
@@ -79,7 +89,7 @@ export function createMcpRoutes(deps: { oauth: OAuthService; server: McpServer; 
     }
   });
 
-  open.post('/oauth/token', async (req, res) => {
+  open.post('/oauth/token', perIp('token', 60_000, 60), async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     try {
       res.json(await oauth.token((req.body ?? {}) as Record<string, unknown>, req.get('authorization')));
@@ -88,7 +98,7 @@ export function createMcpRoutes(deps: { oauth: OAuthService; server: McpServer; 
     }
   });
 
-  open.post('/oauth/revoke', async (req, res) => {
+  open.post('/oauth/revoke', perIp('revoke', 60_000, 60), async (req, res) => {
     const token = (req.body as { token?: unknown })?.token;
     if (typeof token === 'string') await oauth.revokeToken(token);
     res.status(200).end();
@@ -108,10 +118,18 @@ export function createMcpRoutes(deps: { oauth: OAuthService; server: McpServer; 
       res.setHeader('WWW-Authenticate', challenge());
       return void res.status(401).json({ error: 'invalid_token' });
     }
-    const controller = new AbortController();
-    req.on('close', () => !res.writableEnded && controller.abort());
     const body = req.body as unknown;
     const messages = Array.isArray(body) ? body : [body];
+    if (messages.length === 0 || messages.length > MAX_BATCH) {
+      return void res.status(400).json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: `Send 1 to ${MAX_BATCH} messages per request` } });
+    }
+    const limit = await hitRateLimit(db, `mcp:http:${principal.grantId}`, 60_000, REQUESTS_PER_MINUTE);
+    if (!limit.allowed) {
+      res.setHeader('Retry-After', String(limit.retryAfterSeconds));
+      return void res.status(429).json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'Too many requests' } });
+    }
+    const controller = new AbortController();
+    req.on('close', () => !res.writableEnded && controller.abort());
     const replies = [];
     for (const message of messages) {
       try {

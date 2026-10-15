@@ -41,11 +41,14 @@ function toOpenAI(messages: ChatMessage[]) {
  * OpenRouter, Gemini's OpenAI endpoint, vLLM, LM Studio...
  */
 export class OpenAICompatProvider implements ModelProvider {
-  constructor(private baseUrl: string, private apiKey: string | undefined, private label = 'API') {}
+  /** `guard` vets the address before each request (students' own APIs); guarded requests do not follow redirects. */
+  constructor(private baseUrl: string, private apiKey: string | undefined, private label = 'API', private guard?: (url: string) => Promise<void>) {}
 
   async *stream(request: ModelRequest): AsyncIterable<ModelChunk> {
+    await this.guard?.(this.baseUrl);
     const res = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
       method: 'POST',
+      ...(this.guard && { redirect: 'error' as const }),
       headers: {
         'content-type': 'application/json',
         ...(this.apiKey && { authorization: `Bearer ${this.apiKey}` }),
@@ -90,8 +93,10 @@ export class OpenAICompatProvider implements ModelProvider {
 }
 
 /** Model ids an OpenAI-compatible API offers (GET /models). Also proves the key works. */
-export async function listOpenAIModels(baseUrl: string, apiKey: string | undefined): Promise<string[]> {
+export async function listOpenAIModels(baseUrl: string, apiKey: string | undefined, guard?: (url: string) => Promise<void>): Promise<string[]> {
+  await guard?.(baseUrl);
   const res = await fetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
+    ...(guard && { redirect: 'error' as const }),
     headers: apiKey ? { authorization: `Bearer ${apiKey}` } : {},
     signal: AbortSignal.timeout(15_000),
   });
