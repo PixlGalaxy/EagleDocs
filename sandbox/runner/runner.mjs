@@ -189,16 +189,50 @@ async function saveSessionCookies(profile, force = false) {
   await fs.writeFile(join(WORKSPACE, '.browser', profile, SESSION_COOKIES), JSON.stringify(cookies), { mode: 0o600 }).catch(() => {});
 }
 
+/**
+ * Browsers start one at a time. Each one is a whole Chromium (~250 threads):
+ * parallel requests (helpers reading pages at once) must not all pass the
+ * MAX_BROWSERS check before the first one is registered, or the container runs
+ * out of processes and even Python cannot start (EAGAIN).
+ */
+/** Profiles with a request in progress: never closed to make room, even before their browser is registered. */
+const inUse = new Map();
+
+let launchQueue = Promise.resolve();
+function oneAtATime(fn) {
+  const run = launchQueue.then(fn, fn);
+  launchQueue = run.catch(() => {});
+  return run;
+}
+
+/** Waits for a browser to be free to close; the least recently used idle one goes. Busy ones (a page being read) never do. */
+async function makeRoom() {
+  const deadline = Date.now() + 60_000;
+  while (sessions.size >= MAX_BROWSERS) {
+    const idle = [...sessions.entries()].filter(([profile, s]) => !s.busy && !inUse.get(profile)).sort((a, b) => a[1].lastUsed - b[1].lastUsed)[0];
+    if (idle) {
+      await browserRoutes.close({ profile: idle[0] });
+      continue;
+    }
+    if (Date.now() > deadline) throw new HttpError(503, 'The browser is busy with other pages: try again in a moment');
+    await new Promise((r) => setTimeout(r, 300));
+  }
+}
+
 async function session(profile, create) {
   if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(String(profile))) throw new HttpError(400, 'Invalid profile');
   let s = sessions.get(profile);
+  if (!s && create) return oneAtATime(() => openSession(profile));
+  if (!s) throw new HttpError(409, 'No page is open in this profile: use browser_open first');
+  return ready(s);
+}
+
+/** Starts a profile's browser (inside the launch queue: it checks again, another request may have started it). */
+async function openSession(profile) {
+  let s = sessions.get(profile);
   if (!s) {
-    if (!create) throw new HttpError(409, 'No page is open in this profile: use browser_open first');
-    // Too many browsers open: close the least recently used one (its cookies are saved first).
-    while (sessions.size >= MAX_BROWSERS) {
-      const [oldest] = [...sessions.entries()].sort((a, b) => a[1].lastUsed - b[1].lastUsed)[0];
-      await browserRoutes.close({ profile: oldest });
-    }
+    // Too many browsers open: close the least recently used idle one (its cookies are saved first).
+    await makeRoom();
     chromium ??= (await import('playwright-core')).chromium;
     const dir = join(WORKSPACE, '.browser', profile);
     await fs.mkdir(dir, { recursive: true });
@@ -217,7 +251,7 @@ async function session(profile, create) {
     const saved = await fs.readFile(join(dir, SESSION_COOKIES), 'utf8').then(JSON.parse, () => []);
     if (Array.isArray(saved) && saved.length) await context.addCookies(saved).catch(() => {});
     const page = context.pages()[0] ?? (await context.newPage());
-    s = { context, page, lastUsed: Date.now(), savedAt: 0, crashed: false };
+    s = { context, page, lastUsed: Date.now(), savedAt: 0, crashed: false, busy: 0 };
     page.on('crash', () => (s.crashed = true));
     sessions.set(profile, s);
     context.on('close', () => sessions.delete(profile));
@@ -227,6 +261,10 @@ async function session(profile, create) {
       p.on('crash', () => (s.crashed = true));
     });
   }
+  return ready(s);
+}
+
+async function ready(s) {
   // A crashed tab (often out of memory on heavy apps) is replaced, so the profile keeps working.
   if (s.page.isClosed() || s.crashed) {
     s.crashed = false;
@@ -291,7 +329,44 @@ async function act(page, action) {
   await page.waitForTimeout(500);
 }
 
+/** Pages read in their own tab: parallel helpers each get one, in the one shared reading browser. */
+const READER = 'reader';
+const MAX_READ_TABS = 4;
+let readTabs = 0;
+
 const browserRoutes = {
+  /**
+   * Opens `url` in a new tab of the shared reading browser, reads it and closes
+   * the tab: several reads at once never step on each other or start more
+   * browsers. `script` (backend only, e.g. search results) runs instead of the
+   * outline and its result is returned.
+   */
+  async read(body) {
+    const url = new URL(String(body.url));
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new HttpError(400, 'Only http and https URLs');
+    while (readTabs >= MAX_READ_TABS) await new Promise((r) => setTimeout(r, 200));
+    readTabs++;
+    const s = await session(READER, true).catch((err) => {
+      readTabs--;
+      throw err;
+    });
+    s.busy++;
+    const page = await s.context.newPage();
+    try {
+      await page.goto(url.toString(), { waitUntil: 'domcontentloaded', timeout: 45_000 });
+      if (body.script) {
+        await settle(page);
+        const result = await page.evaluate(([source, arg]) => new Function('arg', source)(arg), [String(body.script), body.arg ?? null]);
+        return { url: page.url(), result: result ?? null };
+      }
+      return await view(page);
+    } finally {
+      await page.close().catch(() => {});
+      s.busy--;
+      s.lastUsed = Date.now();
+      readTabs--;
+    }
+  },
   async open(body) {
     const url = new URL(String(body.url));
     if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new HttpError(400, 'Only http and https URLs');
@@ -388,7 +463,7 @@ const browserRoutes = {
 // Idle browsers use a lot of memory: close them; cookies stay on disk.
 setInterval(() => {
   for (const [profile, s] of sessions) {
-    if (Date.now() - s.lastUsed > BROWSER_IDLE_MS) void browserRoutes.close({ profile });
+    if (!s.busy && Date.now() - s.lastUsed > BROWSER_IDLE_MS) void browserRoutes.close({ profile });
   }
 }, 60_000).unref();
 
@@ -434,7 +509,19 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/exec') return send(200, await exec(body));
     const action = /^\/browser\/([a-z]+)$/.exec(url.pathname)?.[1];
     if (action && Object.hasOwn(browserRoutes, action)) {
-      const out = await browserRoutes[action](body);
+      // While a request works on a profile (opening it, loading a page), another one cannot close it to make room.
+      const profile = action === 'close' ? null : String(body.profile ?? '');
+      if (profile) inUse.set(profile, (inUse.get(profile) ?? 0) + 1);
+      let out;
+      try {
+        out = await browserRoutes[action](body);
+      } finally {
+        if (profile) {
+          const left = inUse.get(profile) - 1;
+          if (left > 0) inUse.set(profile, left);
+          else inUse.delete(profile);
+        }
+      }
       if (action !== 'close' && action !== 'url') await saveSessionCookies(body.profile);
       return send(200, out);
     }
