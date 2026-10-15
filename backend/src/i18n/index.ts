@@ -87,6 +87,7 @@ const BACKEND_KEYS = [
   'canvas.tokenFormat',
   'files.quota',
   'files.invalidPath',
+  'files.notEditable',
   'browser.invalidDomain',
   'browser.canvasReadOnly',
   'push.invalidSubscription',

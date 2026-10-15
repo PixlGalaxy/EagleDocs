@@ -51,6 +51,8 @@ export const filesApi = {
     return api.upload<WorkspaceEntry>(`/files/upload?path=${encodeURIComponent(dir)}`, form);
   },
   downloadUrl: (path: string) => apiUrl(`/files/download?path=${encodeURIComponent(path)}`),
+  /** Overwrites an existing text file (the workspace preview's editor). */
+  saveText: (path: string, content: string) => api.put<WorkspaceEntry>('/files/content', { path, content }),
   /**
    * Same as `upload`, with progress (0..1) for the chat's attachment chips. XHR, because
    * fetch cannot report upload progress; `signal` cancels it.

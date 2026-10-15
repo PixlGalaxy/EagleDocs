@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Clock, Download, ExternalLink, File, FileImage, FileText, Folder, FolderOpen, Loader2, Paperclip, RefreshCw, X } from 'lucide-react';
+import { ChevronRight, Clock, Download, ExternalLink, File, FileImage, FileSpreadsheet, FileText, Folder, FolderOpen, Loader2, Paperclip, RefreshCw, X } from 'lucide-react';
 import { filesApi } from '../../api/account';
 import type { WorkspaceEntry } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
-import Modal from '../../components/ui/Modal';
-import { MarkdownBody } from '../../components/chat/MessageView';
-import { fileUrl, formatSize, isImageName, isMarkdownName, isTextName } from '../../components/chat/attachments';
+import { fileUrl, formatSize } from '../../components/chat/attachments';
+import { FileHoverCard, FilePreviewPanel } from '../../components/files/FilePreview';
+import { hasHoverPreview, previewKindOf } from '../../components/files/preview';
 
-/** Bigger text files only offer a download: the preview is for a quick look. */
-const MAX_PREVIEW_BYTES = 512 * 1024;
 const TEMP = 'TEMP';
 
 type FolderState = { entries: WorkspaceEntry[] } | 'error';
@@ -23,70 +21,11 @@ function sortEntries(entries: WorkspaceEntry[]): WorkspaceEntry[] {
   });
 }
 
-const iconFor = (entry: WorkspaceEntry) => (isImageName(entry.name) ? FileImage : isTextName(entry.name) ? FileText : File);
+/** Hovering must last this long, so sweeping the cursor down the tree does not open every file. */
+const HOVER_DELAY_MS = 350;
 
-/** A quick look at a workspace file: photos and text inline, anything else as a download. */
-const FilePreview = ({ entry, onClose, onAttach }: { entry: WorkspaceEntry; onClose: () => void; onAttach: () => void }) => {
-  const { t } = useI18n();
-  const image = isImageName(entry.name);
-  const text = !image && isTextName(entry.name) && entry.size <= MAX_PREVIEW_BYTES;
-  const [content, setContent] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!text) return;
-    let cancelled = false;
-    fetch(fileUrl(entry.path), { credentials: 'include' })
-      .then((res) => (res.ok ? res.text() : Promise.reject(new Error(res.statusText))))
-      .then((body) => !cancelled && setContent(body))
-      .catch(() => !cancelled && setFailed(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [entry.path, text]);
-
-  return (
-    <Modal title={entry.name} onClose={onClose} size="lg">
-      <div className="space-y-4">
-        {image ? (
-          <img src={fileUrl(entry.path, true)} alt={entry.name} className="mx-auto max-h-[65vh] max-w-full rounded-lg object-contain" />
-        ) : text ? (
-          failed ? (
-            <p className="text-sm text-rose-600 dark:text-rose-400">{t('chat.previewError')}</p>
-          ) : content === null ? (
-            <Loader2 size={20} className="mx-auto animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden="true" />
-          ) : isMarkdownName(entry.name) ? (
-            <div className="prose-chat scroll-thin max-h-[65vh] overflow-auto text-[15px] text-slate-800 dark:text-slate-200">
-              <MarkdownBody text={content} />
-            </div>
-          ) : (
-            <pre className="scroll-thin max-h-[65vh] overflow-auto rounded-lg bg-slate-50 p-4 font-mono text-xs leading-relaxed text-slate-800 dark:bg-slate-950 dark:text-slate-200">{content}</pre>
-          )
-        ) : (
-          <p className="text-sm text-slate-600 dark:text-slate-300">{isTextName(entry.name) ? t('chat.previewTooBig') : t('chat.previewNone')}</p>
-        )}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="mr-auto text-xs text-slate-500 dark:text-slate-400">{formatSize(entry.size)}</span>
-          <a href={fileUrl(entry.path)} download={entry.name} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800">
-            <Download size={15} aria-hidden="true" />
-            {t('chat.downloadFile')}
-          </a>
-          <button
-            type="button"
-            onClick={() => {
-              onAttach();
-              onClose();
-            }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent-600)] px-3 py-2 text-sm font-medium text-white transition hover:bg-[var(--accent-700)]"
-          >
-            <Paperclip size={15} aria-hidden="true" />
-            {t('chat.attach')}
-          </button>
-        </div>
-      </div>
-    </Modal>
-  );
-};
+const ICONS = { image: FileImage, spreadsheet: FileSpreadsheet, document: FileText, pdf: FileText, markdown: FileText, html: FileText, text: FileText } as const;
+const iconFor = (entry: WorkspaceEntry) => ICONS[previewKindOf(entry.name) as keyof typeof ICONS] ?? File;
 
 interface Props {
   /** Adds a workspace file to the message being written (no new upload). */
@@ -103,6 +42,20 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [preview, setPreview] = useState<WorkspaceEntry | null>(null);
+  const [hover, setHover] = useState<{ entry: WorkspaceEntry; anchor: DOMRect } | null>(null);
+  const hoverTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
+
+  const startHover = (entry: WorkspaceEntry, row: HTMLElement) => {
+    window.clearTimeout(hoverTimer.current);
+    // Touch screens fire mouseenter on tap: there the tap opens the file instead.
+    if (!hasHoverPreview(entry) || !window.matchMedia('(hover: hover)').matches) return;
+    hoverTimer.current = window.setTimeout(() => setHover({ entry, anchor: row.getBoundingClientRect() }), HOVER_DELAY_MS);
+  };
+  const endHover = () => {
+    window.clearTimeout(hoverTimer.current);
+    setHover(null);
+  };
   const expandedRef = useRef(expanded);
   useEffect(() => {
     expandedRef.current = expanded;
@@ -190,9 +143,14 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
         <li key={entry.path} className="group flex items-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800">
           <button
             type="button"
-            onClick={() => setPreview(entry)}
+            onClick={() => {
+              endHover();
+              setPreview(entry);
+            }}
+            onMouseEnter={(e) => startHover(entry, e.currentTarget.parentElement ?? e.currentTarget)}
+            onMouseLeave={endHover}
             style={{ paddingLeft: `${1.3 + depth * 0.875}rem` }}
-            title={`${entry.name} · ${formatSize(entry.size)}`}
+            title={hasHoverPreview(entry) ? undefined : `${entry.name} · ${formatSize(entry.size)}`}
             className={`flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-1 text-left text-sm ${temp ? 'text-amber-800 dark:text-amber-200/90' : 'text-slate-600 dark:text-slate-400'}`}
           >
             <Icon size={15} className="shrink-0 text-slate-400" aria-hidden="true" />
@@ -244,8 +202,11 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
           <X size={16} />
         </button>
       </div>
-      <ul className="scroll-thin min-h-0 flex-1 overflow-y-auto p-2">{rows('', 0)}</ul>
-      {preview && <FilePreview entry={preview} onClose={() => setPreview(null)} onAttach={() => onAttach(preview)} />}
+      <ul onScroll={endHover} className="scroll-thin min-h-0 flex-1 overflow-y-auto p-2">
+        {rows('', 0)}
+      </ul>
+      {hover && !preview && <FileHoverCard entry={hover.entry} anchor={hover.anchor} />}
+      {preview && <FilePreviewPanel entry={preview} onClose={() => setPreview(null)} onAttach={() => onAttach(preview)} onSaved={() => void reloadAll()} />}
     </div>
   );
 };

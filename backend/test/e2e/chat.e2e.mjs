@@ -196,6 +196,13 @@ let res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploa
 check('pictures preview inline, sandboxed', res.headers.get('content-type') === 'image/png' && /sandbox/.test(res.headers.get('content-security-policy') ?? '') && !/attachment/.test(res.headers.get('content-disposition') ?? ''), `${res.headers.get('content-type')} ${res.headers.get('content-disposition')}`);
 res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e2e/notes.txt')}&inline=1`, { headers: { cookie: user.headers('GET').cookie } });
 check('other files always download', /attachment/.test(res.headers.get('content-disposition') ?? ''), res.headers.get('content-disposition'));
+r = await user.req(A, 'PUT', '/files/content', { path: 'Chat uploads/e2e/notes.txt', content: 'Exam moved to Friday' });
+res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e2e/notes.txt')}`, { headers: { cookie: user.headers('GET').cookie } });
+check('the workspace preview saves a text file', r.status === 200 && r.json.size === 20 && (await res.text()) === 'Exam moved to Friday', String(r.status));
+r = await user.req(A, 'PUT', '/files/content', { path: 'Chat uploads/e2e/board.png', content: 'x' });
+check('only text files can be saved as text', r.status === 400, String(r.status));
+r = await user.req(A, 'PUT', '/files/content', { path: 'Chat uploads/e2e/new.md', content: 'x' });
+check('saving does not create files', r.status === 404, String(r.status));
 for (const m of [smart, mini]) await admin.req(A, 'PATCH', `/admin/models/${m.id}`, { supports_vision: false });
 
 // ---------------------------------------------------------------- thinking level and compacting
