@@ -88,12 +88,17 @@ The sink receives these `EngineEvent` values in order. `sink.emit` is awaited by
 | `interrupted` | A steer cut a generation short, or a dropped connection is about to be retried: drop the partial text | none |
 | `subagent` | Wraps any event from a subagent | `parent_call_id`, `index`, `task` (first 200 characters of the goal), `model_label`, `event` |
 | `usage` | The provider reported token usage | `input_tokens`, `output_tokens` |
+| `context` | Before each model call of a top-level run | `used` (estimated prompt tokens, about 1,000 per image), `window` (`model.contextWindow`). Compaction starts at 75%. |
 | `notice` | The model cannot use tools but tools exist | `message` |
 | `plan` | `plan_update` ran. Each event replaces the previous plan. | `steps: { title, status }[]` with status `pending`, `in_progress`, `done` or `skipped` |
 | `notify` | `notify` ran. Hosts may turn it into a push notification. | `title`, `body`, `url?` |
 | `mfa_required` | Emitted by host tools (`ctx.emit`) that wait for the user to approve a sign-in on their phone, followed by `status: waiting_mfa` and later `running` | `service`, `message` |
 
 `ToolCallView` is `{ id, name, args, status, result_preview? }` with status `running`, `done`, `error`, `waiting_approval` or `rejected`.
+
+## Images
+
+A user message can carry `images: { mediaType, data, name? }[]` (base64, no `data:` prefix). Models with `supportsVision: true` receive them; for other models each image becomes a line `[Image attached: <name> ...]` in the text, so the agent can still open the file with a tool. Send images only with the newest messages: every image counts against the context window on every call.
 
 ## Run kinds
 

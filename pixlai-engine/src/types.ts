@@ -32,6 +32,17 @@ export interface ChatMessage {
   name?: string;
   /** A correction the user sent while the agent was working. */
   steer?: boolean;
+  /** User turns: pictures the user attached. Sent to models with `supportsVision`; others get a note instead. */
+  images?: ChatImage[];
+}
+
+export interface ChatImage {
+  /** e.g. "image/png", "image/jpeg", "image/webp", "image/gif". */
+  mediaType: string;
+  /** Base64, no data: prefix. */
+  data: string;
+  /** Where the user's copy lives (shown to models that cannot see it, so tools can open it). */
+  name?: string;
 }
 
 // ------------------------------------------------------------------ models
@@ -73,6 +84,8 @@ export interface ResolvedModel {
   supportsTools: boolean;
   /** Tokens. Used to decide when to compact the history. */
   contextWindow: number;
+  /** Can read images in user messages. Without it, images become a note with their name. */
+  supportsVision?: boolean;
 }
 
 /** A model the main agent may give a helper (agent_delegate `model`). */
@@ -128,6 +141,8 @@ export type EngineEvent =
   /** An event from a subagent, tagged with the delegate call that started it. */
   | { type: 'subagent'; parent_call_id: string; index: number; task: string; model_label: string; event: EngineEvent }
   | { type: 'usage'; input_tokens: number; output_tokens: number }
+  /** Before each model call of a top-level run: estimated prompt tokens and the model's window (compaction starts at 75%). */
+  | { type: 'context'; used: number; window: number }
   | { type: 'notice'; message: string }
   /** The agent's visible plan for this task (plan_update). Each event replaces the previous plan. */
   | { type: 'plan'; steps: PlanStep[] }

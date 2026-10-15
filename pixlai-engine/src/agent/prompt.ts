@@ -19,8 +19,19 @@ export function wrapUntrusted(source: string, text: string): string {
 }
 
 /** Messages as sent to the provider: steers get their marker. */
-export function toProviderMessages(messages: ChatMessage[]): ChatMessage[] {
-  return messages.map((m) => (m.steer ? { ...m, content: steerContent(m.content) } : m));
+/**
+ * What a provider receives: steers wrapped in their marker, and, for models that
+ * cannot see images, each image replaced by a note with its name so tools can open it.
+ */
+export function toProviderMessages(messages: ChatMessage[], options: { vision?: boolean } = {}): ChatMessage[] {
+  return messages.map((m) => {
+    let out = m.steer ? { ...m, content: steerContent(m.content) } : m;
+    if (out.images?.length && !options.vision) {
+      const notes = out.images.map((img) => `[Image attached: ${img.name ?? img.mediaType}. This model cannot see images; open it with a tool if you need its content.]`);
+      out = { ...out, content: [out.content, ...notes].filter(Boolean).join('\n'), images: undefined };
+    }
+    return out;
+  });
 }
 
 export interface PromptParts {

@@ -12,6 +12,8 @@ All notable changes to PixlAI-Engine. The engine is pre-1.0: minor versions can 
 
 ### Added
 
+- **Images in user messages.** `ChatMessage.images` reach models with `ResolvedModel.supportsVision`; other models get a note with the file name so tools can open it.
+- `context` event before each model call with the estimated prompt size and the window.
 - **Model per helper.** `RunOptions.helperModels` lists the models the agent may give its helpers, with guidance to match the model to the work (`fast`, `smart`, `code`). Each `agent_delegate` task can set `model`; unknown choices fall back to the parent's model. Reports say which model wrote them.
 - **Background delegation.** With `RunOptions.startBackground`, `agent_delegate` accepts `background: true`: the run answers right away and the host runs the helpers later with `UserAgent.runSubagents`, then hands the reports back with `backgroundReportMessage`.
 - **Retries for dropped model connections.** A stream cut mid-answer, a 5xx, or a 429 other than `usage_limit_reached` is retried after 1 s and 4 s. Text already shown is cleared with an `interrupted` event first.

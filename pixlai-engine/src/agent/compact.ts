@@ -17,6 +17,8 @@ export function estimateTokens(messages: ChatMessage[]): number {
   let chars = 0;
   for (const m of messages) {
     chars += m.content.length + 16;
+    // Providers bill an image at roughly a thousand tokens; close enough for the window check.
+    chars += (m.images?.length ?? 0) * 4000;
     for (const call of m.toolCalls ?? []) chars += call.name.length + JSON.stringify(call.args).length;
   }
   return Math.ceil(chars / 4);

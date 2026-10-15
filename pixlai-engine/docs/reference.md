@@ -23,7 +23,7 @@ Everything `pixlai-engine` exports, grouped by what you use it for. Types are Ty
 | `ModelProvider` | `stream(request)` yielding `ModelChunk`s. [Ports](ports.md#modelprovider-and-resolvedmodel) |
 | `ModelRequest`, `ModelChunk` | What a provider receives and yields (`text`, `tool_call`, `usage`, `done`). |
 | `ResolvedModel` | The model chosen for a run: provider, name, label, ref, tool support, context window. |
-| `ChatMessage`, `ToolCallRequest`, `ToolSpec`, `JsonSchema` | Conversation and tool-schema shapes. |
+| `ChatMessage`, `ChatImage`, `ToolCallRequest`, `ToolSpec`, `JsonSchema` | Conversation and tool-schema shapes; `ChatImage` is a picture in a user turn. |
 | `HelperModel`, `HelperModels` | The models the agent may give its helpers. [Concepts](concepts.md#choosing-a-model-per-helper) |
 | `toProviderMessages(messages)` | Adds the out-of-band marker to steers before a provider call (the loop does this; use it if you call a provider yourself). |
 | `estimateTokens`, `COMPACT_THRESHOLD` | The size estimate (4 characters per token) and the 0.75 threshold compaction uses. |

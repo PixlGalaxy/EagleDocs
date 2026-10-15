@@ -170,6 +170,7 @@ interface ResolvedModel {
   ref: string;            // opaque id for the host
   supportsTools: boolean; // false: the engine sends no tools
   contextWindow: number;  // tokens; compaction starts at 75%
+  supportsVision?: boolean; // receives user images; otherwise they become a note
 }
 ```
 
@@ -184,7 +185,7 @@ A working example is in [getting-started.md](getting-started.md#a-minimal-model-
 | Message | Fields | Map it to |
 |---|---|---|
 | First message | `role: 'system'` | The provider's system prompt |
-| User turns | `role: 'user'`, `content` | A user message |
+| User turns | `role: 'user'`, `content`, `images?: { mediaType, data, name? }[]` | A user message; when `images` is set (only for models with `supportsVision`), add them as the API's image parts (OpenAI `image_url` with a data URL, Anthropic `image` blocks, Ollama `images`) |
 | Assistant turns | `role: 'assistant'`, `content` (may be empty), `toolCalls?: { id, name, args }[]` | An assistant message; when `toolCalls` is set, include the tool calls with `args` serialized as the provider expects |
 | Tool results | `role: 'tool'`, `toolCallId`, `name`, `content` | A tool result linked to `toolCallId` (some providers also want `name`) |
 | Steers | `role: 'user'`, `steer: true` | A normal user message. The engine has **already** wrapped `content` in the out-of-band marker; do not add or strip anything. |

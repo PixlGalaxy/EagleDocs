@@ -12,7 +12,9 @@ test('answers without tools and reports usage', async () => {
   assert.equal(result.status, 'done');
   assert.equal(result.content, 'Hola Ana');
   assert.deepEqual(result.usage, { inputTokens: 10, outputTokens: 5, steps: 1 });
-  assert.deepEqual(events.map((e) => e.type), ['status', 'model', 'delta', 'usage', 'status']);
+  assert.deepEqual(events.map((e) => e.type), ['status', 'model', 'context', 'delta', 'usage', 'status']);
+  const ctx = events.find((e) => e.type === 'context');
+  assert.ok(ctx && ctx.type === 'context' && ctx.used > 0 && ctx.window === 100_000, 'the context event carries the estimate and the window');
   const system = provider.requests[0]!.messages[0]!;
   assert.equal(system.role, 'system');
   assert.match(system.content, /You are TestBot/);
@@ -251,4 +253,19 @@ test('a dropped connection is retried; a real error is not', async () => {
   const failed = await agent.run({ runId: 'r2', model: model(refused), history: [user('hi')], sink });
   assert.equal(failed.status, 'failed');
   assert.equal(refused.requests.length, 1);
+});
+
+test('images reach models that can see them; other models get a note with the file', async () => {
+  const { agent, sink } = setup();
+  const image = { mediaType: 'image/png', data: 'iVBORw0KGgo=', name: 'Chat uploads/2026-10-15/board.png' };
+  const seeing = new ScriptedProvider([() => text('A whiteboard')]);
+  await agent.run({ runId: 'v1', model: model(seeing, { supportsVision: true }), history: [{ role: 'user', content: 'what is this?', images: [image] }], sink });
+  const sent = seeing.requests[0]!.messages.at(-1)!;
+  assert.deepEqual(sent.images, [image]);
+
+  const blind = new ScriptedProvider([() => text('I cannot see it')]);
+  await agent.run({ runId: 'v2', model: model(blind), history: [{ role: 'user', content: 'what is this?', images: [image] }], sink });
+  const note = blind.requests[0]!.messages.at(-1)!;
+  assert.equal(note.images, undefined);
+  assert.match(note.content, /what is this\?\n\[Image attached: Chat uploads\/2026-10-15\/board\.png\. This model cannot see images/);
 });

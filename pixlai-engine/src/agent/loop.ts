@@ -29,7 +29,7 @@ import type {
   ToolCallView,
   UserProfile,
 } from '../types.js';
-import { compactIfNeeded } from './compact.js';
+import { compactIfNeeded, estimateTokens } from './compact.js';
 import { helperModelsNote, SUBAGENT_PROMPT } from './delegate.js';
 import { buildSystemPrompt, toProviderMessages, wrapUntrusted } from './prompt.js';
 
@@ -303,15 +303,18 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       let retrying = false;
       const calls: ToolCallRequest[] = [];
       try {
+        const outgoing = toProviderMessages(
+          finalCall
+            ? [...context, { role: 'user' as const, content: BUDGET_SUMMARY_REQUEST }]
+            : nudge
+              ? [...context, { role: 'user' as const, content: nudge }]
+              : context,
+          { vision: model.supportsVision },
+        );
+        if (depth === 0) await emit({ type: 'context', used: estimateTokens(outgoing), window: model.contextWindow });
         const request = {
           model: model.model,
-          messages: toProviderMessages(
-            finalCall
-              ? [...context, { role: 'user' as const, content: BUDGET_SUMMARY_REQUEST }]
-              : nudge
-                ? [...context, { role: 'user' as const, content: nudge }]
-                : context,
-          ),
+          messages: outgoing,
           ...(toolSpecs && !finalCall && { tools: toolSpecs }),
           signal: attempt.signal,
         };
