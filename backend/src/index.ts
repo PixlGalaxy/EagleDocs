@@ -126,7 +126,7 @@ async function main() {
   });
   const builtinSkills = new BuiltinSkills(db, loadBuiltinSkills());
   logger.info(`Loaded ${builtinSkills.all.length} built-in skills`);
-  const engine = await setupEngine(db, bus, { workspace, embeddings, sandbox, searxngUrl: config.SEARXNG_URL, builtinSkills });
+  const engine = await setupEngine(db, bus, { workspace, embeddings, sandbox, searxngUrl: config.SEARXNG_URL, builtinSkills, settings });
   // EagleDocs as an MCP app: the same tools as the web agent, for ChatGPT, Claude and other clients.
   const oauth = new OAuthService(db, config.PUBLIC_URL);
   const mcp = new McpServer({

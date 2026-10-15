@@ -37,4 +37,9 @@ export const SETTINGS_KEYS = {
   smtpPassword: 'smtp.password',
   smtpFromName: 'smtp.from_name',
   smtpFromEmail: 'smtp.from_email',
+
+  /** Paid web search after the free ones: 'none', 'brave' or 'tavily'. */
+  webSearchPaidProvider: 'web_search.paid_provider',
+  /** Secret (secret_enc). */
+  webSearchApiKey: 'web_search.api_key',
 } as const;

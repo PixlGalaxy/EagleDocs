@@ -35,6 +35,31 @@ export async function resolveAttachments(workspace: DiskWorkspace, userId: strin
   return out;
 }
 
+/** Where the composer uploads before a message is sent ("Chat uploads/<day>/..."). */
+export const UPLOADS_FOLDER = 'Chat uploads';
+
+/**
+ * Files the composer uploaded for this message move into the chat's folder
+ * (a name already there gets " (2)", " (3)"...). Files the student picked from
+ * elsewhere in the workspace stay where they are.
+ */
+export async function intoChatFolder(workspace: DiskWorkspace, userId: string, attachments: Attachment[], folder: string): Promise<Attachment[]> {
+  const out: Attachment[] = [];
+  for (const a of attachments) {
+    if (!a.path.startsWith(`${UPLOADS_FOLDER}/`)) {
+      out.push(a);
+      continue;
+    }
+    const dot = a.name.lastIndexOf('.');
+    const [stem, ext] = dot > 0 ? [a.name.slice(0, dot), a.name.slice(dot)] : [a.name, ''];
+    let target = `${folder}/${a.name}`;
+    for (let n = 2; await workspace.stat(userId, target).catch(() => null); n++) target = `${folder}/${stem} (${n})${ext}`;
+    await workspace.move(userId, a.path, target);
+    out.push({ ...a, path: target, name: target.slice(folder.length + 1) });
+  }
+  return out;
+}
+
 /**
  * Turns attachments into what the model gets: every file listed in the
  * message (so tools can open it), and the pictures of the newest messages as

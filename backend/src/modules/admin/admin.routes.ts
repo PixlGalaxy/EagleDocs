@@ -4,6 +4,7 @@ import type { Db } from '../../db/pool.js';
 import { many, one } from '../../db/pool.js';
 import type { SettingsService } from '../../db/settings.js';
 import { badRequest } from '../../errors.js';
+import { PAID_SEARCH_PROVIDERS, paidSearch } from '../../engine/web.js';
 import { format, isLanguage, type Translate } from '../../i18n/index.js';
 import { logger } from '../../logger.js';
 import { NODE_OFFLINE_SECONDS } from '../../nodes/nodes.js';
@@ -259,6 +260,42 @@ export function createAdminRoutes(deps: {
     await mail.sendTest(to, req.lang ?? config.LANGUAGE);
     logger.system.info(`"${req.user!.username}" sent a test email to <${to}>`);
     res.status(204).end();
+  });
+
+  // ------------------------------------------------------------ web search
+
+  // SearXNG and DuckDuckGo are always on; a paid API joins after them only with a key.
+  const webSearchView = () => ({
+    paid_provider: settings.getString(K.webSearchPaidProvider, 'none'),
+    api_key_set: settings.hasSecret(K.webSearchApiKey),
+    searxng: Boolean(config.SEARXNG_URL),
+  });
+
+  router.get('/web-search', (_req, res) => res.json(webSearchView()));
+
+  router.put('/web-search', async (req: AppRequest, res) => {
+    const body = (req.body ?? {}) as { paid_provider?: unknown; api_key?: unknown };
+    const provider = body.paid_provider ?? 'none';
+    if (provider !== 'none' && !PAID_SEARCH_PROVIDERS.includes(provider as never)) throw badRequest('error.invalidInput');
+    if (body.api_key !== undefined && (typeof body.api_key !== 'string' || body.api_key.length > 300 || /\s/.test(body.api_key))) throw badRequest('error.invalidInput');
+    await settings.set(K.webSearchPaidProvider, provider);
+    // Write-only, like the SMTP password: absent keeps it, an empty string clears it.
+    if (typeof body.api_key === 'string') await settings.setSecret(K.webSearchApiKey, body.api_key);
+    logger.system.info(`"${req.user!.username}" updated the web search settings (paid: ${String(provider)})`);
+    await audit(req, 'settings.web_search', null);
+    res.json(webSearchView());
+  });
+
+  /** Runs one search with the paid API as saved, so the admin sees the key works before students rely on it. */
+  router.post('/web-search/test', async (_req: AppRequest, res) => {
+    const search = paidSearch(settings.getString(K.webSearchPaidProvider, 'none'), settings.getSecret(K.webSearchApiKey));
+    if (!search) throw badRequest('error.invalidInput');
+    try {
+      const hits = await search.search('Florida Gulf Coast University', { limit: 3, signal: AbortSignal.timeout(30_000) });
+      res.json({ ok: hits.length > 0, results: hits.length, sample: hits[0]?.url ?? null });
+    } catch (err) {
+      res.json({ ok: false, error: (err as Error).message.slice(0, 200) });
+    }
   });
 
   // ------------------------------------------------------------ general settings

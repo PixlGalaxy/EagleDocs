@@ -61,6 +61,18 @@ const server = http.createServer(async (req, res) => {
     return call('agent_delegate', { tasks: [{ goal: 'helper one [time]', model: 'fast' }, { goal: 'helper two', model: 'smart' }], background: Boolean(delegate[1]) });
   }
   if (lastUser.includes('[time]') && request.tools) return call('time_now', {});
+  // [askopts]: questions with options (ask_user); [html]: an interactive page in the chat (show_html).
+  if (lastUser.includes('[askopts]') && request.tools) {
+    return call('ask_user', {
+      questions: [
+        { question: 'Which format do you want?', header: 'Format', options: [{ label: 'Flashcards (Recommended)', description: 'Quick review' }, { label: 'Practice quiz' }] },
+        { question: 'Which chapters?', header: 'Chapters', multi_select: true, options: [{ label: 'Ch 4' }, { label: 'Ch 5' }] },
+      ],
+    });
+  }
+  if (lastUser.includes('[html]') && request.tools) {
+    return call('show_html', { title: 'Sine wave', html: '<!doctype html><html><body><canvas id="c" width="300" height="100"></canvas><script>const x=document.getElementById("c").getContext("2d");for(let i=0;i<300;i++)x.fillRect(i,50+40*Math.sin(i/20),1,1)</script></body></html>' });
+  }
   if (lastUser.includes('[canvas]') && request.tools) return call('canvas_briefing', { days: 7 });
   if (lastUser.includes('[pages]') && request.tools) return call('canvas_save_pages', { course_id: 101 });
   if (lastUser.includes('[memory]') && request.tools) return call('memory_update', { target: 'user', action: 'add', content: 'Likes end-to-end tests' });

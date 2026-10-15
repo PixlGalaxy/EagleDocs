@@ -4,7 +4,7 @@ import https from 'node:https';
 import { BlockList, isIP } from 'node:net';
 import zlib from 'node:zlib';
 import type { FetchPort, FetchedPage, SearchHit, SearchPort } from 'pixlai-engine';
-import { decodeEntities } from 'pixlai-engine';
+import { decodeEntities, SearchChain } from 'pixlai-engine';
 import { logger } from '../logger.js';
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 EagleDocs';
@@ -193,24 +193,138 @@ export function parseDuckDuckGo(html: string): SearchHit[] {
   return hits;
 }
 
-/** SearXNG first when configured; DuckDuckGo when it is not, or when it fails or finds nothing. */
-export class WebSearch implements SearchPort {
-  private ddg = new DuckDuckGoSearch();
-  private searx: SearxngSearch | null;
+// ------------------------------------------------------------------ paid search APIs (optional, set in Admin)
 
-  constructor(searxngUrl: string | undefined) {
-    this.searx = searxngUrl ? new SearxngSearch(searxngUrl) : null;
-  }
+export const PAID_SEARCH_PROVIDERS = ['brave', 'tavily'] as const;
+export type PaidSearchProvider = (typeof PAID_SEARCH_PROVIDERS)[number];
+
+/** Brave Search API: its own index, a free monthly allowance, then paid per query. */
+export class BraveSearch implements SearchPort {
+  constructor(private apiKey: string) {}
 
   async search(query: string, options: { limit: number; language?: string; signal: AbortSignal }): Promise<SearchHit[]> {
-    if (this.searx) {
-      try {
-        const hits = await this.searx.search(query, options);
-        if (hits.length) return hits;
-      } catch (err) {
-        logger.warn(`SearXNG search failed, using DuckDuckGo: ${(err as Error).message}`);
-      }
-    }
-    return this.ddg.search(query, options);
+    const url = new URL('https://api.search.brave.com/res/v1/web/search');
+    url.searchParams.set('q', query);
+    url.searchParams.set('count', String(Math.min(20, options.limit)));
+    url.searchParams.set('safesearch', 'moderate');
+    const res = await fetch(url, {
+      headers: { accept: 'application/json', 'x-subscription-token': this.apiKey },
+      signal: AbortSignal.any([options.signal, AbortSignal.timeout(20_000)]),
+    });
+    if (!res.ok) throw new Error(`Brave answered ${res.status}`);
+    const data = (await res.json()) as { web?: { results?: { title?: string; url?: string; description?: string }[] } };
+    return (data.web?.results ?? [])
+      .filter((r) => r.url && /^https?:/.test(r.url))
+      .slice(0, options.limit)
+      .map((r) => ({ title: strip(r.title ?? r.url!), url: r.url!, snippet: strip(r.description ?? '') }));
   }
+}
+
+/** Tavily: a search API made for agents (clean snippets of each page). */
+export class TavilySearch implements SearchPort {
+  constructor(private apiKey: string) {}
+
+  async search(query: string, options: { limit: number; signal: AbortSignal }): Promise<SearchHit[]> {
+    const res = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({ query, max_results: Math.min(20, options.limit), search_depth: 'basic' }),
+      signal: AbortSignal.any([options.signal, AbortSignal.timeout(30_000)]),
+    });
+    if (!res.ok) throw new Error(`Tavily answered ${res.status}`);
+    const data = (await res.json()) as { results?: { title?: string; url?: string; content?: string }[] };
+    return (data.results ?? [])
+      .filter((r) => r.url && /^https?:/.test(r.url))
+      .slice(0, options.limit)
+      .map((r) => ({ title: r.title ?? r.url!, url: r.url!, snippet: r.content ?? '' }));
+  }
+}
+
+export function paidSearch(provider: string, apiKey: string | undefined): SearchPort | null {
+  if (!apiKey) return null;
+  if (provider === 'brave') return new BraveSearch(apiKey);
+  if (provider === 'tavily') return new TavilySearch(apiKey);
+  return null;
+}
+
+// ------------------------------------------------------------------ the last resort: a real browser
+
+/** Read in the page itself (not by regex over HTML): Bing's organic results. */
+const BING_RESULTS = `return [...document.querySelectorAll('li.b_algo')].map((li) => {
+  const a = li.querySelector('h2 a');
+  const p = li.querySelector('.b_caption p, p');
+  return a ? { title: (a.textContent || '').trim(), url: a.href, snippet: ((p && p.textContent) || '').trim() } : null;
+}).filter(Boolean).slice(0, 20);`;
+
+/** Bing wraps result links as bing.com/ck/a?...&u=a1<base64url of the real address>. */
+export function unwrapBingUrl(raw: string): string | null {
+  try {
+    const url = new URL(raw);
+    if (/(^|\.)bing\.com$/.test(url.hostname) && url.pathname.startsWith('/ck/')) {
+      const u = url.searchParams.get('u');
+      if (!u?.startsWith('a1')) return null;
+      return Buffer.from(u.slice(2).replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+    }
+    return /^https?:$/.test(url.protocol) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Searches with Chromium in the user's own sandbox, where bot checks rarely
+ * trigger. Slow (it may start the sandbox), so it comes last in the chain.
+ */
+export class BrowserSearch implements SearchPort {
+  private static PROFILE = 'search';
+  constructor(private runner: (<T>(userId: string, path: string, body: Record<string, unknown>, signal: AbortSignal) => Promise<T>) | undefined) {}
+
+  async search(query: string, options: { limit: number; signal: AbortSignal; userId?: string }): Promise<SearchHit[]> {
+    if (!this.runner || !options.userId) throw new Error('No browser here');
+    const run = this.runner;
+    const profile = BrowserSearch.PROFILE;
+    try {
+      await run(options.userId, '/browser/goto', { profile, url: `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=en` }, options.signal);
+      const page = await run<{ result: { title: string; url: string; snippet: string }[] | null }>(options.userId, '/browser/eval', { profile, script: BING_RESULTS }, options.signal);
+      const hits: SearchHit[] = [];
+      for (const r of page.result ?? []) {
+        const url = unwrapBingUrl(r.url);
+        if (url && /^https?:\/\//.test(url) && !hits.some((h) => h.url === url)) hits.push({ title: r.title.slice(0, 200), url, snippet: r.snippet.slice(0, 400) });
+      }
+      return hits.slice(0, options.limit);
+    } finally {
+      await run(options.userId, '/browser/close', { profile }, options.signal).catch(() => undefined);
+    }
+  }
+}
+
+// ------------------------------------------------------------------ the chain
+
+/**
+ * EagleDocs' search, cheapest first: SearXNG (when configured), DuckDuckGo, the
+ * paid API the admin set (off without a key), and Chromium in the user's
+ * sandbox. The engine's SearchChain moves on when one fails or finds nothing.
+ */
+export function eagledocsSearch(deps: {
+  searxngUrl: string | undefined;
+  /** The paid provider and key from Admin → Web search; read on every search, so changes apply at once. */
+  paid: () => { provider: string; apiKey: string | undefined };
+  runner: ConstructorParameters<typeof BrowserSearch>[0];
+}): SearchChain {
+  const ddg = new DuckDuckGoSearch();
+  const searx = deps.searxngUrl ? new SearxngSearch(deps.searxngUrl) : null;
+  const browser = new BrowserSearch(deps.runner);
+  return new SearchChain(
+    [
+      ...(searx ? [{ name: 'searxng', search: searx.search.bind(searx) }] : []),
+      { name: 'duckduckgo', search: ddg.search.bind(ddg) },
+      {
+        name: 'paid',
+        enabled: () => Boolean(paidSearch(deps.paid().provider, deps.paid().apiKey)),
+        search: (query, options) => paidSearch(deps.paid().provider, deps.paid().apiKey)!.search(query, options),
+      },
+      ...(deps.runner ? [{ name: 'browser', search: browser.search.bind(browser) }] : []),
+    ],
+    { logger: { info: (m) => logger.info(m), warn: (m) => logger.warn(m), error: (m, d) => logger.error(m, d) } },
+  );
 }

@@ -10,7 +10,9 @@ import type { SandboxTools } from './sandbox.js';
 import { SCHOOL_TOOLS } from './tools/school.js';
 import { eagledocsBrowserPolicy } from './browser-policy.js';
 import type { BuiltinSkills } from '../modules/skills/builtin.js';
-import { SafeFetch, WebSearch } from './web.js';
+import { eagledocsSearch, SafeFetch } from './web.js';
+import type { SettingsService } from '../db/settings.js';
+import { SETTINGS_KEYS as K } from '../modules/admin/settings-keys.js';
 
 /** Who the agent is. The engine adds the user, memory, skills and its rules after this. */
 export const EAGLEDOCS_PROMPT = `You are EagleDocs, an AI assistant for university students, built on PixlAI-Engine.
@@ -33,7 +35,7 @@ const engineLogger: Logger = {
 export async function setupEngine(
   db: Db,
   bus: Bus,
-  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandbox: SandboxTools | undefined; searxngUrl: string | undefined; builtinSkills: BuiltinSkills },
+  host: { workspace: DiskWorkspace; embeddings: AdminEmbeddings; sandbox: SandboxTools | undefined; searxngUrl: string | undefined; builtinSkills: BuiltinSkills; settings: SettingsService },
 ): Promise<Engine> {
   // Code, browser and school accounts exist only when Docker and the sandbox image are there.
   const sandbox = host.sandbox;
@@ -48,10 +50,16 @@ export async function setupEngine(
     embeddings: host.embeddings,
     // sharedRags: instructor/course RAGs plug in here later (SharedRagSource).
     sandbox,
-    search: new WebSearch(host.searxngUrl),
+    search: eagledocsSearch({
+      searxngUrl: host.searxngUrl,
+      paid: () => ({ provider: host.settings.getString(K.webSearchPaidProvider, 'none'), apiKey: host.settings.getSecret(K.webSearchApiKey) }),
+      runner: sandbox ? (userId, path, body, signal) => sandbox.runner(userId, path, body, signal) : undefined,
+    }),
     fetcher: new SafeFetch(),
     browser: sandbox,
     browserPolicy: eagledocsBrowserPolicy(db),
+    // show_html: the chat shows each page in a sandboxed frame served with its own CSP (no network, no app access).
+    displays: ['html'],
     logger: engineLogger,
   });
 }

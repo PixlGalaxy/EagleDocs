@@ -150,6 +150,9 @@ export class DiskWorkspace implements WorkspacePort {
       'permanently 24 hours after its last change. Put raw downloads there; move anything worth keeping out of TEMP/ in time.',
       'RAG collections (rag_ tools) count toward the workspace quota; after building one, the source files can be deleted.',
       'The user also sees these files on the Files page.',
+      'To give the user a file in an answer, link it as workspace:<path> in angle brackets, e.g.',
+      '[Download notes](<workspace:Fall 2026/ACG 2021/notes.md>); a picture shows inline with ![chart](<workspace:TEMP/chart.png>).',
+      'Never write sandbox:, /mnt/data or other paths in links: only workspace: links open for the user.',
     ].join(' ');
   }
 

@@ -96,6 +96,15 @@ export interface WorkerDeps {
   concurrency: number;
 }
 
+/** The run note that points the agent at its chat's folder. */
+function chatFolderNote(folder: string): string {
+  return [
+    "## This chat's files",
+    `This chat's folder in the workspace is "${folder}/". Save the files you create for this chat there (for example`,
+    `"${folder}/summary.md"), unless the user asks for another place. Files the user attaches in this chat are there too.`,
+  ].join('\n');
+}
+
 /**
  * Runs queued jobs on this replica. Any replica may claim any job (SKIP
  * LOCKED); the browser's stream can be on a different one, since events go
@@ -263,6 +272,8 @@ export class JobWorker {
       if (resolution.notice) events.emit({ type: 'notice', message: resolution.notice });
 
       const timezone = user.timezone || 'America/New_York';
+      // Where this chat keeps its files: the agent and its helpers save there.
+      const notes = chatId ? chatFolderNote(await chats.folderOf(user.id, chatId)) : undefined;
       const agent = engine.forUser({
         id: user.id,
         name: user.display_name || user.username,
@@ -291,6 +302,7 @@ export class JobWorker {
       if (job.kind === 'delegate') {
         const { reports, usage } = await agent.runSubagents({
           runId: job.id,
+          notes,
           model: resolution.model,
           tasks,
           helperModels,
@@ -322,6 +334,7 @@ export class JobWorker {
       let context: { used: number; window: number } | undefined;
       const result = await agent.run({
         runId: job.id,
+        notes,
         model: resolution.model,
         history,
         signal: controller.signal,
@@ -372,6 +385,10 @@ export class JobWorker {
             ...(status === 'failed' && { failed: result.error }),
             ...(silent && { silent: true }),
             ...(context && { context }),
+            // ask_user with options: the chat shows them as choices under the answer.
+            ...(result.questions && { questions: result.questions }),
+            // show_html pages, served one by one from /chats/:id/messages/:mid/displays/:n.
+            ...(result.displays?.length && { displays: result.displays }),
           },
         },
       });

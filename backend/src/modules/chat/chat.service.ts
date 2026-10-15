@@ -1,4 +1,4 @@
-import type { ChatMessage, ToolCallRequest, ToolCallView } from 'pixlai-engine';
+import type { ChatMessage, Display, ToolCallRequest, ToolCallView, UserQuestion } from 'pixlai-engine';
 import type { Db, Queryable } from '../../db/pool.js';
 import { many, maybe } from '../../db/pool.js';
 import { notFound } from '../../errors.js';
@@ -32,6 +32,10 @@ interface MessageRow {
     attachments?: Attachment[];
     /** Final answers: estimated prompt tokens of the last model call, and the window. */
     context?: { used: number; window: number };
+    /** The agent asked with options (ask_user). */
+    questions?: UserQuestion[];
+    /** Pages the agent showed (show_html). */
+    displays?: Display[];
   };
   model_ref: string | null;
   model_label: string | null;
@@ -51,6 +55,10 @@ export interface MessageView {
   background?: BackgroundInfo;
   /** Files and pictures the student attached (workspace paths). */
   attachments?: Attachment[];
+  /** Questions with options the agent asked; the student answers with the next message. */
+  questions?: UserQuestion[];
+  /** Pages the agent showed, by title; each loads from its own URL (the HTML is never inlined here). */
+  displays?: { kind: Display['kind']; title: string }[];
   created_at: Date;
 }
 
@@ -72,6 +80,8 @@ export function toMessageView(row: MessageRow): MessageView {
     ...(row.meta.steer && { steer: true }),
     ...(row.meta.background && { background: row.meta.background }),
     ...(row.meta.attachments?.length && { attachments: row.meta.attachments }),
+    ...(row.meta.questions?.length && { questions: row.meta.questions }),
+    ...(row.meta.displays?.length && { displays: row.meta.displays.map((d) => ({ kind: d.kind, title: d.title })) }),
     created_at: row.created_at,
   };
 }
@@ -121,6 +131,35 @@ export class ChatService {
     if (!UUID.test(chatId)) throw notFound();
     const result = await this.db.query('DELETE FROM chats WHERE id = $1 AND user_id = $2', [chatId, userId]);
     if (result.rowCount === 0) throw notFound();
+  }
+
+  /**
+   * The chat's workspace folder ("Chats/<title>"), named the first time it is
+   * needed and kept when the chat is renamed. Another chat already using that
+   * name gets this one's short id added. `titleHint` names a chat whose title
+   * is not saved yet (its first message).
+   */
+  async folderOf(userId: string, chatId: string, titleHint = ''): Promise<string> {
+    const row = await maybe<{ folder: string | null; title: string }>(this.db, 'SELECT folder, title FROM chats WHERE id = $1 AND user_id = $2', [chatId, userId]);
+    if (!row) throw notFound();
+    if (row.folder) return row.folder;
+    const base = `${CHATS_FOLDER}/${folderSafe(row.title || titleHint) || 'Chat'}`;
+    const taken = await maybe(this.db, 'SELECT 1 FROM chats WHERE user_id = $1 AND folder = $2', [userId, base]);
+    const name = taken ? `${base} (${chatId.slice(0, 6)})` : base;
+    const saved = await maybe<{ folder: string }>(this.db, 'UPDATE chats SET folder = COALESCE(folder, $2) WHERE id = $1 RETURNING folder', [chatId, name]);
+    return saved!.folder;
+  }
+
+  /** One page the agent showed in a message of this user's chat (show_html), or null. */
+  async display(userId: string, chatId: string, messageId: string, index: number): Promise<Display | null> {
+    if (!UUID.test(chatId) || !UUID.test(messageId) || !Number.isInteger(index) || index < 0) return null;
+    const row = await maybe<{ display: Display | null }>(
+      this.db,
+      `SELECT m.meta->'displays'->($4::int) AS display FROM messages m JOIN chats c ON c.id = m.chat_id
+       WHERE m.id = $3 AND c.id = $2 AND c.user_id = $1`,
+      [userId, chatId, messageId, index],
+    );
+    return row?.display ?? null;
   }
 
   /** What the user sees: their messages and each run's final answer. */
@@ -258,6 +297,19 @@ export class ChatService {
       [chatId],
     );
   }
+}
+
+/** Where every chat's folder lives in the workspace. */
+export const CHATS_FOLDER = 'Chats';
+
+/** A chat title as a folder name: no separators or characters Windows refuses, no leading dots, short. */
+export function folderSafe(title: string): string {
+  return title
+    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s.]+|[\s.]+$/g, '')
+    .slice(0, 60)
+    .trim();
 }
 
 /** A short title from the first message; good enough and free (no model call). */

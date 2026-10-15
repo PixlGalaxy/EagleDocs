@@ -176,33 +176,48 @@ await upload('notes.txt', Buffer.from('Exam on Thursday'), 'text/plain');
 const attachChat = (await user.req(A, 'POST', '/chats', {})).json.id;
 r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '[echoimages]', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png', 'Chat uploads/e2e/notes.txt'] });
 check('a message can carry a photo and a file', r.status === 201 && r.json.message.attachments?.map((a) => a.kind).join(',') === 'image,file', JSON.stringify(r.json.message?.attachments));
-events = await user.stream(B, attachChat, r.json.job_id);
+// Uploads move into the chat's own folder, named after the chat.
+const firstJob = r.json.job_id;
+const [boardPath, notesPath] = r.json.message.attachments.map((a) => a.path);
+const chatFolder = boardPath.slice(0, boardPath.lastIndexOf('/'));
+check("uploads move into the chat's folder", /^Chats\/.+/.test(chatFolder) && notesPath === `${chatFolder}/notes.txt`, `${boardPath} ${notesPath}`);
+r = await user.req(A, 'GET', `/files?path=${encodeURIComponent('Chat uploads/e2e')}`);
+check('...and leave the uploads area', !(r.json.entries ?? []).some((e) => e.name === 'board.png'), JSON.stringify(r.json).slice(0, 120));
+events = await user.stream(B, attachChat, firstJob);
 let said = events.at(-1).message?.content ?? '';
-check('a model without vision gets a note with the file path instead', /^images=0/.test(said) && /Image attached: Chat uploads\/e2e\/board\.png/.test(said) && /notes\.txt \(file/.test(said), said);
+check('a model without vision gets a note with the file path instead', /^images=0/.test(said) && said.includes(`Image attached: ${boardPath}`) && /notes\.txt \(file/.test(said), said);
 check('the stream reports the context size', events.some((e) => e.type === 'context' && e.used > 0 && e.window > 0));
 for (const m of [smart, mini]) await admin.req(A, 'PATCH', `/admin/models/${m.id}`, { supports_vision: true });
-r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '[echoimages]', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png'] });
+r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '[echoimages]', model_ref: 'auto', attachments: [boardPath] });
 events = await user.stream(B, attachChat, r.json.job_id);
 said = events.at(-1).message?.content ?? '';
 check('a vision model receives the picture itself', /^images=1/.test(said), said.slice(0, 120));
-r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png'] });
+r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: '', model_ref: 'auto', attachments: [boardPath] });
 check('a photo alone is a valid message', r.status === 201, r.json?.error);
+check("a file already in the chat's folder stays where it is", r.json.message?.attachments?.[0]?.path === boardPath, r.json.message?.attachments?.[0]?.path);
 await user.stream(B, attachChat, r.json.job_id);
 r = await user.req(A, 'GET', `/chats/${attachChat}`);
 check('the chat keeps the attachments and the last context size', r.json.messages[0]?.attachments?.length === 2 && r.json.context?.window > 0, JSON.stringify(r.json.context));
 r = await user.req(A, 'POST', `/chats/${attachChat}/messages`, { content: 'x', model_ref: 'auto', attachments: ['../../etc/passwd'] });
 check('attachments must be files in the student\'s workspace', r.status === 400, String(r.status));
-let res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e2e/board.png')}&inline=1`, { headers: { cookie: user.headers('GET').cookie } });
+let res = await fetch(`${A}/files/download?path=${encodeURIComponent(boardPath)}&inline=1`, { headers: { cookie: user.headers('GET').cookie } });
 check('pictures preview inline, sandboxed', res.headers.get('content-type') === 'image/png' && /sandbox/.test(res.headers.get('content-security-policy') ?? '') && !/attachment/.test(res.headers.get('content-disposition') ?? ''), `${res.headers.get('content-type')} ${res.headers.get('content-disposition')}`);
-res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e2e/notes.txt')}&inline=1`, { headers: { cookie: user.headers('GET').cookie } });
+res = await fetch(`${A}/files/download?path=${encodeURIComponent(notesPath)}&inline=1`, { headers: { cookie: user.headers('GET').cookie } });
 check('other files always download', /attachment/.test(res.headers.get('content-disposition') ?? ''), res.headers.get('content-disposition'));
-r = await user.req(A, 'PUT', '/files/content', { path: 'Chat uploads/e2e/notes.txt', content: 'Exam moved to Friday' });
-res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e2e/notes.txt')}`, { headers: { cookie: user.headers('GET').cookie } });
+r = await user.req(A, 'PUT', '/files/content', { path: notesPath, content: 'Exam moved to Friday' });
+res = await fetch(`${A}/files/download?path=${encodeURIComponent(notesPath)}`, { headers: { cookie: user.headers('GET').cookie } });
 check('the workspace preview saves a text file', r.status === 200 && r.json.size === 20 && (await res.text()) === 'Exam moved to Friday', String(r.status));
-r = await user.req(A, 'PUT', '/files/content', { path: 'Chat uploads/e2e/board.png', content: 'x' });
+r = await user.req(A, 'PUT', '/files/content', { path: boardPath, content: 'x' });
 check('only text files can be saved as text', r.status === 400, String(r.status));
-r = await user.req(A, 'PUT', '/files/content', { path: 'Chat uploads/e2e/new.md', content: 'x' });
+r = await user.req(A, 'PUT', '/files/content', { path: `${chatFolder}/new.md`, content: 'x' });
 check('saving does not create files', r.status === 404, String(r.status));
+// Another chat gets its own folder; the same file name there does not clash.
+await upload('board.png', PNG, 'image/png');
+const otherChat = (await user.req(A, 'POST', '/chats', {})).json.id;
+r = await user.req(A, 'POST', `/chats/${otherChat}/messages`, { content: 'second chat photo', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png'] });
+const otherPath = r.json.message?.attachments?.[0]?.path ?? '';
+check('each chat keeps its uploads in its own folder', otherPath === 'Chats/second chat photo/board.png' && !otherPath.startsWith(`${chatFolder}/`), otherPath);
+await user.stream(B, otherChat, r.json.job_id);
 for (const m of [smart, mini]) await admin.req(A, 'PATCH', `/admin/models/${m.id}`, { supports_vision: false });
 
 // ---------------------------------------------------------------- thinking level and compacting
@@ -315,6 +330,26 @@ r = await user.req(A, 'POST', '/schedules', { name: 'Check', cron: '0 8 * * 1', 
 check('create schedule', r.status === 201 && r.json.next_run_at, JSON.stringify(r.json));
 r = await user.req(A, 'POST', '/schedules', { name: 'Bad', cron: 'every 5m', prompt: 'x' });
 check('invalid schedule refused with reason', r.status === 400 && /15 minutes/.test(r.json.error), r.json?.error);
+
+// ---------------------------------------------------------------- questions with options and pages in the chat
+const askChat = (await user.req(A, 'POST', '/chats', {})).json.id;
+r = await user.req(A, 'POST', `/chats/${askChat}/messages`, { content: 'help me study [askopts]', model_ref: 'auto' });
+await user.stream(B, askChat, r.json.job_id);
+r = await user.req(A, 'GET', `/chats/${askChat}`);
+const asked = r.json.messages.at(-1);
+check('the agent asks with options and the answer keeps them', asked?.questions?.length === 2 && asked.questions[1].multiSelect === true && /Which format/.test(asked.content), JSON.stringify(asked?.questions)?.slice(0, 160));
+r = await user.req(A, 'POST', `/chats/${askChat}/messages`, { content: 'Format: Flashcards (Recommended)\nChapters: Ch 4, Ch 5 [html]', model_ref: 'auto' });
+await user.stream(B, askChat, r.json.job_id);
+r = await user.req(A, 'GET', `/chats/${askChat}`);
+const shownMsg = r.json.messages.at(-1);
+check('a page the agent shows is listed on its answer, without its HTML', shownMsg?.displays?.[0]?.title === 'Sine wave' && !JSON.stringify(shownMsg).includes('<canvas'), JSON.stringify(shownMsg?.displays));
+let page = await fetch(`${A}/chats/${askChat}/messages/${shownMsg.id}/displays/0`, { headers: { cookie: user.headers('GET').cookie } });
+const csp = page.headers.get('content-security-policy') ?? '';
+check('the page is served on its own, sandboxed and without network', page.status === 200 && /text\/html/.test(page.headers.get('content-type') ?? '') && /sandbox allow-scripts/.test(csp) && /connect-src 'none'/.test(csp) && !/allow-same-origin/.test(csp) && (await page.text()).includes('<canvas'), csp);
+page = await fetch(`${A}/chats/${askChat}/messages/${shownMsg.id}/displays/0`, { headers: { cookie: admin.headers('GET').cookie } });
+check("another user cannot open someone's page", page.status === 404, String(page.status));
+page = await fetch(`${A}/chats/${askChat}/messages/${shownMsg.id}/displays/5`, { headers: { cookie: user.headers('GET').cookie } });
+check('a page that does not exist is 404', page.status === 404, String(page.status));
 
 // ---------------------------------------------------------------- approvals endpoint and isolation
 r = await admin.req(A, 'GET', `/chats/${chatId}`);

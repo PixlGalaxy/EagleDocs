@@ -9,7 +9,7 @@ import type { AppRequest } from '../../types/index.js';
 import { requireAuth } from '../auth/session.middleware.js';
 import { titleFrom, type ChatService } from './chat.service.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
-import { resolveAttachments } from './attachments.js';
+import { intoChatFolder, resolveAttachments } from './attachments.js';
 import { compactHistory, estimateTokens, type ReasoningLevel } from 'pixlai-engine';
 import type { ModelCatalog } from '../models/catalog.js';
 import { hitRateLimit } from '../../middleware/rate-limit.js';
@@ -85,6 +85,24 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     });
   });
 
+  /**
+   * A page the agent showed (show_html), as its own document. Its CSP makes it a
+   * sandbox with an opaque origin (no cookies, no app, no storage) and no
+   * network at all, so a page can only draw and compute, never send data away.
+   */
+  chatsRouter.get('/:id/messages/:messageId/displays/:n', async (req: AppRequest, res) => {
+    const display = await chats.display(req.user!.id, routeParam(req.params.id), routeParam(req.params.messageId), Number(req.params.n));
+    if (!display || display.kind !== 'html') throw notFound();
+    res.setHeader(
+      'Content-Security-Policy',
+      "sandbox allow-scripts; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'; frame-ancestors 'self'",
+    );
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.type('html').send(display.content);
+  });
+
   chatsRouter.patch('/:id', async (req: AppRequest, res) => {
     const title = text((req.body as { title?: unknown })?.title, 120);
     await chats.rename(req.user!.id, routeParam(req.params.id), title);
@@ -104,9 +122,13 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const body = (req.body ?? {}) as { content?: unknown; model_ref?: unknown; attachments?: unknown; reasoning?: unknown };
     // 'default' or nothing: the provider's own default.
     const reasoning = REASONING.includes(body.reasoning as ReasoningLevel) ? (body.reasoning as ReasoningLevel) : undefined;
-    const attachments = await resolveAttachments(workspace, userId, body.attachments);
+    const picked = await resolveAttachments(workspace, userId, body.attachments);
     // A picture alone is a valid message.
-    const content = attachments.length && (typeof body.content !== 'string' || !body.content.trim()) ? '' : text(body.content, MAX_MESSAGE_CHARS);
+    const content = picked.length && (typeof body.content !== 'string' || !body.content.trim()) ? '' : text(body.content, MAX_MESSAGE_CHARS);
+    // Uploads land in this chat's folder (named after its first message in a new chat).
+    const attachments = picked.length
+      ? await intoChatFolder(workspace, userId, picked, await chats.folderOf(userId, chat.id, titleFrom(content || picked.map((a) => a.name).join(', '))))
+      : picked;
     const modelRef = modelRefOf(body.model_ref);
 
     const { message, jobId } = await withTx(db, async (client) => {
