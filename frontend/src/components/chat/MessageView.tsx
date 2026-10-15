@@ -10,6 +10,7 @@ import { LOGO_SRC } from '../brand';
 import { useSmoothText } from './useSmoothText';
 import QuestionCard from './QuestionCard';
 import HtmlDisplay from './HtmlDisplay';
+import { FileCards, linkedFilesIn } from './LinkedFiles';
 import type { UserQuestion } from '../../api/types';
 import { fileUrl, workspaceLinkPath } from './attachments';
 
@@ -52,11 +53,29 @@ const urlTransform = (url: string, key: string) => {
  * pictures become links: an image loads without a click, so injected text
  * could otherwise send data away in its address.
  */
-export const MarkdownBody = memo(({ text }: { text: string }) => (
+/**
+ * `fileCards`: under each paragraph or list item that links to files in the
+ * workspace, a small preview card of each (the chat's finished answers).
+ */
+export const MarkdownBody = memo(({ text, fileCards = false }: { text: string; fileCards?: boolean }) => (
   <Markdown
     remarkPlugins={[remarkGfm]}
     urlTransform={urlTransform}
     components={{
+      ...(fileCards && {
+        p: ({ node, children }) => (
+          <>
+            <p>{children}</p>
+            <FileCards paths={linkedFilesIn(node)} />
+          </>
+        ),
+        li: ({ node, children }) => (
+          <li>
+            {children}
+            <FileCards paths={linkedFilesIn(node)} />
+          </li>
+        ),
+      }),
       a: ({ href, children }) =>
         // An address the transform dropped (an unknown scheme) would open this app again in a new tab: plain text instead.
         !href ? (
@@ -143,7 +162,7 @@ const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, 
           <QuestionCard questions={questions} answered={questionsAnswered || !onAnswer} onAnswer={(text) => onAnswer?.(text)} />
         ) : shown && (
           <div className="prose-chat text-[15px] text-slate-800 dark:text-slate-200">
-            <MarkdownBody text={shown} />
+            <MarkdownBody text={shown} fileCards={!streaming} />
           </div>
         )}
         {typing && (

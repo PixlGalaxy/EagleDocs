@@ -219,6 +219,13 @@ r = await user.req(A, 'PUT', '/files/content', { path: boardPath, content: 'x' }
 check('only text files can be saved as text', r.status === 400, String(r.status));
 r = await user.req(A, 'PUT', '/files/content', { path: `${chatFolder}/new.md`, content: 'x' });
 check('saving does not create files', r.status === 404, String(r.status));
+// One file's details, for the chat's cards of the files an answer links to.
+r = await user.req(A, 'GET', `/files/stat?path=${encodeURIComponent(notesPath)}`);
+check("a file's details for its card", r.status === 200 && r.json.name === 'notes.txt' && r.json.type === 'file' && r.json.size > 0, JSON.stringify(r.json));
+r = await user.req(A, 'GET', `/files/stat?path=${encodeURIComponent(`${chatFolder}/missing.pdf`)}`);
+const missingStatus = r.status;
+r = await admin.req(A, 'GET', `/files/stat?path=${encodeURIComponent(notesPath)}`);
+check('a missing file, or one of another student, is not found', missingStatus === 404 && r.status === 404, `${missingStatus} ${r.status}`);
 // Another chat gets its own folder; the same file name there does not clash.
 await upload('board.png', PNG, 'image/png');
 const otherChat = (await user.req(A, 'POST', '/chats', {})).json.id;

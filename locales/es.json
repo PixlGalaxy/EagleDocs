@@ -992,6 +992,7 @@
   "settings.busyInputQueueHint": "Espera y se envía cuando termina la respuesta",
   "settings.busyInputInterrupt": "Interrumpir",
   "settings.busyInputInterruptHint": "Detiene la respuesta y envía tu mensaje en su lugar",
+  "chat.openFile": "Abrir {name}",
   "chat.questionSend": "Enviar respuestas",
   "chat.htmlOpen": "Abrir en otra pestaña",
   "chat.modelLocked": "El modelo se puede cambiar cuando termine la respuesta",

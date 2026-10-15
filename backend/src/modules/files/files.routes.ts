@@ -82,6 +82,13 @@ export function createFilesRoutes(workspace: DiskWorkspace, chats: ChatService) 
     res.status(204).end();
   });
 
+  /** One file's details (the chat's file cards ask for the files an answer links to). */
+  files.get('/stat', async (req: AppRequest, res) => {
+    const stat = await workspace.stat(req.user!.id, pathParam(req.query.path)).catch(asHttp);
+    if (!stat) throw notFound();
+    res.json({ name: stat.name, path: stat.path, type: stat.type, size: stat.size, modified_at: stat.modifiedAt });
+  });
+
   files.get('/download', async (req: AppRequest, res, next) => {
     const path = pathParam(req.query.path);
     const stat = await workspace.stat(req.user!.id, path).catch(asHttp);

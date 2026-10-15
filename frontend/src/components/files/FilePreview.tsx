@@ -82,7 +82,8 @@ function useBlobText(blob: Blob | undefined): string | null {
 interface PanelProps {
   entry: WorkspaceEntry;
   onClose: () => void;
-  onAttach: () => void;
+  /** Adds the file to the message being written; without it the panel has no Attach button. */
+  onAttach?: () => void;
   /** After a save, so the file list picks up the new size and date. */
   onSaved?: () => void;
 }
@@ -218,18 +219,20 @@ export const FilePreviewPanel = ({ entry, onClose, onAttach, onSaved }: PanelPro
               <span className="hidden sm:inline">{t('chat.previewSave')}</span>
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              onAttach();
-              onClose();
-            }}
-            title={t('chat.attach')}
-            className={`${button} border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800`}
-          >
-            <Paperclip size={15} aria-hidden="true" />
-            <span className="hidden sm:inline">{t('chat.attach')}</span>
-          </button>
+          {onAttach && (
+            <button
+              type="button"
+              onClick={() => {
+                onAttach();
+                onClose();
+              }}
+              title={t('chat.attach')}
+              className={`${button} border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800`}
+            >
+              <Paperclip size={15} aria-hidden="true" />
+              <span className="hidden sm:inline">{t('chat.attach')}</span>
+            </button>
+          )}
           <a href={fileUrl(entry.path)} download={entry.name} title={t('chat.downloadFile')} className={`${button} border border-slate-300 text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800`}>
             <Download size={15} aria-hidden="true" />
             <span className="hidden sm:inline">{t('chat.downloadFile')}</span>
@@ -265,7 +268,8 @@ const GAP = 12;
 /** A glance needs only the start of a long text. */
 const SNIPPET_CHARS = 4000;
 
-const HoverBody = ({ entry }: { entry: WorkspaceEntry }) => {
+/** A glance at a file: the start of a text, the first page of a document, a picture. Also the chat's file cards. */
+export const FileGlance = ({ entry }: { entry: WorkspaceEntry }) => {
   const { t } = useI18n();
   const kind = previewKindOf(entry.name);
   const file = useFileBlob(entry.path, entry.modified_at, kind !== 'image');
@@ -301,7 +305,7 @@ export const FileHoverCard = ({ entry, anchor }: { entry: WorkspaceEntry; anchor
     >
       <div className="truncate border-b border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 dark:border-slate-700 dark:text-slate-300">{entry.name}</div>
       <div className="min-h-0 flex-1 bg-slate-50 dark:bg-slate-950">
-        <HoverBody entry={entry} />
+        <FileGlance entry={entry} />
       </div>
     </div>,
     document.body,
