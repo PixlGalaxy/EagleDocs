@@ -1,6 +1,25 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Clock, Download, ExternalLink, File, FileImage, FileSpreadsheet, FileText, Folder, FolderOpen, Loader2, Paperclip, RefreshCw, X } from 'lucide-react';
+import {
+  ChevronRight,
+  Clock,
+  Download,
+  ExternalLink,
+  File,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  Folder,
+  FolderOpen,
+  Loader2,
+  Paperclip,
+  RefreshCw,
+  Trash2,
+  X,
+} from 'lucide-react';
+import { ApiError } from '../../api/client';
+import Modal from '../../components/ui/Modal';
+import { btn } from '../../components/ui/styles';
 import { filesApi } from '../../api/account';
 import type { WorkspaceEntry } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
@@ -42,6 +61,9 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [preview, setPreview] = useState<WorkspaceEntry | null>(null);
+  /** The file or folder waiting for the student to confirm its deletion. */
+  const [deleting, setDeleting] = useState<WorkspaceEntry | null>(null);
+  const [deleteState, setDeleteState] = useState<{ busy: boolean; error: string }>({ busy: false, error: '' });
   const [hover, setHover] = useState<{ entry: WorkspaceEntry; anchor: DOMRect } | null>(null);
   const hoverTimer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(hoverTimer.current), []);
@@ -91,6 +113,22 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
     void reloadAll().finally(() => setRefreshing(false));
   };
 
+  const deleteButton = (entry: WorkspaceEntry) => (
+    <button
+      type="button"
+      onClick={() => {
+        endHover();
+        setDeleteState({ busy: false, error: '' });
+        setDeleting(entry);
+      }}
+      aria-label={t('files.delete', { name: entry.name })}
+      title={t('files.delete', { name: entry.name })}
+      className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-rose-600 dark:hover:bg-slate-700 dark:hover:text-rose-400"
+    >
+      <Trash2 size={13} />
+    </button>
+  );
+
   const rows = (path: string, depth: number): ReactNode => {
     const state = folders[path];
     const pad = { paddingLeft: `${0.5 + depth * 0.875}rem` };
@@ -119,21 +157,28 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
         const FolderIcon = entry.temp ? Clock : open ? FolderOpen : Folder;
         return (
           <li key={entry.path}>
-            <button
-              type="button"
-              onClick={() => toggle(entry.path)}
-              aria-expanded={open}
-              style={pad}
-              title={entry.temp ? t('files.tempBadge', { hours: 24 }) : entry.name}
-              className="flex w-full items-center gap-1.5 rounded-md py-1.5 pr-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-            >
-              <ChevronRight size={13} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
-              <FolderIcon size={15} className={`shrink-0 ${temp ? 'text-amber-500' : 'text-[var(--accent-500)]'}`} aria-hidden="true" />
-              <span className="min-w-0 truncate">{entry.name}</span>
-              {entry.temp && (
-                <span className="ml-auto shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">24 h</span>
+            <div className="group flex items-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-800">
+              <button
+                type="button"
+                onClick={() => toggle(entry.path)}
+                aria-expanded={open}
+                style={pad}
+                title={entry.temp ? t('files.tempBadge', { hours: 24 }) : entry.name}
+                className="flex min-w-0 flex-1 items-center gap-1.5 py-1.5 pr-2 text-left text-sm text-slate-700 dark:text-slate-300"
+              >
+                <ChevronRight size={13} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
+                <FolderIcon size={15} className={`shrink-0 ${temp ? 'text-amber-500' : 'text-[var(--accent-500)]'}`} aria-hidden="true" />
+                <span className="min-w-0 truncate">{entry.name}</span>
+                {entry.temp && (
+                  <span className="ml-auto shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">24 h</span>
+                )}
+              </button>
+              {entry.path !== TEMP && (
+                <span className="flex shrink-0 items-center pr-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
+                  {deleteButton(entry)}
+                </span>
               )}
-            </button>
+            </div>
             {open && <ul>{rows(entry.path, depth + 1)}</ul>}
           </li>
         );
@@ -175,10 +220,26 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
             >
               <Download size={13} />
             </a>
+            {deleteButton(entry)}
           </span>
         </li>
       );
     });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteState({ busy: true, error: '' });
+    try {
+      await filesApi.remove(deleting.path);
+      // Whatever was open from inside it is gone too.
+      if (preview && (preview.path === deleting.path || preview.path.startsWith(`${deleting.path}/`))) setPreview(null);
+      setDeleting(null);
+      setDeleteState({ busy: false, error: '' });
+      void reloadAll();
+    } catch (err) {
+      setDeleteState({ busy: false, error: err instanceof ApiError ? err.message : t('common.networkError') });
+    }
   };
 
   return (
@@ -195,10 +256,21 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
         >
           <RefreshCw size={15} className={refreshing ? 'animate-spin motion-reduce:animate-none' : ''} />
         </button>
-        <Link to="/files" aria-label={t('nav.files')} title={t('nav.files')} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
+        <Link
+          to="/files"
+          aria-label={t('nav.files')}
+          title={t('nav.files')}
+          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        >
           <ExternalLink size={15} />
         </Link>
-        <button type="button" onClick={onClose} aria-label={t('chat.hideFiles')} title={t('chat.hideFiles')} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('chat.hideFiles')}
+          title={t('chat.hideFiles')}
+          className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+        >
           <X size={16} />
         </button>
       </div>
@@ -206,6 +278,21 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
         {rows('', 0)}
       </ul>
       {hover && !preview && <FileHoverCard entry={hover.entry} anchor={hover.anchor} />}
+      {deleting && (
+        <Modal title={t('files.deleteTitle')} onClose={() => !deleteState.busy && setDeleting(null)}>
+          <p className="text-sm text-slate-600 dark:text-slate-300">{t('files.deleteBody', { name: deleting.name })}</p>
+          {deleteState.error && <p className="mt-3 text-sm text-rose-600 dark:text-rose-400">{deleteState.error}</p>}
+          <div className="mt-6 flex justify-end gap-2">
+            <button type="button" onClick={() => setDeleting(null)} disabled={deleteState.busy} className={btn.secondary}>
+              {t('common.cancel')}
+            </button>
+            <button type="button" onClick={() => void confirmDelete()} disabled={deleteState.busy} className={btn.danger}>
+              {deleteState.busy && <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+              {t('common.delete')}
+            </button>
+          </div>
+        </Modal>
+      )}
       {preview && <FilePreviewPanel entry={preview} onClose={() => setPreview(null)} onAttach={() => onAttach(preview)} onSaved={() => void reloadAll()} />}
     </div>
   );

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ArrowDown, BookOpen, CalendarClock, Folder, FolderOpen, GraduationCap, Map as MapIcon, Menu, PanelLeftClose, PanelLeftOpen, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
+import { ArrowDown, BookOpen, CalendarClock, Folder, FolderOpen, GraduationCap, Map as MapIcon, Menu, PanelLeftClose, PanelLeftOpen, X, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError, apiUrl } from '../../api/client';
 import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, ReasoningLevel, StreamEvent, ToolCall, WorkspaceEntry } from '../../api/types';
@@ -158,6 +158,20 @@ const ChatPage = () => {
       .finally(() => setLoadingChats(false));
   }, [t]);
 
+  // The list keeps up by itself: often while some chat is working (its spinner, then its unread dot), rarely otherwise.
+  const anyWorking = chats.some((c) => c.working || c.active_job_id);
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refreshChats();
+    }, anyWorking ? 4000 : 20000);
+    const onVisible = () => document.visibilityState === 'visible' && refreshChats();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [anyWorking, refreshChats]);
+
   useEffect(() => {
     refreshChats();
     Promise.all([modelsApi.options(), modelsApi.prefs()])
@@ -260,7 +274,6 @@ const ChatPage = () => {
         liveJob.current = null;
         // Decided approvals were only context for the running turn; the tool list keeps the record.
         setApprovals((prev) => prev.filter((a) => a.status === 'pending'));
-        refreshChats();
         setFilesVersion((v) => v + 1);
         const finish = () => setLive((cur) => (cur?.jobId === jobId ? null : cur));
         if (steeredJobs.current.has(jobId)) {
@@ -270,11 +283,13 @@ const ChatPage = () => {
           void reload(streamChatId).then((ok) => {
             if (!ok && currentChat.current === streamChatId) setMessages((prev) => withMessage(prev, event.message));
             finish();
+            // After the reload, which marks the chat read: no unread dot for the answer being watched.
+            refreshChats();
           });
         } else {
           setMessages((prev) => withMessage(prev, event.message));
           finish();
-          void reload(streamChatId);
+          void reload(streamChatId).then(refreshChats);
         }
       } else if (event.type === 'error') {
         finishedJobs.current.add(jobId);
@@ -449,6 +464,28 @@ const ChatPage = () => {
     } finally {
       sending.current = false;
     }
+  };
+
+  /** A message written while the agent worked (queue or interrupt mode), sent as soon as the answer ends. */
+  const [queued, setQueued] = useState<string | null>(null);
+  const busyMode = user?.busy_input ?? 'steer';
+  useEffect(() => {
+    if (live || !queued || sending.current) return;
+    const text = queued;
+    setQueued(null);
+    void send(text);
+    // send reads the current chat; it only needs to run when the answer ends.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, queued]);
+
+  /** Enter while the agent works, by the student's setting: correct it, queue the message, or stop it and send. */
+  const busySubmit = () => {
+    if (busyMode === 'steer') return void steer();
+    const content = draft.trim();
+    if (!content) return;
+    setDraft('');
+    setQueued((prev) => (prev ? `${prev}\n\n${content}` : content));
+    if (busyMode === 'interrupt') void stop();
   };
 
   /** Sends the draft as a correction to the running answer. */
@@ -799,6 +836,29 @@ const ChatPage = () => {
         <div className="shrink-0 px-4 pb-4 pt-2">
           {chatId && <BackgroundTasks chatId={chatId} jobs={background} onFinished={onBackgroundFinished} />}
           {/* Corrections the agent has not read yet wait here, next to where they were written. */}
+          {/* The message that goes out when the answer ends (queue or interrupt mode); it can still be taken back. */}
+          {queued && (
+            <div className={`mx-auto mb-2 flex w-full ${CHAT_COLUMN} justify-end`}>
+              <div className="flex max-w-[85%] items-start gap-2 rounded-2xl rounded-br-md border border-dashed border-[var(--accent-400)] bg-[var(--accent-50)] px-4 py-2.5 text-[15px] text-slate-800 dark:bg-[var(--accent-500)]/10 dark:text-slate-100">
+                <div className="min-w-0">
+                  <p className="mb-0.5 text-xs font-medium text-[var(--accent-700)] dark:text-[var(--accent-300)]">{t(busyMode === 'interrupt' ? 'chat.interruptPending' : 'chat.queuedLabel')}</p>
+                  <p className="whitespace-pre-wrap break-words">{queued}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(queued);
+                    setQueued(null);
+                  }}
+                  aria-label={t('chat.queuedCancel')}
+                  title={t('chat.queuedCancel')}
+                  className="shrink-0 rounded-md p-1 text-slate-500 hover:bg-white hover:text-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                >
+                  <X size={14} aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          )}
           {live && live.steers.some((st) => !st.applied) && (
             <div className={`mx-auto mb-2 w-full ${CHAT_COLUMN} space-y-2`}>
               {live.steers
@@ -813,7 +873,8 @@ const ChatPage = () => {
             onChange={setDraft}
             onSubmit={() => void send()}
             onStop={() => void stop()}
-            onSteer={() => void steer()}
+            onSteer={busySubmit}
+            busyMode={busyMode}
             busy={!!live}
             attachments={attachments.items}
             onAttach={attachments.add}

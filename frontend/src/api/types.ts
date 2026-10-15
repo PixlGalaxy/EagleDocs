@@ -40,9 +40,15 @@ export interface User {
   major: string | null;
   theme_mode: string;
   theme_skin: string;
+  /** Tools in the chat: one expandable line ('compact', the default) or the full list. */
+  tool_trace?: 'compact' | 'full';
+  /** A message typed while the agent works: corrects it ('steer', the default), waits ('queue') or stops it ('interrupt'). */
+  busy_input?: BusyInput;
   created_at: string;
   updated_at: string;
 }
+
+export type BusyInput = 'steer' | 'queue' | 'interrupt';
 
 export interface SessionInfo {
   user: User;
@@ -106,6 +112,12 @@ export interface Chat {
   updated_at: string;
   /** Set while a job for this chat is running in the background. */
   active_job_id: string | null;
+  /** The list: the agent or its helpers are working on it right now. */
+  working?: boolean;
+  /** The list: an answer arrived since the student last opened it. */
+  unread?: boolean;
+  /** The list: helpers (children) of its latest delegation. */
+  helpers?: { goal: string; running: boolean }[];
 }
 
 export interface ToolCall {

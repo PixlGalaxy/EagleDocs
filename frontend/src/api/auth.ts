@@ -16,7 +16,7 @@ export const authApi = {
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post<void>('/auth/change-password', { currentPassword, newPassword }),
   updateProfile: (body: Partial<Pick<User, 'display_name' | 'major' | 'timezone'>>) => api.patch<User>('/auth/profile', body),
-  appearance: (body: { mode?: string; skin?: string; language?: string }) => api.post<User>('/auth/appearance', body),
+  appearance: (body: { mode?: string; skin?: string; language?: string; tool_trace?: 'compact' | 'full'; busy_input?: 'steer' | 'queue' | 'interrupt' }) => api.post<User>('/auth/appearance', body),
 };
 
 export const avatarsApi = {

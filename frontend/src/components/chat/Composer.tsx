@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
 import { CHAT_COLUMN } from './layout';
-import { ArrowUp, CornerDownRight, Mic, Paperclip, Square } from 'lucide-react';
+import { ArrowUp, CornerDownRight, ListPlus, Mic, Paperclip, SkipForward, Square } from 'lucide-react';
+import type { BusyInput } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { AttachmentTray } from './AttachmentViews';
 import { MAX_ATTACHMENTS, type DraftAttachment } from './attachments';
@@ -12,8 +13,10 @@ interface Props {
   onChange: (value: string) => void;
   onSubmit: () => void;
   onStop?: () => void;
-  /** While busy: sends the text as a correction instead of a new message. */
+  /** While busy: what the text does, by the student's setting (Settings → Appearance). */
   onSteer?: () => void;
+  /** 'steer' corrects the running task (default), 'queue' sends it when the task ends, 'interrupt' stops the task and sends it. */
+  busyMode?: BusyInput;
   busy: boolean;
   disabled?: boolean;
   /** Files waiting to go with the next message; omit to hide the paperclip. */
@@ -42,13 +45,21 @@ const MAX_HEIGHT = 220;
  * active: Enter sends a correction (steer) and Stop sits next to it. Photos and
  * files come in through the paperclip, a drop or a paste.
  */
-const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busy, disabled, attachments = [], onAttach, onRemoveAttachment, controls, status }: Props) => {
+const BUSY = {
+  steer: { label: 'chat.steerLabel', placeholder: 'chat.steerPlaceholder', hint: 'chat.steerHint', button: 'chat.steer', icon: CornerDownRight, color: 'bg-amber-400 text-amber-950 hover:bg-amber-500' },
+  queue: { label: 'chat.queueLabel', placeholder: 'chat.queuePlaceholder', hint: 'chat.queueHint', button: 'chat.queue', icon: ListPlus, color: 'bg-[var(--accent-600)] text-white hover:bg-[var(--accent-700)]' },
+  interrupt: { label: 'chat.interruptLabel', placeholder: 'chat.interruptPlaceholder', hint: 'chat.interruptHint', button: 'chat.interrupt', icon: SkipForward, color: 'bg-rose-500 text-white hover:bg-rose-600' },
+} as const;
+
+const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busyMode = 'steer', busy, disabled, attachments = [], onAttach, onRemoveAttachment, controls, status }: Props) => {
   const { t, language } = useI18n();
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [overLimit, setOverLimit] = useState(false);
   const steering = busy && !!onSteer;
+  const mode = BUSY[busyMode];
+  const ModeIcon = mode.icon;
   const uploading = attachments.some((a) => !a.path && !a.error);
   const hasFiles = attachments.some((a) => a.path);
   // A message can be only files, but not while one is still uploading.
@@ -129,7 +140,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busy, disabled, 
       ? t('chat.dictating')
       : overLimit && attachments.length >= MAX_ATTACHMENTS
         ? t('chat.attachLimit', { count: MAX_ATTACHMENTS })
-        : t(steering ? 'chat.steerHint' : 'chat.disclaimer');
+        : t(steering ? mode.hint : 'chat.disclaimer');
 
   return (
     <form onSubmit={submit} className={`mx-auto w-full ${CHAT_COLUMN}`} {...dragHandlers}>
@@ -149,7 +160,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busy, disabled, 
           </div>
         )}
         <label htmlFor="composer" className="sr-only">
-          {t(steering ? 'chat.steerLabel' : 'chat.composerLabel')}
+          {t(steering ? mode.label : 'chat.composerLabel')}
         </label>
         <textarea
           id="composer"
@@ -165,7 +176,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busy, disabled, 
           onPaste={onPaste}
           disabled={disabled}
           maxLength={steering ? 2000 : 20000}
-          placeholder={t(steering ? 'chat.steerPlaceholder' : 'chat.composerPlaceholder')}
+          placeholder={t(steering ? mode.placeholder : 'chat.composerPlaceholder')}
           className="scroll-thin block max-h-[220px] min-h-[52px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15px] text-slate-900 placeholder-slate-500 focus:outline-none disabled:cursor-not-allowed dark:text-slate-100 dark:placeholder-slate-400"
         />
 
@@ -224,11 +235,11 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busy, disabled, 
               <button
                 type="submit"
                 disabled={!value.trim() || disabled}
-                aria-label={t('chat.steer')}
-                title={t('chat.steer')}
-                className={`${sendButton} bg-amber-400 text-amber-950 hover:bg-amber-500`}
+                aria-label={t(mode.button)}
+                title={t(mode.button)}
+                className={`${sendButton} ${mode.color}`}
               >
-                <CornerDownRight size={17} aria-hidden="true" />
+                <ModeIcon size={17} aria-hidden="true" />
               </button>
             )}
             {busy && onStop ? (
