@@ -4,6 +4,7 @@ import { Loader2, MessageSquarePlus, Pencil, Search, Trash2, X } from 'lucide-re
 import type { Chat } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { Skeleton } from '../../components/ui/kit';
+import TasksPanel from './TasksPanel';
 
 interface Props {
   chats: Chat[];
@@ -122,6 +123,7 @@ const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onDelete, onCl
           ))
         )}
       </div>
+      <TasksPanel onNavigate={onClose} />
     </div>
   );
 };

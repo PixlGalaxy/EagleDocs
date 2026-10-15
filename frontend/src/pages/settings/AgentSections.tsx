@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { BookMarked, Brain, CalendarClock, CircleAlert, Library, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { memoryApi, ragsApi, schedulesApi, skillsApi } from '../../api/account';
 import { ApiError } from '../../api/client';
-import type { Memory, RagSummary, Schedule, Skill } from '../../api/types';
+import type { MemoryDoc, MemoryInfo, RagSummary, Schedule, Skill } from '../../api/types';
+import type { TranslationKey } from '../../i18n/translations';
 import { useConfirm } from '../../components/ui/confirm';
 import { useI18n } from '../../i18n/I18nContext';
 import Modal from '../../components/ui/Modal';
@@ -137,89 +138,129 @@ export const SchedulesSection = () => {
 
 // ------------------------------------------------------------------ memory
 
-export const MemorySection = () => {
-  const { t, language } = useI18n();
-  const ask = useConfirm();
-  const [memories, setMemories] = useState<Memory[] | null>(null);
-  const [paused, setPaused] = useState(false);
-  const [editing, setEditing] = useState<Memory | null>(null);
+/** USER.md and MEMORY.md keep one fact per entry; here each line is one entry. */
+const ENTRY = /\n?§\n?/;
+const toLines = (text: string) =>
+  text
+    .split(ENTRY)
+    .map((e) => e.trim().replace(/\s*\n\s*/g, ' '))
+    .filter(Boolean)
+    .join('\n');
+const fromLines = (text: string) =>
+  text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .join('\n§\n');
 
-  useEffect(() => {
-    memoryApi
-      .list()
-      .then(({ memories, paused }) => {
-        setMemories(memories);
-        setPaused(paused);
-      })
-      .catch(() => setMemories([]));
-  }, []);
+const DOCS: { doc: MemoryDoc; file: string; title: TranslationKey; body: TranslationKey; placeholder: TranslationKey; lines: boolean }[] = [
+  { doc: 'user', file: 'USER.md', title: 'memory.userTitle', body: 'memory.userBody', placeholder: 'memory.userPlaceholder', lines: true },
+  { doc: 'notes', file: 'MEMORY.md', title: 'memory.notesTitle', body: 'memory.notesBody', placeholder: 'memory.notesPlaceholder', lines: true },
+  { doc: 'soul', file: 'SOUL.md', title: 'memory.soulTitle', body: 'memory.soulBody', placeholder: 'memory.soulPlaceholder', lines: false },
+];
 
-  const save = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!editing) return;
-    const updated = await memoryApi.update(editing.id, editing.content);
-    setMemories((prev) => prev?.map((m) => (m.id === updated.id ? updated : m)) ?? null);
-    setEditing(null);
+/** One of the agent's files: edit, see how full it is, save. */
+const MemoryDocEditor = ({ spec, saved, limit, onSaved }: { spec: (typeof DOCS)[number]; saved: string; limit: number; onSaved: (info: Omit<MemoryInfo, 'paused'>) => void }) => {
+  const { t } = useI18n();
+  const shown = spec.lines ? toLines(saved) : saved;
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const value = draft ?? shown;
+  const stored = spec.lines ? fromLines(value) : value.trim();
+  const over = stored.length > limit;
+
+  const save = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      onSaved(await memoryApi.save(spec.doc, stored));
+      setDraft(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
-    <Panel
-      title={t('memory.title')}
-      description={t('memory.body')}
-      actions={
-        <label className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
-          {t('memory.enabled')}
-          <Switch
-            label={t('memory.enabled')}
-            checked={!paused}
-            onChange={(on) => {
-              setPaused(!on);
-              void memoryApi.setPaused(!on);
-            }}
-          />
-        </label>
-      }
-    >
-      {memories === null ? (
-        <Skeleton className="h-24" />
-      ) : memories.length === 0 ? (
-        <EmptyState icon={Brain} title={t('memory.emptyTitle')} description={t('memory.emptyBody')} />
-      ) : (
-        <ul className="space-y-2">
-          {memories.map((m) => (
-            <li key={m.id} className="flex items-start gap-3 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-              <p className="min-w-0 flex-1 text-sm text-slate-800 dark:text-slate-200">{m.content}</p>
-              <span className="hidden shrink-0 text-xs text-slate-500 sm:block">{new Date(m.created_at).toLocaleDateString(language, { month: 'short', day: 'numeric' })}</span>
-              <button type="button" onClick={() => setEditing(m)} className={btn.iconGhost} aria-label={t('common.edit')}>
-                <Pencil size={15} />
-              </button>
-              <button type="button" onClick={() => ask(() => void memoryApi.remove(m.id).then(() => setMemories((prev) => prev?.filter((x) => x.id !== m.id) ?? null)))} className={btn.iconDanger} aria-label={t('common.delete')}>
-                <Trash2 size={15} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {editing && (
-        <Modal title={t('memory.edit')} onClose={() => setEditing(null)}>
-          <form onSubmit={(e) => void save(e)} className="space-y-5">
-            <label htmlFor="memory-edit" className="sr-only">
-              {t('memory.edit')}
-            </label>
-            <textarea id="memory-edit" rows={4} value={editing.content} onChange={(e) => setEditing({ ...editing, content: e.target.value })} className={input} />
-            <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setEditing(null)} className={btn.secondary}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" className={btn.primary}>
-                {t('common.save')}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+    <Panel title={t(spec.title)} description={t(spec.body)}>
+      <label htmlFor={`memory-${spec.doc}`} className="mb-1.5 block font-mono text-xs text-slate-500 dark:text-slate-400">
+        {spec.file}
+      </label>
+      <textarea
+        id={`memory-${spec.doc}`}
+        rows={spec.lines ? 6 : 5}
+        value={value}
+        placeholder={t(spec.placeholder)}
+        onChange={(e) => setDraft(e.target.value)}
+        className={`${input} font-mono text-[13px] leading-relaxed`}
+      />
+      <div className="mt-2 flex flex-wrap items-center gap-3">
+        <span className={`text-xs ${over ? 'font-medium text-rose-600 dark:text-rose-400' : 'text-slate-500 dark:text-slate-400'}`}>
+          {t('memory.usage', { used: stored.length, limit })}
+        </span>
+        {spec.lines && <span className="text-xs text-slate-500 dark:text-slate-400">{t('memory.oneFactPerLine')}</span>}
+        {error && <span className="text-xs text-rose-600 dark:text-rose-400">{error}</span>}
+        <div className="ml-auto flex gap-2">
+          {draft !== null && (
+            <button type="button" onClick={() => setDraft(null)} className={btn.secondary}>
+              {t('common.cancel')}
+            </button>
+          )}
+          <button type="button" disabled={draft === null || busy || over} onClick={() => void save()} className={btn.primary}>
+            {busy && <Loader2 size={15} className="animate-spin" />}
+            {t('common.save')}
+          </button>
+        </div>
+      </div>
     </Panel>
+  );
+};
+
+export const MemorySection = () => {
+  const { t } = useI18n();
+  const [info, setInfo] = useState<MemoryInfo | null>(null);
+
+  useEffect(() => {
+    memoryApi
+      .get()
+      .then(setInfo)
+      .catch(() => setInfo({ docs: { soul: '', user: '', notes: '' }, limits: { soul: 3000, user: 1500, notes: 2500 }, paused: false }));
+  }, []);
+
+  if (!info) return <Skeleton className="h-64 rounded-xl" />;
+  return (
+    <>
+      <Panel
+        title={t('memory.title')}
+        description={t('memory.body')}
+        actions={
+          <label className="flex items-center gap-3 text-sm text-slate-700 dark:text-slate-300">
+            {t('memory.enabled')}
+            <Switch
+              label={t('memory.enabled')}
+              checked={!info.paused}
+              onChange={(on) => {
+                setInfo({ ...info, paused: !on });
+                void memoryApi.setPaused(!on);
+              }}
+            />
+          </label>
+        }
+      >
+        {info.paused ? (
+          <Notice tone="neutral" icon={Brain}>
+            {t('memory.pausedNote')}
+          </Notice>
+        ) : (
+          <p className="text-sm text-slate-600 dark:text-slate-400">{t('memory.howItWorks')}</p>
+        )}
+      </Panel>
+      {DOCS.map((spec) => (
+        <MemoryDocEditor key={spec.doc} spec={spec} saved={info.docs[spec.doc]} limit={info.limits[spec.doc]} onSaved={(next) => setInfo({ ...info, ...next })} />
+      ))}
+    </>
   );
 };
 

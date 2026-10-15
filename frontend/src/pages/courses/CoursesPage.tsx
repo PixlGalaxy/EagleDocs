@@ -10,6 +10,7 @@ import { Badge, EmptyState, Notice, Skeleton } from '../../components/ui/kit';
 import { btn, card } from '../../components/ui/styles';
 import { dayKey, formatDay, formatTime, priorityTone } from './format';
 import type { TranslationKey } from '../../i18n/translations';
+import CourseFoldersBar from './CourseFoldersBar';
 
 /** 412 from /api/canvas/* means the user has not saved a Canvas token yet. */
 const NOT_CONNECTED = 412;
@@ -144,6 +145,7 @@ const CoursesPage = () => {
           </button>
         </div>
       </div>
+      <CourseFoldersBar />
 
       {error && (
         <div className="mt-4">

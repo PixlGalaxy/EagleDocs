@@ -215,10 +215,10 @@ const routes: [string, RegExp, Handler][] = [
   ['POST', /^\/oauth\/requests\/([^/]+)$/, ({ body }) => ({ redirect_to: body.approve ? '/settings?section=apps' : '/chat' })],
 
   // memory, skills, schedules, push, billing
-  ['GET', /^\/memories$/, () => ({ memories: db.memories, paused: mockSettings.memoryPaused })],
-  ['PATCH', /^\/memories\/([^/]+)$/, ({ params, body }) => Object.assign(db.memories.find((m) => m.id === params[0])!, { content: body.content })],
-  ['DELETE', /^\/memories\/([^/]+)$/, ({ params }) => {
-    db.memories.splice(db.memories.findIndex((m) => m.id === params[0]), 1);
+  ['GET', /^\/memories$/, () => ({ docs: db.memoryDocs, limits: { soul: 3000, user: 1500, notes: 2500 }, paused: mockSettings.memoryPaused })],
+  ['PUT', /^\/memories\/docs\/(soul|user|notes)$/, ({ params, body }) => {
+    db.memoryDocs[params[0] as 'soul' | 'user' | 'notes'] = String(body.content ?? '');
+    return { docs: db.memoryDocs, limits: { soul: 3000, user: 1500, notes: 2500 } };
   }],
   ['PUT', /^\/memories\/paused$/, ({ body }) => {
     mockSettings.memoryPaused = Boolean(body.paused);

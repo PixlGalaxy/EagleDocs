@@ -207,6 +207,14 @@ export interface CanvasCourse {
   current?: boolean;
 }
 
+/** Last sync of the student's "<Term>/<Course>/" folders. */
+export interface CourseFoldersStatus {
+  synced_at: string | null;
+  term: string | null;
+  courses: number;
+  error: string | null;
+}
+
 export interface CanvasItem {
   id: string;
   course_id: number;
@@ -305,11 +313,12 @@ export interface RagSummary {
 
 // ---------------------------------------------------------------- agent extras
 
-export interface Memory {
-  id: string;
-  content: string;
-  source: 'agent' | 'user';
-  created_at: string;
+/** The agent's files about the student (Hermes style): personality, who they are, its own notes. */
+export type MemoryDoc = 'soul' | 'user' | 'notes';
+export interface MemoryInfo {
+  docs: Record<MemoryDoc, string>;
+  limits: Record<MemoryDoc, number>;
+  paused: boolean;
 }
 
 export interface Skill {
@@ -342,8 +351,10 @@ export interface Job {
   id: string;
   chat_id: string | null;
   chat_title: string | null;
-  kind: 'chat' | 'scheduled' | 'sync';
+  /** delegate: helper agents working in the background for chat_id. */
+  kind: 'chat' | 'scheduled' | 'sync' | 'delegate';
   status: JobStatus;
+  queued_at: string;
   started_at: string | null;
   finished_at: string | null;
   error: string | null;

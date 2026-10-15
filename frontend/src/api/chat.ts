@@ -12,6 +12,8 @@ export const chatApi = {
   send: (id: string, body: { content: string; model_ref: string }) =>
     api.post<{ job_id: string; message: Message }>(`/chats/${id}/messages`, body),
   cancel: (jobId: string) => api.post<void>(`/jobs/${jobId}/cancel`),
+  /** Runs a stopped or failed turn again. */
+  retry: (jobId: string) => api.post<{ job_id: string; chat_id: string }>(`/jobs/${jobId}/retry`),
   /** Corrects the agent while it works, without stopping it. */
   steer: (jobId: string, content: string) => api.post<Steer>(`/jobs/${jobId}/steer`, { content }),
   decide: (approvalId: string, approve: boolean) =>

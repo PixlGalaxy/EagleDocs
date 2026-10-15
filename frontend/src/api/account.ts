@@ -3,11 +3,13 @@ import type {
   CanvasAnnouncement,
   CanvasCourse,
   CanvasItem,
+  CourseFoldersStatus,
   Connection,
   ConnectionsInfo,
   McpInfo,
   McpScope,
-  Memory,
+  MemoryDoc,
+  MemoryInfo,
   BrowserInfo,
   RagSummary,
   OAuthConsent,
@@ -34,6 +36,9 @@ export const canvasApi = {
   upcoming: (days = 14) => api.get<CanvasItem[]>(`/canvas/upcoming?days=${days}`),
   course: (id: number) =>
     api.get<{ course: CanvasCourse; items: CanvasItem[]; announcements: CanvasAnnouncement[] }>(`/canvas/courses/${id}`),
+  /** "<Term>/<Course>/" folders in Files, kept from Canvas. */
+  folders: () => api.get<CourseFoldersStatus>('/canvas/folders'),
+  syncFolders: () => api.post<{ term: string; written: number }>('/canvas/folders/sync'),
 };
 
 export const filesApi = {
@@ -61,9 +66,8 @@ export const ragsApi = {
 };
 
 export const memoryApi = {
-  list: () => api.get<{ memories: Memory[]; paused: boolean }>('/memories'),
-  remove: (id: string) => api.del<void>(`/memories/${id}`),
-  update: (id: string, content: string) => api.patch<Memory>(`/memories/${id}`, { content }),
+  get: () => api.get<MemoryInfo>('/memories'),
+  save: (doc: MemoryDoc, content: string) => api.put<Omit<MemoryInfo, 'paused'>>(`/memories/docs/${doc}`, { content }),
   setPaused: (paused: boolean) => api.put<void>('/memories/paused', { paused }),
 };
 

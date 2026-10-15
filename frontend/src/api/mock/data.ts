@@ -6,7 +6,6 @@ import type {
   Chat,
   Connection,
   Institution,
-  Memory,
   RagSummary,
   BrowserInfo,
   Message,
@@ -194,11 +193,11 @@ export const rags: RagSummary[] = [
   },
 ];
 
-export const memories: Memory[] = [
-  { id: 'mem1', content: 'Majoring in Accounting, graduating Spring 2028.', source: 'agent', created_at: iso(-24 * 20) },
-  { id: 'mem2', content: 'Works at the campus library Tuesdays and Thursdays 1 to 5 PM.', source: 'user', created_at: iso(-24 * 9) },
-  { id: 'mem3', content: 'Prefers email drafts in simple English, then a Spanish summary.', source: 'agent', created_at: iso(-24 * 3) },
-];
+export const memoryDocs = {
+  soul: '',
+  user: ['Studies Accounting, junior year', 'Works Tuesday and Thursday evenings', 'Prefers drafts in English'].join('\n§\n'),
+  notes: 'Canvas briefing reads best with days=14',
+};
 
 export const skills: Skill[] = [
   { slug: 'canvas-lms', name: 'Canvas', description: 'Courses, assignments, deadlines, workload estimates and study plans.', builtin: true, enabled: true, notes: [] },
