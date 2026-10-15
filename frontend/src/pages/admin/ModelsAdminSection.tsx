@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CircleAlert, Loader2, Plus, RefreshCw, Server, Trash2 } from 'lucide-react';
+import { CircleAlert, CreditCard, Loader2, Plus, RefreshCw, Server, Trash2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { adminApi, type AdminModel, type GeneralSettings, type ModelEndpoint } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import { useConfirm } from '../../components/ui/confirm';
@@ -173,23 +174,12 @@ const ModelsAdminSection = () => {
 
       {general && (
         <Panel title={t('admin.quotaTitle')} description={t('admin.quotaBody')}>
-          <div className="flex max-w-xs items-end gap-2">
-            <Field label={t('admin.dailyMessages')}>
-              {(id) => (
-                <input
-                  id={id}
-                  type="number"
-                  min={0}
-                  value={general.eagledocs_daily_messages}
-                  onChange={(e) => setGeneral({ ...general, eagledocs_daily_messages: Number(e.target.value) })}
-                  className={`${input} font-mono`}
-                />
-              )}
-            </Field>
-            <button type="button" onClick={() => void adminApi.saveGeneral({ eagledocs_daily_messages: general.eagledocs_daily_messages })} className={btn.primary}>
-              {t('common.save')}
-            </button>
-          </div>
+          <Notice tone="neutral" icon={CreditCard}>
+            {t('admin.messagesInPlans')}{' '}
+            <Link to="/admin?section=billing" className="font-medium underline underline-offset-2">
+              {t('admin.openPlans')}
+            </Link>
+          </Notice>
         </Panel>
       )}
 

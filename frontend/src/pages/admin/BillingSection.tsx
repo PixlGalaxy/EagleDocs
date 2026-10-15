@@ -17,12 +17,15 @@ const NEW_TIER: Partial<Tier> & { name: string } = {
   price_cents: 0,
   currency: 'usd',
   stripe_price_id: null,
-  cpu: 0.5,
-  mem_mb: 512,
+  cpu: 1,
+  // Outlook in the sandbox browser needs about 2 GB.
+  mem_mb: 2048,
   disk_mb: 5120,
   daily_messages: 100,
-  max_background_jobs: 1,
+  max_background_jobs: 2,
   max_schedules: 3,
+  max_parallel_subagents: 3,
+  max_subagent_depth: 2,
   is_default: false,
   enabled: true,
 };
@@ -167,14 +170,23 @@ const BillingSection = () => {
             <Field label={t('admin.diskMb')}>
               {(id) => <input id={id} type="number" step={256} value={draft.disk_mb} onChange={num('disk_mb')} className={`${input} font-mono`} />}
             </Field>
-            <Field label={t('admin.dailyMessages')}>
-              {(id) => <input id={id} type="number" min={0} value={draft.daily_messages} onChange={num('daily_messages')} className={`${input} font-mono`} />}
+            <Field label={t('admin.dailyMessages')} hint={t('admin.zeroUnlimited')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} value={draft.daily_messages} onChange={num('daily_messages')} className={`${input} font-mono`} />}
             </Field>
             <Field label={t('plan.jobs')}>
               {(id) => <input id={id} type="number" min={1} value={draft.max_background_jobs} onChange={num('max_background_jobs')} className={`${input} font-mono`} />}
             </Field>
             <Field label={t('plan.schedules')}>
               {(id) => <input id={id} type="number" min={0} value={draft.max_schedules} onChange={num('max_schedules')} className={`${input} font-mono`} />}
+            </Field>
+            <Field label={t('plan.helpers')} hint={t('admin.helpersHint')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="number" min={1} max={10} value={draft.max_parallel_subagents} onChange={num('max_parallel_subagents')} className={`${input} font-mono`} />}
+            </Field>
+            <Field label={t('admin.helperDepth')} hint={t('admin.helperDepthHint')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} max={3} value={draft.max_subagent_depth} onChange={num('max_subagent_depth')} className={`${input} font-mono`} />}
+            </Field>
+            <Field label={t('admin.sortOrder')}>
+              {(id) => <input id={id} type="number" value={draft.sort ?? 0} onChange={num('sort')} className={`${input} font-mono`} />}
             </Field>
             <div className="sm:col-span-3">
               <Field label={t('admin.stripePrice')} hint={t('admin.stripePriceHint')}>

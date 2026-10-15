@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Box, Loader2, Square } from 'lucide-react';
+import { Box, CreditCard, Loader2, Square } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { adminApi, type NodeRow, type SandboxRow, type SandboxSettings } from '../../api/admin';
 import { useConfirm } from '../../components/ui/confirm';
 import { useI18n } from '../../i18n/I18nContext';
@@ -85,16 +86,15 @@ const SandboxSection = () => {
                 {t('admin.sandboxUnavailable')}
               </Notice>
             )}
+            <div className="mb-5">
+              <Notice tone="neutral" icon={CreditCard}>
+                {t('admin.limitsInPlans')}{' '}
+                <Link to="/admin?section=billing" className="font-medium underline underline-offset-2">
+                  {t('admin.openPlans')}
+                </Link>
+              </Notice>
+            </div>
             <div className="grid gap-5 sm:grid-cols-3">
-              <Field label={t('admin.cpu')} hint={t('admin.cpuHint')}>
-                {(id, d) => <input id={id} aria-describedby={d} type="number" step={0.25} min={0.25} value={settings.default_cpu} onChange={num('default_cpu')} className={`${input} font-mono`} />}
-              </Field>
-              <Field label={t('admin.memMb')}>
-                {(id) => <input id={id} type="number" step={128} min={256} value={settings.default_mem_mb} onChange={num('default_mem_mb')} className={`${input} font-mono`} />}
-              </Field>
-              <Field label={t('admin.diskMb')}>
-                {(id) => <input id={id} type="number" step={256} min={256} value={settings.default_disk_mb} onChange={num('default_disk_mb')} className={`${input} font-mono`} />}
-              </Field>
               <Field label={t('admin.maxActive')} hint={t('admin.maxActiveHint')}>
                 {(id, d) => <input id={id} aria-describedby={d} type="number" min={1} value={settings.max_active_per_node} onChange={num('max_active_per_node')} className={`${input} font-mono`} />}
               </Field>

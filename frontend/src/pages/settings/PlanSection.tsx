@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Check, CreditCard, Loader2 } from 'lucide-react';
+import { CalendarClock, Check, CircleAlert, CreditCard, Loader2, PartyPopper } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import { billingApi } from '../../api/account';
 import type { PlanInfo, Tier } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
-import { Badge, Panel, Skeleton } from '../../components/ui/kit';
+import { Badge, Notice, Panel, Skeleton } from '../../components/ui/kit';
 import { btn, card } from '../../components/ui/styles';
 import { formatPrice } from './format';
 
@@ -12,6 +13,9 @@ const PlanSection = () => {
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [redirecting, setRedirecting] = useState<string | null>(null);
+  // Back from Stripe Checkout: the webhook switches the plan a moment later.
+  const [params] = useSearchParams();
+  const justPaid = params.get('checkout') === 'success';
 
   useEffect(() => {
     billingApi.plan().then((p) => {
@@ -29,23 +33,25 @@ const PlanSection = () => {
     }
   };
 
-  if (!plan) return <Skeleton className="h-48 rounded-xl" />;
+  if (!plan?.tier) return <Skeleton className="h-48 rounded-xl" />;
 
   const { tier, usage_today } = plan;
+  const day = (iso: string) => new Date(iso).toLocaleDateString(language, { dateStyle: 'medium' });
   const specs = [
     { label: t('plan.cpu'), value: `${tier.cpu} vCPU` },
     { label: t('plan.memory'), value: `${tier.mem_mb} MB` },
     { label: t('plan.disk'), value: `${(tier.disk_mb / 1024).toFixed(1)} GB` },
-    { label: t('plan.messages'), value: `${usage_today.messages} / ${tier.daily_messages}` },
+    { label: t('plan.messages'), value: tier.daily_messages ? `${usage_today.messages} / ${tier.daily_messages}` : `${usage_today.messages} / ${t('plan.unlimited')}` },
     { label: t('plan.jobs'), value: String(tier.max_background_jobs) },
     { label: t('plan.schedules'), value: String(tier.max_schedules) },
+    { label: t('plan.helpers'), value: String(tier.max_parallel_subagents) },
   ];
 
   return (
     <>
       <Panel
         title={t('plan.current', { name: tier.name })}
-        description={plan.current_period_end ? t('plan.renews', { date: new Date(plan.current_period_end).toLocaleDateString(language, { dateStyle: 'medium' }) }) : t('plan.body')}
+        description={plan.current_period_end && !plan.cancel_at_period_end ? t('plan.renews', { date: day(plan.current_period_end) }) : t('plan.body')}
         actions={
           plan.billing_enabled && plan.subscription_status ? (
             <button type="button" onClick={() => void go('portal', billingApi.portal)} disabled={redirecting !== null} className={btn.secondary}>
@@ -55,6 +61,27 @@ const PlanSection = () => {
           ) : undefined
         }
       >
+        {justPaid && !plan.subscription_status && (
+          <div className="mb-4">
+            <Notice tone="success" icon={PartyPopper}>
+              {t('plan.checkoutSuccess')}
+            </Notice>
+          </div>
+        )}
+        {plan.grace_until && (
+          <div className="mb-4">
+            <Notice tone="danger" icon={CircleAlert}>
+              {t('plan.paymentFailed', { date: day(plan.grace_until) })}
+            </Notice>
+          </div>
+        )}
+        {plan.cancel_at_period_end && plan.current_period_end && !plan.grace_until && (
+          <div className="mb-4">
+            <Notice tone="neutral" icon={CalendarClock}>
+              {t('plan.endsOn', { date: day(plan.current_period_end) })}
+            </Notice>
+          </div>
+        )}
         <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {specs.map((s) => (
             <div key={s.label}>
@@ -81,7 +108,12 @@ const PlanSection = () => {
                     {option.price_cents > 0 && <span className="text-sm font-normal text-slate-500"> / {t('plan.month')}</span>}
                   </p>
                   <ul className="mt-4 flex-1 space-y-1.5 text-sm text-slate-600 dark:text-slate-300">
-                    {[`${option.cpu} vCPU · ${option.mem_mb} MB`, `${(option.disk_mb / 1024).toFixed(1)} GB`, t('plan.perDay', { count: option.daily_messages })].map((line) => (
+                    {[
+                      `${option.cpu} vCPU · ${option.mem_mb} MB`,
+                      `${(option.disk_mb / 1024).toFixed(1)} GB`,
+                      option.daily_messages ? t('plan.perDay', { count: option.daily_messages }) : t('plan.unlimitedMessages'),
+                      t('plan.helpersLine', { count: option.max_parallel_subagents }),
+                    ].map((line) => (
                       <li key={line} className="flex items-center gap-2">
                         <Check size={14} className="text-[var(--accent-600)]" aria-hidden="true" />
                         {line}
