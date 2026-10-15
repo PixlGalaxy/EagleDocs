@@ -89,16 +89,52 @@ export function toMessageView(row: MessageRow): MessageView {
 export class ChatService {
   constructor(private db: Db) {}
 
-  /** Chats with the id of the job still working on them, if any. */
-  list(userId: string) {
-    return many<ChatRow & { active_job_id: string | null }>(
+  /**
+   * Chats for the list: the job still answering (if any), whether anything is
+   * working on it (that job or helpers in the background), whether an answer
+   * arrived since the student last looked, and the helpers of its latest
+   * delegation (background ones first, they may still be running).
+   */
+  async list(userId: string) {
+    const rows = await many<
+      ChatRow & {
+        active_job_id: string | null;
+        helpers_running: boolean;
+        unread: boolean;
+        bg_tasks: { goal?: string }[] | null;
+        run_tasks: string[] | null;
+      }
+    >(
       this.db,
       `SELECT c.id, c.title, c.model_ref, c.kind, c.created_at, c.updated_at,
          (SELECT j.id FROM jobs j WHERE j.chat_id = c.id AND j.status IN ('queued', 'running', 'waiting_approval', 'waiting_mfa')
-          ORDER BY j.queued_at DESC LIMIT 1) AS active_job_id
+          ORDER BY j.queued_at DESC LIMIT 1) AS active_job_id,
+         EXISTS (SELECT 1 FROM jobs j WHERE j.kind = 'delegate' AND j.payload->>'chat_id' = c.id::text AND j.status IN ('queued', 'running')) AS helpers_running,
+         EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = c.id AND m.role = 'assistant' AND NOT (m.meta ? 'internal')
+                 AND m.created_at > c.last_read_at) AS unread,
+         (SELECT j.payload->'tasks' FROM jobs j WHERE j.kind = 'delegate' AND j.payload->>'chat_id' = c.id::text
+          ORDER BY j.queued_at DESC LIMIT 1) AS bg_tasks,
+         (SELECT jsonb_path_query_array(m.meta->'tool_views', '$[*] ? (@.name == "agent_delegate").args.tasks[*].goal')
+            FROM messages m WHERE m.chat_id = c.id AND m.role = 'assistant'
+              AND jsonb_path_exists(m.meta->'tool_views', '$[*] ? (@.name == "agent_delegate")')
+            ORDER BY m.seq DESC LIMIT 1) AS run_tasks
        FROM chats c WHERE c.user_id = $1 AND NOT c.archived ORDER BY c.updated_at DESC LIMIT 200`,
       [userId],
     );
+    return rows.map(({ helpers_running, bg_tasks, run_tasks, unread, ...chat }) => {
+      // The newest delegation: a background one while it runs, else the helpers of the latest answer that used them.
+      const helpers = helpers_running && bg_tasks?.length
+        ? bg_tasks.map((t) => ({ goal: String(t.goal ?? '').slice(0, 160), running: true }))
+        : (run_tasks ?? bg_tasks?.map((t) => t.goal) ?? []).map((goal) => ({ goal: String(goal ?? '').slice(0, 160), running: false }));
+      const working = Boolean(chat.active_job_id) || helpers_running;
+      return { ...chat, working, unread: unread && !working, helpers: helpers.slice(0, 12) };
+    });
+  }
+
+  /** The student looked at the chat: answers up to now are read. */
+  async markRead(userId: string, chatId: string): Promise<void> {
+    if (!UUID.test(chatId)) return;
+    await this.db.query('UPDATE chats SET last_read_at = now() WHERE id = $1 AND user_id = $2', [chatId, userId]);
   }
 
   async get(userId: string, chatId: string) {

@@ -276,25 +276,23 @@ export function unwrapBingUrl(raw: string): string | null {
  * trigger. Slow (it may start the sandbox), so it comes last in the chain.
  */
 export class BrowserSearch implements SearchPort {
-  private static PROFILE = 'search';
   constructor(private runner: (<T>(userId: string, path: string, body: Record<string, unknown>, signal: AbortSignal) => Promise<T>) | undefined) {}
 
   async search(query: string, options: { limit: number; signal: AbortSignal; userId?: string }): Promise<SearchHit[]> {
     if (!this.runner || !options.userId) throw new Error('No browser here');
-    const run = this.runner;
-    const profile = BrowserSearch.PROFILE;
-    try {
-      await run(options.userId, '/browser/goto', { profile, url: `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=en` }, options.signal);
-      const page = await run<{ result: { title: string; url: string; snippet: string }[] | null }>(options.userId, '/browser/eval', { profile, script: BING_RESULTS }, options.signal);
-      const hits: SearchHit[] = [];
-      for (const r of page.result ?? []) {
-        const url = unwrapBingUrl(r.url);
-        if (url && /^https?:\/\//.test(url) && !hits.some((h) => h.url === url)) hits.push({ title: r.title.slice(0, 200), url, snippet: r.snippet.slice(0, 400) });
-      }
-      return hits.slice(0, options.limit);
-    } finally {
-      await run(options.userId, '/browser/close', { profile }, options.signal).catch(() => undefined);
+    // A tab of its own in the shared reading browser: searches from parallel helpers do not step on each other.
+    const page = await this.runner<{ result: { title: string; url: string; snippet: string }[] | null }>(
+      options.userId,
+      '/browser/read',
+      { url: `https://www.bing.com/search?q=${encodeURIComponent(query)}&setlang=en`, script: BING_RESULTS },
+      options.signal,
+    );
+    const hits: SearchHit[] = [];
+    for (const r of page.result ?? []) {
+      const url = unwrapBingUrl(r.url);
+      if (url && /^https?:\/\//.test(url) && !hits.some((h) => h.url === url)) hits.push({ title: r.title.slice(0, 200), url, snippet: r.snippet.slice(0, 400) });
     }
+    return hits.slice(0, options.limit);
   }
 }
 

@@ -99,6 +99,12 @@ export class SandboxTools implements SandboxPort, BrowserPort {
     return this.call(userId, '/browser/open', { profile, url }, BROWSER_MS, signal);
   }
 
+  /** A page read in its own tab of the shared reading browser (parallel helpers do not step on each other). */
+  async read(userId: string, url: string, signal: AbortSignal): Promise<BrowserPage> {
+    await assertPublicUrl(url);
+    return this.call(userId, '/browser/read', { url }, BROWSER_MS, signal);
+  }
+
   snapshot(userId: string, profile: string, signal: AbortSignal): Promise<BrowserPage> {
     return this.call(userId, '/browser/snapshot', { profile }, BROWSER_MS, signal);
   }

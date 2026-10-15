@@ -43,6 +43,12 @@ const server = http.createServer(async (req, res) => {
     done();
   };
 
+  // A new chat's title (chat/titles.ts): "Title: Chat about <first word>", so the cleanup is exercised too.
+  const systemText = String(messages.find((m) => m.role === 'system')?.content ?? '');
+  if (systemText.startsWith('Write a short title')) {
+    text(`Title: "Chat about ${lastUser.split(/s+/)[0]}."`);
+    return done();
+  }
   if (lastUser.startsWith('[Background helpers finished')) {
     text(`summary of ${lastUser.split('### Helper').length - 1} reports`);
     return done();

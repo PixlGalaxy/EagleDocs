@@ -219,6 +219,36 @@ export class ModelCatalog {
     };
   }
 
+  /**
+   * Models for small side jobs (a chat's title), best first; the caller tries
+   * the next when one fails. A fast model from the same source as the chat
+   * comes first (it is the one known to be up), then the chat's own model,
+   * then the user's Auto choice for "fast" and the admin's fast model.
+   */
+  async quickModels(userId: string, chatRef: string | null): Promise<Resolution[]> {
+    const options = await this.options(userId);
+    const available = new Set(options.map((o) => o.ref));
+    const prefs = await this.prefs(userId);
+    const chat = chatRef && chatRef !== 'auto' ? chatRef : prefs.mode === 'manual' ? prefs.default_model_ref : null;
+    const source = chat ? parseRef(chat) : null;
+    const sameSourceFast = source
+      ? options.find((o) => {
+          const r = parseRef(o.ref);
+          // EagleDocs models share one source (the admin's); a connection is its own source.
+          return o.tags.includes('fast') && r?.provider === source.provider && (r.provider === 'eagledocs' || r.source === source.source);
+        })?.ref
+      : undefined;
+    const refs = [sameSourceFast, chat, prefs.auto_map.fast, await this.eagleDefault('fast')].filter(
+      (ref, i, all): ref is string => Boolean(ref) && available.has(ref!) && all.indexOf(ref) === i,
+    );
+    const out: Resolution[] = [];
+    for (const ref of refs.slice(0, 3)) {
+      const built = await this.build(userId, ref, null).catch(() => null);
+      if (built) out.push(built);
+    }
+    return out;
+  }
+
   /** Picks and builds the model for a run. `auto` routes by heuristics. */
   async resolve(userId: string, requested: string | null, route: RouteInput): Promise<Resolution> {
     const prefs = await this.prefs(userId);

@@ -102,8 +102,14 @@ const done = events.at(-1);
 check('stream on A finishes with done', done?.type === 'done', events.map((e) => e.type).join(','));
 check('auto picked the fast model for "hola"', events.some((e) => e.type === 'model' && /Auto -> EagleDocs Mini/.test(e.model_label)), JSON.stringify(events.find((e) => e.type === 'model')));
 check('answer text', done?.message?.content === 'echo: hola', done?.message?.content);
+// The first words are the title at once; a quick model replaces them with a short name right after.
+let titled = '';
+for (let i = 0; i < 20 && titled !== 'Chat about hola'; i++) {
+  titled = (await user.req(A, 'GET', `/chats/${chatId}`)).json.chat.title;
+  if (titled !== 'Chat about hola') await new Promise((res) => setTimeout(res, 250));
+}
 r = await user.req(A, 'GET', `/chats/${chatId}`);
-check('chat has title and 2 visible messages', r.json.chat.title === 'hola' && r.json.messages.length === 2, JSON.stringify(r.json.chat));
+check('a quick model names the new chat (cleaned: no "Title:", quotes or period)', titled === 'Chat about hola' && r.json.messages.length === 2, JSON.stringify(r.json.chat));
 
 // Reconnect with Last-Event-ID replays only what is after it.
 const lastButOne = events.at(-2)._id;
@@ -267,6 +273,12 @@ const helperModelOf = (i) => events.find((e) => e.type === 'subagent' && e.index
 check('each helper runs on the model the agent picked', helperModelOf(0) === 'EagleDocs Mini' && helperModelOf(1) === 'EagleDocs Smart', `${helperModelOf(0)} / ${helperModelOf(1)}`);
 check("helpers' tokens are not stored as events", !events.some((e) => e.type === 'subagent' && e.event.type === 'delta'));
 check('waiting delegation answers with the reports', /tool said/.test(events.at(-1).message?.content ?? ''), events.at(-1).message?.content);
+// The chat list: a finished answer nobody opened is unread, with the helpers of its delegation; opening it reads it.
+let listed = (await user.req(A, 'GET', '/chats')).json.find((c) => c.id === delegateChat);
+check('the list marks an answer not yet opened as unread, with its helpers', listed?.unread === true && listed.working === false && listed.helpers?.length === 2 && listed.helpers[0].goal === 'helper one [time]' && listed.helpers.every((h) => !h.running), JSON.stringify(listed));
+await user.req(A, 'GET', `/chats/${delegateChat}`);
+listed = (await user.req(A, 'GET', '/chats')).json.find((c) => c.id === delegateChat);
+check('opening the chat reads it', listed?.unread === false, JSON.stringify(listed));
 
 r = await user.req(A, 'POST', `/chats/${delegateChat}/messages`, { content: 'read everything [delegatebg] explain', model_ref: 'auto' });
 events = await user.stream(B, delegateChat, r.json.job_id);

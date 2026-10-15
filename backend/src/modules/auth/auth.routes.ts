@@ -180,16 +180,19 @@ export function createAuthRoutes(
   });
 
   router.post('/appearance', requireAuth, async (req: AppRequest, res) => {
-    const { mode, skin, language } = req.body as { mode?: unknown; skin?: unknown; language?: unknown };
-    if (mode === undefined && skin === undefined && language === undefined) throw badRequest('auth.invalidTheme');
+    const { mode, skin, language, tool_trace: toolTrace, busy_input: busyInput } = req.body as { mode?: unknown; skin?: unknown; language?: unknown; tool_trace?: unknown; busy_input?: unknown };
+    if (mode === undefined && skin === undefined && language === undefined && toolTrace === undefined && busyInput === undefined) throw badRequest('auth.invalidTheme');
+    if (busyInput !== undefined && !['steer', 'queue', 'interrupt'].includes(busyInput as string)) throw badRequest('auth.invalidTheme');
+    if (toolTrace !== undefined && toolTrace !== 'compact' && toolTrace !== 'full') throw badRequest('auth.invalidTheme');
     if (mode !== undefined && !THEME_MODES.includes(mode as never)) throw badRequest('auth.invalidTheme');
     if (skin !== undefined && !THEME_SKINS.includes(skin as never)) throw badRequest('auth.invalidTheme');
     if (language !== undefined && (typeof language !== 'string' || !isLanguage(language))) throw badRequest('auth.invalidLanguage');
 
     await db.query(
       `UPDATE users SET theme_mode = COALESCE($1, theme_mode), theme_skin = COALESCE($2, theme_skin),
-         language = COALESCE($3, language), updated_at = now() WHERE id = $4`,
-      [mode ?? null, skin ?? null, language ?? null, req.user!.id],
+         language = COALESCE($3, language), tool_trace = COALESCE($5, tool_trace),
+         busy_input = COALESCE($6, busy_input), updated_at = now() WHERE id = $4`,
+      [mode ?? null, skin ?? null, language ?? null, req.user!.id, toolTrace ?? null, busyInput ?? null],
     );
     res.json(toPublicUser((await getUserById(db, req.user!.id))!));
   });

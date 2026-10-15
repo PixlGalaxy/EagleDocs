@@ -10,6 +10,7 @@ import { requireAuth } from '../auth/session.middleware.js';
 import { titleFrom, type ChatService } from './chat.service.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import { intoChatFolder, resolveAttachments } from './attachments.js';
+import { nameChat } from './titles.js';
 import { compactHistory, estimateTokens, type ReasoningLevel } from 'pixlai-engine';
 import type { ModelCatalog } from '../models/catalog.js';
 import { hitRateLimit } from '../../middleware/rate-limit.js';
@@ -76,6 +77,8 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
 
   chatsRouter.get('/:id', async (req: AppRequest, res) => {
     const chat = await chats.get(req.user!.id, routeParam(req.params.id));
+    // Opening a chat (or reloading it when an answer lands while it is open) reads it.
+    await chats.markRead(req.user!.id, chat.id);
     res.json({
       chat,
       messages: await chats.visibleMessages(chat.id),
@@ -130,13 +133,15 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
       ? await intoChatFolder(workspace, userId, picked, await chats.folderOf(userId, chat.id, titleFrom(content || picked.map((a) => a.name).join(', '))))
       : picked;
     const modelRef = modelRefOf(body.model_ref);
+    // A new chat gets its first words as a title now, and a better one from a quick model right after.
+    const provisional = titleFrom(content || attachments.map((a) => a.name).join(', '));
 
     const { message, jobId } = await withTx(db, async (client) => {
       await assertChatIdle(client, chat.id);
       const msg = await chats.addUserMessage(client, chat.id, content, attachments.length ? { attachments } : {});
       await client.query(
         "UPDATE chats SET model_ref = $2, title = CASE WHEN title = '' THEN $3 ELSE title END WHERE id = $1",
-        [chat.id, modelRef, titleFrom(content || attachments.map((a) => a.name).join(', '))],
+        [chat.id, modelRef, provisional],
       );
       const { rows } = await client.query<{ id: string }>(
         "INSERT INTO jobs (user_id, chat_id, kind, payload) VALUES ($1, $2, 'chat', $3) RETURNING id",
@@ -145,6 +150,7 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
       return { message: msg, jobId: rows[0]!.id };
     });
     await bus.publish('job_queued', { jobId });
+    if (!chat.title) void nameChat({ db, catalog }, { userId, chatId: chat.id, modelRef, provisional }, content || provisional);
     res.status(201).json({ job_id: jobId, message });
   });
 

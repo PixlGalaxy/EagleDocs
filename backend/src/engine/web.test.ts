@@ -50,11 +50,11 @@ test('the paid search API is off without a key or with an unknown provider', () 
   assert.ok(paidSearch('tavily', 'key-123'));
 });
 
-test('browser search reads Bing in the user\'s sandbox and always closes its profile', async () => {
+test('browser search reads Bing in a tab of its own in the user\'s sandbox', async () => {
   const calls: string[] = [];
   const runner = async <T>(_user: string, path: string): Promise<T> => {
     calls.push(path);
-    if (path === '/browser/eval') {
+    if (path === '/browser/read') {
       const wrapped = `https://www.bing.com/ck/a?u=a1${Buffer.from('https://real.example/a').toString('base64url')}`;
       return { result: [{ title: 'A', url: wrapped, snippet: 'about a' }, { title: 'dup', url: 'https://real.example/a', snippet: '' }, { title: 'B', url: 'https://b.example/', snippet: '' }] } as T;
     }
@@ -62,7 +62,7 @@ test('browser search reads Bing in the user\'s sandbox and always closes its pro
   };
   const hits = await new BrowserSearch(runner).search('q', { limit: 5, signal: AbortSignal.timeout(5000), userId: 'u1' });
   assert.deepEqual(hits.map((h) => h.url), ['https://real.example/a', 'https://b.example/']);
-  assert.deepEqual(calls, ['/browser/goto', '/browser/eval', '/browser/close']);
+  assert.deepEqual(calls, ['/browser/read'], 'one call: the runner opens and closes the tab');
   await assert.rejects(new BrowserSearch(undefined).search('q', { limit: 5, signal: AbortSignal.timeout(5000), userId: 'u1' }), /No browser/);
 });
 

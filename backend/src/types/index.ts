@@ -52,6 +52,10 @@ export interface User {
   major: string | null;
   theme_mode: string;
   theme_skin: string;
+  /** Tools in the chat: 'compact' (one line) or 'full'. */
+  tool_trace: string;
+  /** A message typed while the agent works: 'steer', 'queue' or 'interrupt'. */
+  busy_input: string;
   email_verified_at: Date | null;
   created_at: Date;
   updated_at: Date;
