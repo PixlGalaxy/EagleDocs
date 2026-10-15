@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown, BookOpen, CalendarClock, FolderTree, GraduationCap, Map as MapIcon, Menu, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError } from '../../api/client';
-import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, StreamEvent, ToolCall, WorkspaceEntry } from '../../api/types';
+import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, ReasoningLevel, StreamEvent, ToolCall, WorkspaceEntry } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
@@ -15,13 +15,17 @@ import BackgroundTasks from '../../components/chat/BackgroundTasks';
 import { applySubagentEvent, mergeCall } from '../../components/chat/subagents';
 import Composer from '../../components/chat/Composer';
 import ModelPicker from '../../components/chat/ModelPicker';
-import ContextMeter from '../../components/chat/ContextMeter';
+import ReasoningPicker from '../../components/chat/ReasoningPicker';
+import ContextRing from '../../components/chat/ContextRing';
+import { REASONING_LEVELS } from '../../components/chat/toolbar';
 import { useDraftAttachments } from '../../components/chat/useDraftAttachments';
 import { toolLabel } from '../../components/chat/toolLabels';
 import { MAX_ATTACHMENTS } from '../../components/chat/attachments';
 import WorkspacePanel from './WorkspacePanel';
 import ResizableDock from './ResizableDock';
 import Modal from '../../components/ui/Modal';
+import Toast from '../../components/ui/Toast';
+import { useConfirm } from '../../components/ui/confirm';
 import { Notice, Skeleton } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
 
@@ -46,6 +50,18 @@ const withMessage = (list: Message[], message: Message) => (list.some((m) => m.i
 /** The workspace panel's open state on wide screens, kept per browser. */
 const FILES_PANEL_KEY = 'eagledocs.chat.filesPanel';
 const WIDE = '(min-width: 1024px)';
+
+/** The thinking effort, kept per browser. */
+const REASONING_KEY = 'eagledocs.chat.reasoning';
+
+function storedReasoning(): ReasoningLevel {
+  try {
+    const value = localStorage.getItem(REASONING_KEY);
+    return REASONING_LEVELS.find((level) => level === value) ?? 'default';
+  } catch {
+    return 'default';
+  }
+}
 
 function storedFilesPanel(): boolean {
   try {
@@ -78,6 +94,7 @@ const ChatPage = () => {
   const [live, setLive] = useState<LiveAnswer | null>(null);
   const [options, setOptions] = useState<ModelOption[] | null>(null);
   const [modelRef, setModelRef] = useState('auto');
+  const [reasoning, setReasoning] = useState<ReasoningLevel>(storedReasoning);
   const location = useLocation();
   const [draft, setDraft] = useState<string>(() => (location.state as { prompt?: string } | null)?.prompt ?? '');
   const [error, setError] = useState('');
@@ -86,6 +103,9 @@ const ChatPage = () => {
   const [deleting, setDeleting] = useState<Chat | null>(null);
   /** How full the model's context is (last run, then live while one runs). */
   const [context, setContext] = useState<ContextUsage | null>(null);
+  const [compacting, setCompacting] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const ask = useConfirm();
   const attachments = useDraftAttachments();
   /** Workspace panel: docked on wide screens (remembered), a drawer on phones (always starts closed). */
   const [filesDocked, setFilesDocked] = useState(storedFilesPanel);
@@ -279,6 +299,7 @@ const ChatPage = () => {
     setLoadingMessages(!!chatId);
     setAwayFromBottom(false);
     setContext(null);
+    setCompacting(false);
   }
 
   // Load the selected chat and resume its job if one is still running server-side.
@@ -368,6 +389,11 @@ const ChatPage = () => {
     return () => document.removeEventListener('keydown', onKey);
   }, [sidebarOpen, filesDrawer]);
 
+  /** The thinking selector shows for Auto and for models that take a reasoning effort. */
+  const selectedModel = options?.find((o) => o.ref === modelRef);
+  const showReasoning = modelRef === 'auto' || !!selectedModel?.reasoning;
+  const effort = showReasoning && reasoning !== 'default' ? reasoning : undefined;
+
   const send = async (text = draft) => {
     const content = text.trim();
     const files = attachments.paths;
@@ -380,14 +406,19 @@ const ChatPage = () => {
     try {
       if (!chatId) {
         const chat = await chatApi.create({ model_ref: modelRef });
-        await chatApi.send(chat.id, { content, model_ref: modelRef, ...(files.length ? { attachments: files } : {}) });
+        await chatApi.send(chat.id, { content, model_ref: modelRef, ...(files.length ? { attachments: files } : {}), ...(effort ? { reasoning: effort } : {}) });
         attachments.clear();
         // The loader effect picks up the running job from the new chat.
         navigate(`/chat/${chat.id}`);
         refreshChats();
         return;
       }
-      const { job_id, message } = await chatApi.send(chatId, { content, model_ref: modelRef, ...(files.length ? { attachments: files } : {}) });
+      const { job_id, message } = await chatApi.send(chatId, {
+        content,
+        model_ref: modelRef,
+        ...(files.length ? { attachments: files } : {}),
+        ...(effort ? { reasoning: effort } : {}),
+      });
       attachments.clear();
       setMessages((prev) => withMessage(prev, message));
       attach(chatId, job_id);
@@ -424,6 +455,46 @@ const ChatPage = () => {
       // The stream reports the final state either way.
     }
   };
+
+  const chooseReasoning = (level: ReasoningLevel) => {
+    setReasoning(level);
+    try {
+      localStorage.setItem(REASONING_KEY, level);
+    } catch {
+      // Private mode: it just is not remembered.
+    }
+  };
+
+  /** Summarizes the older messages (after a confirm); the visible chat stays the same. */
+  const compact = () => {
+    const id = chatId;
+    if (!id || live || compacting) return;
+    ask(
+      () => {
+        setCompacting(true);
+        chatApi
+          .compact(id)
+          .then(({ context: usage, summarized }) => {
+            if (currentChat.current !== id) return;
+            setContext(usage);
+            setToast(t('chat.compacted', { count: summarized }));
+          })
+          .catch((err) => {
+            if (currentChat.current === id) setError(err instanceof ApiError ? err.message : t('common.networkError'));
+          })
+          .finally(() => {
+            if (currentChat.current === id) setCompacting(false);
+          });
+      },
+      { title: t('chat.compactTitle'), body: t('chat.compactBody'), confirmLabel: t('chat.compact'), tone: 'primary' },
+    );
+  };
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   const decide = async (approval: Approval, approve: boolean) => {
     try {
@@ -521,10 +592,8 @@ const ChatPage = () => {
           >
             <Menu size={20} />
           </button>
-          <ModelPicker options={options ?? []} value={modelRef} onChange={setModelRef} disabled={!!live} />
-          <div className="ml-auto flex min-w-0 items-center gap-1">
-            <p className="hidden min-w-0 truncate pr-1 text-sm text-slate-500 dark:text-slate-400 sm:block">{activeChat?.title}</p>
-            {context && <ContextMeter usage={context} />}
+          <p className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-slate-700 dark:text-slate-200">{activeChat?.title ?? t('chat.new')}</p>
+          <div className="flex shrink-0 items-center gap-1">
             <button
               type="button"
               onClick={toggleFiles}
@@ -717,6 +786,13 @@ const ChatPage = () => {
             attachments={attachments.items}
             onAttach={attachments.add}
             onRemoveAttachment={attachments.remove}
+            controls={
+              <>
+                <ModelPicker options={options ?? []} value={modelRef} onChange={setModelRef} disabled={!!live} />
+                {showReasoning && <ReasoningPicker value={reasoning} onChange={chooseReasoning} disabled={!!live} />}
+              </>
+            }
+            status={chatId && context ? <ContextRing usage={context} onCompact={compact} busy={!!live} compacting={compacting} /> : null}
           />
         </div>
       </section>
@@ -737,6 +813,8 @@ const ChatPage = () => {
           </aside>
         </div>
       )}
+
+      {toast && <Toast message={toast} />}
 
       {renaming && (
         <Modal title={t('chat.rename')} onClose={() => setRenaming(null)}>

@@ -118,6 +118,7 @@ const routes: [string, RegExp, Handler][] = [
     chat.updated_at = iso();
     return { job_id: jobId, message };
   }],
+  ['POST', /^\/chats\/([^/]+)\/compact$/, () => ({ context: { used: 9_400, window: 272_000 }, summarized: 6 })],
   ['POST', /^\/jobs\/([^/]+)\/cancel$/, () => undefined],
   ['POST', /^\/jobs\/([^/]+)\/steer$/, ({ body }) => ({ id: id('steer'), content: body.content, created_at: iso() })],
   ['POST', /^\/approvals\/([^/]+)\/(approve|reject)$/, ({ params }) => {

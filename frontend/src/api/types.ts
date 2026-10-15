@@ -75,7 +75,12 @@ export interface ModelOption {
   tags: ModelTier[];
   supports_tools: boolean;
   supports_vision: boolean;
+  /** Takes a reasoning effort (the thinking selector shows); missing on older servers. */
+  reasoning?: boolean;
 }
+
+/** How hard the model thinks before answering; `default` leaves it to the model (and is not sent). */
+export type ReasoningLevel = 'default' | 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface UserModelPrefs {
   mode: 'manual' | 'auto';
@@ -425,6 +430,9 @@ export interface Tier {
   /** Helper agents per delegation, and how deep helpers may delegate. */
   max_parallel_subagents: number;
   max_subagent_depth: number;
+  /** Per day from ChatGPT/Claude (MCP); 0 = unlimited. */
+  mcp_daily_calls: number;
+  mcp_daily_code_runs: number;
   sort: number;
   is_default: boolean;
   enabled: boolean;
@@ -439,7 +447,7 @@ export interface PlanInfo {
   cancel_at_period_end: boolean;
   /** A payment failed: the plan stays until then. */
   grace_until: string | null;
-  usage_today: { messages: number; tokens_in: number; tokens_out: number };
+  usage_today: { messages: number; tokens_in: number; tokens_out: number; mcp_calls: number; mcp_code_runs: number };
 }
 
 // ---------------------------------------------------------------- push

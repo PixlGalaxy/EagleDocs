@@ -3,14 +3,18 @@ import { useI18n } from '../../i18n/I18nContext';
 import Modal from './Modal';
 import { btn } from './styles';
 
-type Ask = (action: () => void, options?: { title?: string; body?: string; confirmLabel?: string }) => void;
+type Ask = (
+  action: () => void,
+  /** `tone: 'primary'` for a safe action (the default red button is for deleting). */
+  options?: { title?: string; body?: string; confirmLabel?: string; tone?: 'danger' | 'primary' },
+) => void;
 
 const ConfirmContext = createContext<Ask>((action) => action());
 
 /** One shared "are you sure?" dialog for destructive actions. */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n();
-  const [pending, setPending] = useState<{ action: () => void; title: string; body: string; confirmLabel: string } | null>(null);
+  const [pending, setPending] = useState<{ action: () => void; title: string; body: string; confirmLabel: string; tone: 'danger' | 'primary' } | null>(null);
 
   const ask = useCallback<Ask>(
     (action, options) =>
@@ -19,6 +23,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
         title: options?.title ?? t('confirm.title'),
         body: options?.body ?? t('confirm.body'),
         confirmLabel: options?.confirmLabel ?? t('common.delete'),
+        tone: options?.tone ?? 'danger',
       }),
     [t],
   );
@@ -39,7 +44,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
                 pending.action();
                 setPending(null);
               }}
-              className={btn.danger}
+              className={pending.tone === 'primary' ? btn.primary : btn.danger}
             >
               {pending.confirmLabel}
             </button>

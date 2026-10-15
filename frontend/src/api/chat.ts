@@ -1,5 +1,5 @@
 import { api, apiUrl } from './client';
-import type { Approval, BackgroundJob, Chat, CodexDeviceStart, ContextUsage, Connection, Job, Message, ModelOption, Steer, StreamEvent, UserModelPrefs } from './types';
+import type { Approval, BackgroundJob, Chat, CodexDeviceStart, ContextUsage, Connection, Job, Message, ModelOption, ReasoningLevel, Steer, StreamEvent, UserModelPrefs } from './types';
 
 export const chatApi = {
   list: () => api.get<Chat[]>('/chats'),
@@ -18,9 +18,15 @@ export const chatApi = {
   /**
    * Queues a job and returns its id; the answer arrives through `stream`.
    * `attachments`: workspace paths (max 10) sent with the message; the text may then be empty.
+   * `reasoning`: the thinking effort for this turn; omitted means the model's default.
    */
-  send: (id: string, body: { content: string; model_ref: string; attachments?: string[] }) =>
+  send: (id: string, body: { content: string; model_ref: string; attachments?: string[]; reasoning?: Exclude<ReasoningLevel, 'default'> }) =>
     api.post<{ job_id: string; message: Message }>(`/chats/${id}/messages`, body),
+  /**
+   * Summarizes the older messages to free context; the visible chat stays the same.
+   * 409 while a run is active.
+   */
+  compact: (id: string) => api.post<{ context: ContextUsage; summarized: number }>(`/chats/${id}/compact`),
   cancel: (jobId: string) => api.post<void>(`/jobs/${jobId}/cancel`),
   /** Runs a stopped or failed turn again. */
   retry: (jobId: string) => api.post<{ job_id: string; chat_id: string }>(`/jobs/${jobId}/retry`),
