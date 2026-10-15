@@ -106,6 +106,12 @@ test('cron parsing and next runs', () => {
   );
   assert.equal(nextRun(parseSchedule('2020-01-01T00:00'), 'UTC', after), null);
   assert.throws(() => parseSchedule('every 5m'), /15 minutes/);
+  // Cron too: every minute, every 5, or two runs 10 minutes apart across midnight are refused.
+  assert.throws(() => parseSchedule('* * * * *'), /15 minutes/);
+  assert.throws(() => parseSchedule('*/5 8 * * *'), /15 minutes/);
+  assert.throws(() => parseSchedule('0,55 0,23 * * *'), /15 minutes/);
+  assert.doesNotThrow(() => parseSchedule('*/15 8-17 * * 1-5'));
+  assert.doesNotThrow(() => parseSchedule('0 8 * * 1'));
   assert.throws(() => parseSchedule('61 * * * *'), /out of range/);
   assert.throws(() => parseSchedule('tomorrow'), /5-field/);
   assert.throws(() => planSchedule('0 8 * * *', 'Mars/Base', after), /Unknown timezone/);

@@ -1,6 +1,7 @@
 /**
  * Schedules the agent can create, all evaluated in the user's timezone:
- * - cron, 5 fields: "0 8 * * 1" (Mondays at 8:00). Names (MON, JAN), ranges, lists and steps work.
+ * - cron, 5 fields: "0 8 * * 1" (Mondays at 8:00). Names (MON, JAN), ranges, lists and steps work;
+ *   runs at least 15 minutes apart.
  * - interval: "every 30m", "every 2h", "every 1d" (minimum 15 minutes).
  * - one-off: an ISO date/time, "2026-11-02T09:00" (local to the timezone unless it carries an offset).
  */
@@ -73,16 +74,29 @@ export function parseSchedule(input: string): ParsedSchedule {
     dowSet.delete(7);
     dowSet.add(0);
   }
+  const minutes = parseField(minute, 0, 59);
+  const hours = parseField(hour, 0, 23);
+  if (shortestDailyGap(minutes, hours) < MIN_INTERVAL_MS / 60_000) throw new Error('Runs must be at least 15 minutes apart');
   return {
     kind: 'cron',
-    minute: parseField(minute, 0, 59),
-    hour: parseField(hour, 0, 23),
+    minute: minutes,
+    hour: hours,
     dom: parseField(dom, 1, 31),
     month: parseField(month, 1, 12, MONTHS),
     dow: dowSet,
     domAny: dom === '*',
     dowAny: dow === '*',
   };
+}
+
+/** Minutes between the closest two runs of a day's minute/hour pattern (the day filters only spread them out). */
+function shortestDailyGap(minutes: Set<number>, hours: Set<number>): number {
+  const times: number[] = [];
+  for (const h of [...hours].sort((a, b) => a - b)) for (const m of [...minutes].sort((a, b) => a - b)) times.push(h * 60 + m);
+  if (times.length < 2) return Infinity;
+  let gap = 1440 - times.at(-1)! + times[0]!;
+  for (let i = 1; i < times.length; i++) gap = Math.min(gap, times[i]! - times[i - 1]!);
+  return gap;
 }
 
 export function isValidTimezone(timeZone: string): boolean {
