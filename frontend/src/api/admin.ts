@@ -31,6 +31,14 @@ export interface AdminUserRow extends User {
   sandbox_status?: SandboxStatus;
 }
 
+export interface WebSearchSettings {
+  /** 'none', 'brave' or 'tavily'. */
+  paid_provider: string;
+  api_key_set: boolean;
+  /** SearXNG is configured on the server (SEARXNG_URL). */
+  searxng: boolean;
+}
+
 export interface SmtpSettings {
   host: string;
   port: number;
@@ -191,6 +199,9 @@ export const adminApi = {
   deleteInstitution: (id: string) => api.del<void>(`/admin/institutions/${id}`),
   builtinSkills: () => api.get<{ slug: string; name: string; description: string; requires?: 'degreeworks' | 'outlook' }[]>('/admin/skills'),
 
+  webSearch: () => api.get<WebSearchSettings>('/admin/web-search'),
+  saveWebSearch: (body: { paid_provider: string; api_key?: string }) => api.put<WebSearchSettings>('/admin/web-search', body),
+  testWebSearch: () => api.post<{ ok: boolean; results?: number; error?: string }>('/admin/web-search/test'),
   smtp: () => api.get<SmtpSettings>('/admin/smtp'),
   saveSmtp: (body: SmtpSettings) => api.put<SmtpSettings>('/admin/smtp', body),
   testSmtp: (to: string) => api.post<void>('/admin/smtp/test', { to }),

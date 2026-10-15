@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown, BookOpen, CalendarClock, FolderTree, GraduationCap, Map as MapIcon, Menu, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
-import { ApiError } from '../../api/client';
+import { ApiError, apiUrl } from '../../api/client';
 import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, ReasoningLevel, StreamEvent, ToolCall, WorkspaceEntry } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
@@ -666,6 +666,11 @@ const ChatPage = () => {
                     modelLabel={m.model_label}
                     toolCalls={m.tool_calls}
                     attachments={m.attachments}
+                    questions={m.questions}
+                    // Only the newest question card can be answered, and not while the agent works.
+                    questionsAnswered={i < messages.length - 1 || !!live}
+                    onAnswer={(answer) => void send(answer)}
+                    displays={m.displays?.map((d, n) => ({ title: d.title, src: apiUrl(`/chats/${chatId}/messages/${m.id}/displays/${n}`) }))}
                     steer={m.steer ? 'applied' : undefined}
                     // A saved correction comes right after the part of the answer the agent had done.
                     steerNote={m.steer && messages[i - 1]?.tool_calls?.length ? steerNote(messages[i - 1].tool_calls) : undefined}

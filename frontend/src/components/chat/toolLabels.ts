@@ -28,6 +28,8 @@ const TOOL_LABELS: Record<string, TranslationKey> = {
   'skills.add_note': 'tools.skillsNote',
   'schedule.create': 'tools.scheduleCreate',
   'agent.delegate': 'tools.agentDelegate',
+  'ask.user': 'tools.askUser',
+  'show.html': 'tools.showHtml',
 };
 
 /** The engine names tools `canvas_briefing`; the labels above use `canvas.briefing`. */

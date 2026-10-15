@@ -14,6 +14,27 @@ export const isMarkdownName = (name: string) => /\.(md|markdown)$/i.test(name);
 /** A workspace file as the browser can load it; `inline` asks to show it rather than save it. */
 export const fileUrl = (path: string, inline = false) => `${apiUrl('/files/download')}?path=${encodeURIComponent(path)}${inline ? '&inline=1' : ''}`;
 
+/**
+ * The workspace path behind a link the agent wrote, or null for any other link.
+ * It is told to write `workspace:<path>`; models also use their own habits:
+ * `/workspace/<path>` (the sandbox mount), `sandbox:/workspace/<path>` and
+ * ChatGPT's `sandbox:/mnt/data/<path>`.
+ */
+export function workspaceLinkPath(href: string): string | null {
+  let rest: string;
+  if (/^workspace:/i.test(href)) rest = href.slice('workspace:'.length);
+  else if (/^sandbox:/i.test(href)) rest = href.slice('sandbox:'.length);
+  else if (/^\/workspace\//i.test(href)) rest = href;
+  else return null;
+  rest = rest.replace(/^\/+/, '').replace(/^(workspace|mnt\/data)\//i, '');
+  try {
+    rest = decodeURIComponent(rest);
+  } catch {
+    // Not percent-encoded: keep it as written.
+  }
+  return rest && !rest.split('/').includes('..') ? rest : null;
+}
+
 /** Where the composer uploads: one folder per day, so the workspace stays tidy. */
 export function uploadFolder(now = new Date()): string {
   const day = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;

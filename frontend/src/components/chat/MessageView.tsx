@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import Markdown from 'react-markdown';
+import Markdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CornerDownRight, Sparkles } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
@@ -8,6 +8,10 @@ import ToolCallList from './ToolCallList';
 import { MessageAttachments } from './AttachmentViews';
 import { LOGO_SRC } from '../brand';
 import { useSmoothText } from './useSmoothText';
+import QuestionCard from './QuestionCard';
+import HtmlDisplay from './HtmlDisplay';
+import type { UserQuestion } from '../../api/types';
+import { fileUrl, workspaceLinkPath } from './attachments';
 
 interface Props {
   role: 'user' | 'assistant';
@@ -24,10 +28,24 @@ interface Props {
   steerNote?: string;
   /** Files sent with a user message. */
   attachments?: MessageAttachment[];
+  /** The agent asked these with options: shown as a card instead of their text version. */
+  questions?: UserQuestion[];
+  /** A later message exists or the agent is working: the questions are read-only. */
+  questionsAnswered?: boolean;
+  onAnswer?: (text: string) => void;
+  /** Interactive pages the agent showed, with the URL each one loads from. */
+  displays?: { title: string; src: string }[];
 }
 
+const FILE_LINK = fileUrl('');
 /** Only the student's own files load as pictures by themselves. */
-const isOwnFile = (src: unknown) => typeof src === 'string' && src.startsWith('/api/files/');
+const isOwnFile = (src: unknown) => typeof src === 'string' && src.startsWith(FILE_LINK.slice(0, FILE_LINK.indexOf('?')));
+
+/** Links to workspace files become downloads (pictures load inline); other addresses go through the safe default. */
+const urlTransform = (url: string, key: string) => {
+  const path = workspaceLinkPath(url);
+  return path ? fileUrl(path, key === 'src') : defaultUrlTransform(url);
+};
 
 /**
  * Answers and reports share it: links always open in a new tab. Outside
@@ -37,12 +55,22 @@ const isOwnFile = (src: unknown) => typeof src === 'string' && src.startsWith('/
 export const MarkdownBody = memo(({ text }: { text: string }) => (
   <Markdown
     remarkPlugins={[remarkGfm]}
+    urlTransform={urlTransform}
     components={{
-      a: ({ href, children }) => (
-        <a href={href} target="_blank" rel="noopener noreferrer">
-          {children}
-        </a>
-      ),
+      a: ({ href, children }) =>
+        // An address the transform dropped (an unknown scheme) would open this app again in a new tab: plain text instead.
+        !href ? (
+          <span>{children}</span>
+        ) : isOwnFile(href) ? (
+          // The server answers with an attachment: the browser saves it and stays on the chat.
+          <a href={href} download>
+            {children}
+          </a>
+        ) : (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {children}
+          </a>
+        ),
       img: ({ src, alt }) =>
         isOwnFile(src) ? (
           <img src={src as string} alt={alt ?? ''} loading="lazy" />
@@ -58,7 +86,7 @@ export const MarkdownBody = memo(({ text }: { text: string }) => (
 ));
 
 /** One chat turn. Assistant answers render markdown; user turns stay plain text. */
-const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, typing = false, steer, steerNote, attachments }: Props) => {
+const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, typing = false, steer, steerNote, attachments, questions, questionsAnswered = false, onAnswer, displays }: Props) => {
   const { t } = useI18n();
   const shown = useSmoothText(content, streaming);
   if (role === 'user' && steer) {
@@ -104,7 +132,16 @@ const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, 
           </p>
         )}
         {toolCalls && <ToolCallList calls={toolCalls} />}
-        {shown && (
+        {displays && displays.length > 0 && (
+          <div className="mb-3 space-y-3">
+            {displays.map((d) => (
+              <HtmlDisplay key={d.src} title={d.title} src={d.src} />
+            ))}
+          </div>
+        )}
+        {questions?.length ? (
+          <QuestionCard questions={questions} answered={questionsAnswered || !onAnswer} onAnswer={(text) => onAnswer?.(text)} />
+        ) : shown && (
           <div className="prose-chat text-[15px] text-slate-800 dark:text-slate-200">
             <MarkdownBody text={shown} />
           </div>

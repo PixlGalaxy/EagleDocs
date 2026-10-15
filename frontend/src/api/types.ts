@@ -149,7 +149,19 @@ export interface Message {
   background?: { job_id: string; tasks: { goal: string; status: string }[] };
   /** Workspace files sent with a user message (photos go to vision models). */
   attachments?: MessageAttachment[];
+  /** The agent asked these with options (ask_user); answered with the next message. */
+  questions?: UserQuestion[];
+  /** Interactive pages the agent showed (show_html), loaded by index from their own URL. */
+  displays?: { kind: 'html'; title: string }[];
   created_at: string;
+}
+
+export interface UserQuestion {
+  question: string;
+  /** A 1-3 word tag, e.g. "Format". */
+  header?: string;
+  options: { label: string; description?: string }[];
+  multiSelect?: boolean;
 }
 
 export interface MessageAttachment {
