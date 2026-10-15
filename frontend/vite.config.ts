@@ -20,6 +20,11 @@ export default defineConfig({
         target: `http://localhost:${process.env.VITE_BACKEND_PORT || 4000}`,
         changeOrigin: true,
       },
+      // OAuth and MCP for ChatGPT, Claude and MCP Inspector (the consent screen itself stays in the app).
+      '^/(mcp|oauth/(authorize|token|register|revoke)|\\.well-known/(oauth-|openid-))': {
+        target: `http://localhost:${process.env.VITE_BACKEND_PORT || 4000}`,
+        changeOrigin: true,
+      },
     },
   },
 })

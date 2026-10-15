@@ -99,9 +99,9 @@ export class BillingService {
     const limits = await this.tiers.limitsFor(userId);
     const tier = limits.tierId ? await this.tiers.get(limits.tierId) : undefined;
     const sub = await this.subscription(userId);
-    const usage = await maybe<{ messages: number; tokens_in: number; tokens_out: number }>(
+    const usage = await maybe<{ messages: number; tokens_in: number; tokens_out: number; mcp_calls: number; mcp_code_runs: number }>(
       this.db,
-      'SELECT eagledocs_messages AS messages, tokens_in, tokens_out FROM usage_daily WHERE user_id = $1 AND day = current_date',
+      'SELECT eagledocs_messages AS messages, tokens_in, tokens_out, mcp_calls, mcp_code_runs FROM usage_daily WHERE user_id = $1 AND day = current_date',
       [userId],
     );
     return {
@@ -111,7 +111,13 @@ export class BillingService {
       current_period_end: sub?.current_period_end ?? null,
       cancel_at_period_end: sub?.cancel_at_period_end ?? false,
       grace_until: sub?.grace_until ?? null,
-      usage_today: { messages: usage?.messages ?? 0, tokens_in: Number(usage?.tokens_in ?? 0), tokens_out: Number(usage?.tokens_out ?? 0) },
+      usage_today: {
+        messages: usage?.messages ?? 0,
+        tokens_in: Number(usage?.tokens_in ?? 0),
+        tokens_out: Number(usage?.tokens_out ?? 0),
+        mcp_calls: usage?.mcp_calls ?? 0,
+        mcp_code_runs: usage?.mcp_code_runs ?? 0,
+      },
     };
   }
 

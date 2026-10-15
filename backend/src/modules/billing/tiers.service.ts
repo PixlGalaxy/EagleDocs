@@ -19,6 +19,8 @@ export interface TierRow {
   max_schedules: number;
   max_parallel_subagents: number;
   max_subagent_depth: number;
+  mcp_daily_calls: number;
+  mcp_daily_code_runs: number;
   is_default: boolean;
   enabled: boolean;
 }
@@ -36,6 +38,9 @@ export interface TierLimits {
   maxSchedules: number;
   maxParallelSubagents: number;
   maxSubagentDepth: number;
+  /** From ChatGPT/Claude per day; 0 = unlimited. */
+  mcpDailyCalls: number;
+  mcpDailyCodeRuns: number;
 }
 
 /** Used only if the tiers table is empty (it never is after the migration's seed). */
@@ -50,10 +55,12 @@ const FALLBACK: TierLimits = {
   maxSchedules: 3,
   maxParallelSubagents: 3,
   maxSubagentDepth: 2,
+  mcpDailyCalls: 300,
+  mcpDailyCodeRuns: 40,
 };
 
 const COLUMNS = `id, name, sort, price_cents, currency, stripe_price_id, cpu::float8 AS cpu, mem_mb, disk_mb, daily_messages,
-  max_background_jobs, max_schedules, max_parallel_subagents, max_subagent_depth, is_default, enabled`;
+  max_background_jobs, max_schedules, max_parallel_subagents, max_subagent_depth, mcp_daily_calls, mcp_daily_code_runs, is_default, enabled`;
 
 /** Plans live a few seconds in each replica: limits are read on every message, sandbox start and file write. */
 const CACHE_MS = 15_000;
@@ -70,6 +77,8 @@ function toLimits(row: TierRow): TierLimits {
     maxSchedules: row.max_schedules,
     maxParallelSubagents: row.max_parallel_subagents,
     maxSubagentDepth: row.max_subagent_depth,
+    mcpDailyCalls: row.mcp_daily_calls,
+    mcpDailyCodeRuns: row.mcp_daily_code_runs,
   };
 }
 
@@ -84,6 +93,8 @@ const NUMBER_FIELDS: [keyof TierRow, number, number][] = [
   ['max_schedules', 0, 500],
   ['max_parallel_subagents', 1, 10],
   ['max_subagent_depth', 0, 3],
+  ['mcp_daily_calls', 0, 1_000_000],
+  ['mcp_daily_code_runs', 0, 1_000_000],
 ];
 
 export class TiersService {

@@ -53,6 +53,19 @@ E2E_DATABASE_URL=postgres://eagledocs:eagledocs@localhost:55433/eagledocs E2E_DA
   node test/e2e/sandbox-nodes.e2e.mjs
 ```
 
+## EagleDocs as an MCP app (`mcp.e2e.mjs`)
+
+The script plays an MCP client the way ChatGPT or Claude do: discovery (RFC 9728 and 8414), dynamic registration,
+authorize with PKCE, the student's consent (narrowing scopes), the token exchange, MCP calls (tools per scope, memory
+shared with the web app, skills as prompts, the profile resource), refresh rotation with reuse detection, the
+destructive hint on `files_delete`, revoking from Settings and turning MCP off. Start the backend with `PUBLIC_URL` set
+to its own origin so the URLs it advertises are reachable.
+
+```bash
+PUBLIC_URL=http://localhost:4000 PORT=4000 npx tsx src/index.ts &
+node test/e2e/mcp.e2e.mjs
+```
+
 ## Plans and billing (`billing.e2e.mjs`)
 
 Runs a fake Stripe API on port 4995 and sends webhooks signed like Stripe. Covers the seeded plans, each plan's limits

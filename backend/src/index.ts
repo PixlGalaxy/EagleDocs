@@ -31,6 +31,8 @@ import { BuiltinSkills, loadBuiltinSkills } from './modules/skills/builtin.js';
 import { CourseFolders, syncDueCourseFolders } from './modules/canvas/course-folders.js';
 import { TiersService } from './modules/billing/tiers.service.js';
 import { BillingService } from './modules/billing/billing.service.js';
+import { OAuthService } from './modules/mcp/oauth.service.js';
+import { McpServer } from './modules/mcp/mcp.server.js';
 import { DiskWorkspace, sweepTemp } from './engine/workspace.js';
 import { AdminEmbeddings } from './engine/documents.js';
 import { ChatService } from './modules/chat/chat.service.js';
@@ -125,6 +127,19 @@ async function main() {
   const builtinSkills = new BuiltinSkills(db, loadBuiltinSkills());
   logger.info(`Loaded ${builtinSkills.all.length} built-in skills`);
   const engine = await setupEngine(db, bus, { workspace, embeddings, sandbox, searxngUrl: config.SEARXNG_URL, builtinSkills });
+  // EagleDocs as an MCP app: the same tools as the web agent, for ChatGPT, Claude and other clients.
+  const oauth = new OAuthService(db, config.PUBLIC_URL);
+  const mcp = new McpServer({
+    db,
+    engine,
+    builtinSkills,
+    tiers,
+    version: config.BACKEND_VERSION,
+    hostFor: (userId) => ({
+      canvas: { service: canvas, userId, workspace, folders: courseFolders },
+      school: { service: school, userId, workspace },
+    }),
+  });
   const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, school, push, builtinSkills, courseFolders, tiers, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
@@ -136,6 +151,9 @@ async function main() {
     await pruneNodes(db);
     await pruneLogs(db);
     await pruneJobEvents(db);
+    // OAuth: unused requests and expired tokens are never needed again.
+    await db.query("DELETE FROM oauth_requests WHERE expires_at < now() - interval '1 day'");
+    await db.query("DELETE FROM oauth_tokens WHERE expires_at < now() - interval '1 day'");
   });
   scheduleExclusive(db, 'scheduler', LOCKS.scheduler, 60 * 1000, () => runDueSchedules(db, bus));
   scheduleExclusive(db, 'job-reaper', LOCKS.jobReaper, 10 * 1000, () => reapOrphanJobs(db, bus));
@@ -174,6 +192,8 @@ async function main() {
     courseFolders,
     tiers,
     billing,
+    oauth,
+    mcp,
   });
   const onListening = () => {
     logger.info(`Node ${config.NODE_ID} listening on ${config.HOST ?? 'all interfaces'}:${config.PORT} (${config.NODE_ENV})`);

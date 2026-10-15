@@ -43,6 +43,9 @@ import type { CourseFolders } from './modules/canvas/course-folders.js';
 import { createBillingRoutes } from './modules/billing/billing.routes.js';
 import type { BillingService } from './modules/billing/billing.service.js';
 import type { TiersService } from './modules/billing/tiers.service.js';
+import { createMcpRoutes } from './modules/mcp/mcp.routes.js';
+import type { McpServer } from './modules/mcp/mcp.server.js';
+import type { OAuthService } from './modules/mcp/oauth.service.js';
 
 export interface AppDeps {
   db: Db;
@@ -70,10 +73,12 @@ export interface AppDeps {
   courseFolders: CourseFolders;
   tiers: TiersService;
   billing: BillingService;
+  oauth: OAuthService;
+  mcp: McpServer;
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseFolders, tiers, billing } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseFolders, tiers, billing, oauth, mcp } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -85,6 +90,9 @@ export function createApp(deps: AppDeps): express.Application {
   const billingRoutes = createBillingRoutes({ billing, tiers, settings });
   app.use('/api/billing/webhook', billingRoutes.webhook);
   app.use(express.json({ limit: '1mb' }));
+  // OAuth and MCP for ChatGPT, Claude and other clients: tokens instead of cookies, so before the session and CSRF.
+  const mcpRoutes = createMcpRoutes({ oauth, server: mcp, settings });
+  app.use(mcpRoutes.open);
   app.use(cookieParser());
   app.use(createSessionMiddleware(auth));
   app.use(createCsrfProtection({ secure: config.COOKIE_SECURE }));
@@ -119,7 +127,7 @@ export function createApp(deps: AppDeps): express.Application {
 
   app.use('/api/auth', createAuthRoutes(db, config, auth, register, sessionTtlHours));
   app.use('/api/avatars', createAvatarsRoutes(db, config.AVATARS_DIR));
-  const { chatsRouter, jobsRouter, approvalsRouter } = createChatRoutes(db, bus, chats, workspace);
+  const { chatsRouter, jobsRouter, approvalsRouter } = createChatRoutes(db, bus, chats, workspace, catalog);
   app.use('/api/chats', chatsRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/approvals', approvalsRouter);
@@ -141,6 +149,8 @@ export function createApp(deps: AppDeps): express.Application {
 
   const pushRoutes = createPushRoutes({ db, push, settings, t });
   app.use('/api/push', pushRoutes.user);
+  app.use('/api/oauth', mcpRoutes.consent);
+  app.use('/api/mcp-apps', mcpRoutes.apps);
   app.use('/api/billing', billingRoutes.user);
   app.use('/api/admin', billingRoutes.admin);
   app.use('/api/admin', pushRoutes.admin);
