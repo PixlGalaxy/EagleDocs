@@ -22,6 +22,7 @@ import type {
   EngineEvent,
   EventSink,
   HelperModels,
+  ReasoningLevel,
   Limits,
   ResolvedModel,
   RunResult,
@@ -102,6 +103,7 @@ export interface LoopInput {
   startBackground?: (tasks: { goal: string; context?: string; model?: string }[]) => Promise<void>;
   /** Models the agent may give its helpers. */
   helperModels?: HelperModels;
+  reasoning?: ReasoningLevel;
 }
 
 /** The model a helper runs on: the one chosen when the host knows it, else its parent's. */
@@ -143,6 +145,72 @@ function stringify(value: unknown): string {
 
 function clip(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}\n[truncated: ${text.length - max} more characters]` : text;
+}
+
+/** One tool call outside a conversation: the same context, gates, timeout and wrapping as inside a run. */
+export async function runToolOnce(input: {
+  services: Services;
+  user: UserProfile;
+  limits: Limits;
+  host: Record<string, unknown>;
+  tools: ToolRegistry;
+  name: string;
+  args: Record<string, unknown>;
+  runId: string;
+  signal: AbortSignal;
+  emit?: (event: EngineEvent) => void;
+}): Promise<{ status: 'done' | 'error'; content: string; untrusted: boolean }> {
+  const { services, user, limits, tools, name, args } = input;
+  const tool = tools.get(name);
+  if (!tool) return { status: 'error', content: stringify({ error: `Tool "${name}" does not exist` }), untrusted: false };
+  const gateCtx = { user, runKind: 'chat' as const, host: input.host, browser: services.browser, browserPolicy: services.browserPolicy, workspace: services.workspace };
+  try {
+    const gate = tool.gate ? await tool.gate(args, gateCtx) : 'run';
+    if (typeof gate === 'object') return { status: 'error', content: stringify({ error: gate.refuse }), untrusted: false };
+    // Nobody can approve here: actions that need the user's OK stay in the host's own app.
+    if (tool.sideEffect === 'external' || gate === 'approve') {
+      return { status: 'error', content: stringify({ error: 'This action needs the user\'s approval and can only run inside the app.' }), untrusted: false };
+    }
+  } catch (err) {
+    return { status: 'error', content: stringify({ error: errorText(err) }), untrusted: false };
+  }
+  const timeoutMs = tool.timeoutMs ?? limits.toolTimeoutMs;
+  const toolSignal = AbortSignal.any([input.signal, AbortSignal.timeout(timeoutMs)]);
+  const ctx: ToolContext = {
+    user,
+    runId: input.runId,
+    signal: toolSignal,
+    depth: 0,
+    limits,
+    emit: (event) => input.emit?.(event),
+    memory: services.memory,
+    skills: services.skills,
+    schedules: services.schedules,
+    workspace: services.workspace,
+    extractor: services.extractor,
+    embeddings: services.embeddings,
+    sharedRags: services.sharedRags,
+    sandbox: services.sandbox,
+    search: services.search,
+    fetcher: services.fetcher,
+    browser: services.browser,
+    browserPolicy: services.browserPolicy,
+    complete: () => Promise.reject(new Error('No model is available outside a conversation')),
+    clock: services.clock,
+    logger: services.logger,
+    host: input.host,
+    callId: input.runId,
+    runKind: 'chat',
+  };
+  try {
+    const value = await abortable(tool.run(args, ctx), toolSignal);
+    let content = clip(stringify(value), TOOL_RESULT_CHARS);
+    if (tool.untrusted) content = wrapUntrusted(tool.name, content);
+    return { status: 'done', content, untrusted: Boolean(tool.untrusted) };
+  } catch (err) {
+    const timedOut = toolSignal.aborted && !input.signal.aborted;
+    return { status: 'error', content: stringify({ error: timedOut ? `Timed out after ${Math.round(timeoutMs / 1000)}s` : errorText(err) }), untrusted: false };
+  }
 }
 
 /** Rejects when `signal` aborts; used to bound tool calls. */
@@ -315,6 +383,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         const request = {
           model: model.model,
           messages: outgoing,
+          ...(input.reasoning && { reasoning: input.reasoning }),
           ...(toolSpecs && !finalCall && { tools: toolSpecs }),
           signal: attempt.signal,
         };

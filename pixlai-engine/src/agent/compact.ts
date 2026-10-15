@@ -61,6 +61,27 @@ async function summarize(model: ResolvedModel, messages: ChatMessage[], signal: 
 }
 
 /**
+ * Compaction on demand (a "compact" button): summarizes everything but the
+ * newest messages with the given model. `keepFrom` is where the kept messages
+ * start in `history` (never between a tool call and its results); the host
+ * stores the summary and sends it before them from then on. Returns null when
+ * there is too little to compact.
+ */
+export async function compactHistory(
+  history: ChatMessage[],
+  model: ResolvedModel,
+  signal: AbortSignal,
+  keep = KEEP_TAIL,
+): Promise<{ summary: string; keepFrom: number } | null> {
+  let keepFrom = Math.max(0, history.length - keep);
+  while (keepFrom > 0 && history[keepFrom]!.role === 'tool') keepFrom--;
+  if (keepFrom < 2) return null;
+  const summary = await summarize(model, history.slice(0, keepFrom), signal);
+  if (!summary) throw new Error('The model returned no summary');
+  return { summary: SUMMARY_PREFIX + summary, keepFrom };
+}
+
+/**
  * Keeps the provider-facing history under the window: first clears old tool
  * outputs (no model call), then summarizes the middle with the same model.
  * The first element (system prompt) and the newest messages are never touched.

@@ -53,9 +53,14 @@ export interface ToolSpec {
   parameters: JsonSchema;
 }
 
+/** How hard a reasoning model thinks before answering. Providers map it to their own setting and ignore it when unsupported. */
+export type ReasoningLevel = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface ModelRequest {
   model: string;
   messages: ChatMessage[];
+  /** Absent: the provider's default. */
+  reasoning?: ReasoningLevel;
   /** Omitted when the model cannot call tools. */
   tools?: ToolSpec[];
   signal: AbortSignal;

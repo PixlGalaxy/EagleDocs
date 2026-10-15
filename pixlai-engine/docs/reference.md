@@ -9,7 +9,7 @@ Everything `pixlai-engine` exports, grouped by what you use it for. Types are Ty
 | `createEngine(options)` | Builds the engine once per process: stores, base prompt, your tools and the optional ports. [Getting started](getting-started.md) |
 | `Engine` | `forUser(user, { limits?, host? })` returns a `UserAgent`. |
 | `EngineOptions` | `stores`, `basePrompt`, `tools?`, `disableBuiltins?`, `limits?`, `logger?`, `clock?`, and the optional ports (`workspace`, `extractor`, `embeddings`, `sharedRags`, `sandbox`, `search`, `fetcher`, `browser`, `browserPolicy`). |
-| `UserAgent` | `run(options)`, `runSubagents(options)`, `tools()`, `user`, `limits`. |
+| `UserAgent` | `run(options)`, `runSubagents(options)`, `callTool(name, args, options?)` (one tool outside a conversation, e.g. for an MCP server: same gates, timeout and untrusted wrapping; tools that need an approval are refused), `tools()`, `user`, `limits`. |
 | `RunOptions` | `runId`, `model`, `history`, `sink`, `signal?`, `kind?` (`chat` / `scheduled`), `toolFilter?`, `startBackground?`, `helperModels?`. [Concepts](concepts.md#runs-and-the-loop) |
 | `SubagentRunOptions` | `runId`, `model`, `tasks`, `sink`, `signal?`, `toolFilter?`, `helperModels?`, for background helpers. [Concepts](concepts.md#background-delegation) |
 | `RunResult` | `status`, `content`, `messages`, `toolCalls`, `usage`, `error?`, `awaitingUser?`. [Concepts](concepts.md#runresult) |
@@ -27,6 +27,8 @@ Everything `pixlai-engine` exports, grouped by what you use it for. Types are Ty
 | `HelperModel`, `HelperModels` | The models the agent may give its helpers. [Concepts](concepts.md#choosing-a-model-per-helper) |
 | `toProviderMessages(messages)` | Adds the out-of-band marker to steers before a provider call (the loop does this; use it if you call a provider yourself). |
 | `estimateTokens`, `COMPACT_THRESHOLD` | The size estimate (4 characters per token) and the 0.75 threshold compaction uses. |
+| `compactHistory(history, model, signal, keep?)` | Compaction on demand (a "compact" button): summarizes all but the newest messages; returns `{ summary, keepFrom }` for the host to store, or null when there is too little. |
+| `ReasoningLevel` | `none`, `minimal`, `low`, `medium`, `high`, `xhigh`: `RunOptions.reasoning` passes it to `ModelRequest.reasoning`; providers map it to their own setting. |
 
 ## Events
 

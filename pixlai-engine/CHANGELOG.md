@@ -12,6 +12,9 @@ All notable changes to PixlAI-Engine. The engine is pre-1.0: minor versions can 
 
 ### Added
 
+- `RunOptions.reasoning` (`ReasoningLevel`) reaches `ModelRequest.reasoning`, so hosts can offer a thinking selector.
+- `compactHistory` for compaction on demand: the host stores the summary and sends it before the kept messages.
+- `UserAgent.callTool(name, args)` runs one tool outside a conversation (for MCP servers and other hosts), with the same context, gates, timeout and untrusted wrapping; tools that need an approval are refused.
 - **Images in user messages.** `ChatMessage.images` reach models with `ResolvedModel.supportsVision`; other models get a note with the file name so tools can open it.
 - `context` event before each model call with the estimated prompt size and the window.
 - **Model per helper.** `RunOptions.helperModels` lists the models the agent may give its helpers, with guidance to match the model to the work (`fast`, `smart`, `code`). Each `agent_delegate` task can set `model`; unknown choices fall back to the parent's model. Reports say which model wrote them.

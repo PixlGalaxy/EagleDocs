@@ -19,7 +19,7 @@ import { BROWSER_TOOLS } from './browser/tools.js';
 import { CODE_TOOLS } from './tools/code.js';
 import { webDownload, webFetch, webSearch } from './web/tools.js';
 import { agentDelegate, taskBrief, toReport, type DelegateReport, type DelegateTask } from './agent/delegate.js';
-import { helperModel, runLoop, subagentTools } from './agent/loop.js';
+import { helperModel, runLoop, runToolOnce, subagentTools } from './agent/loop.js';
 import { CRON_TOOLS, SCHEDULED_RUN_NOTE } from './cron/tools.js';
 import { BUILTIN_TOOLS } from './tools/builtin.js';
 import { CORE_TOOLS } from './tools/core.js';
@@ -29,8 +29,10 @@ import { ToolRegistry, type RunKind, type Tool } from './tools/tool.js';
 import {
   DEFAULT_LIMITS,
   type ChatMessage,
+  type EngineEvent,
   type EventSink,
   type HelperModels,
+  type ReasoningLevel,
   type Limits,
   type ResolvedModel,
   type RunResult,
@@ -83,6 +85,8 @@ export interface RunOptions {
   kind?: Exclude<RunKind, 'subagent'>;
   /** Narrows the tools for this run (e.g. ones the user turned off). */
   toolFilter?: (tool: Tool) => boolean;
+  /** How hard the model thinks (reasoning models). Helpers get the same level. */
+  reasoning?: ReasoningLevel;
   /**
    * Lets agent_delegate run helpers in the background: the host stores the tasks,
    * runs them later with `runSubagents`, and hands the reports back in a new turn
@@ -114,6 +118,12 @@ export interface UserAgent {
   readonly limits: Limits;
   tools(): Tool[];
   run(options: RunOptions): Promise<RunResult>;
+  /**
+   * Runs one tool outside a conversation, e.g. for an MCP client. Same context,
+   * gates, timeout and untrusted wrapping as in a run; tools that would need an
+   * approval are refused (there is no one to ask), and `complete` is unavailable.
+   */
+  callTool(name: string, args: Record<string, unknown>, options?: { runId?: string; signal?: AbortSignal; emit?: (event: EngineEvent) => void; toolFilter?: (tool: Tool) => boolean }): Promise<{ status: 'done' | 'error'; content: string; untrusted: boolean }>;
   /** Runs helper agents in parallel outside a chat run (background delegation). */
   runSubagents(options: SubagentRunOptions): Promise<{ reports: DelegateReport[]; usage: { inputTokens: number; outputTokens: number } }>;
 }
@@ -201,6 +211,23 @@ export function createEngine(options: EngineOptions): Engine {
             extraInstructions: kind === 'scheduled' ? SCHEDULED_RUN_NOTE : undefined,
             startBackground: run.startBackground,
             helperModels: run.helperModels,
+            reasoning: run.reasoning,
+          });
+        },
+        callTool(name, args, opts = {}) {
+          let tools = available('chat');
+          if (opts.toolFilter) tools = tools.filter(opts.toolFilter);
+          return runToolOnce({
+            services,
+            user,
+            limits,
+            host: userOptions?.host ?? {},
+            tools,
+            name,
+            args,
+            runId: opts.runId ?? `call-${Date.now()}`,
+            signal: opts.signal ?? new AbortController().signal,
+            emit: opts.emit,
           });
         },
         async runSubagents(run) {

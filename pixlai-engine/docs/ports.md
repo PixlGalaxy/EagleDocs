@@ -155,7 +155,7 @@ Both are optional in `createEngine`. The default logger writes to the console wi
 ```ts
 interface ModelProvider { stream(request: ModelRequest): AsyncIterable<ModelChunk> }
 
-interface ModelRequest { model: string; messages: ChatMessage[]; tools?: ToolSpec[]; signal: AbortSignal }
+interface ModelRequest { model: string; messages: ChatMessage[]; tools?: ToolSpec[]; reasoning?: ReasoningLevel; signal: AbortSignal }
 
 type ModelChunk =
   | { type: 'text'; text: string }

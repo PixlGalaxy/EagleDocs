@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { model, readPage, ScriptedProvider, setup, slowText, text, toolCall } from './helpers.js';
-import { defineTool } from '../src/index.js';
+import { compactHistory, defineTool } from '../src/index.js';
 
 const user = (content: string) => ({ role: 'user' as const, content });
 
@@ -268,4 +268,46 @@ test('images reach models that can see them; other models get a note with the fi
   const note = blind.requests[0]!.messages.at(-1)!;
   assert.equal(note.images, undefined);
   assert.match(note.content, /what is this\?\n\[Image attached: Chat uploads\/2026-10-15\/board\.png\. This model cannot see images/);
+});
+
+test('callTool runs one tool outside a conversation, with the same safety rules', async () => {
+  const { agent, stores } = setup();
+  await stores.memory.write('u1', 'user', 'Studies Accounting');
+  const time = await agent.callTool('time_now', { timezone: 'America/New_York' });
+  assert.equal(time.status, 'done');
+  assert.match(time.content, /America\/New_York/);
+
+  const page = await agent.callTool('web_read', { url: 'https://example.com' });
+  assert.equal(page.untrusted, true);
+  assert.match(page.content, /^<untrusted_content source="web_read">/);
+
+  const send = await agent.callTool('email_send', { to: 'prof@uni.edu' });
+  assert.equal(send.status, 'error');
+  assert.match(send.content, /approval/);
+
+  const missing = await agent.callTool('nope', {});
+  assert.equal(missing.status, 'error');
+  const hidden = await agent.callTool('time_now', {}, { toolFilter: (t) => t.name !== 'time_now' });
+  assert.match(hidden.content, /does not exist/);
+});
+
+test('the reasoning level reaches the provider; compactHistory keeps tool calls with their results', async () => {
+  const { agent, sink } = setup();
+  const provider = new ScriptedProvider([() => text('ok')]);
+  await agent.run({ runId: 'th', model: model(provider), history: [user('think hard')], sink, reasoning: 'high' });
+  assert.equal(provider.requests[0]!.reasoning, 'high');
+  const plain = new ScriptedProvider([() => text('ok')]);
+  await agent.run({ runId: 'th2', model: model(plain), history: [user('x')], sink });
+  assert.equal(plain.requests[0]!.reasoning, undefined);
+
+  const summarizer = new ScriptedProvider([() => text('- Ana studies Accounting')]);
+  const history = [
+    user('one'), { role: 'assistant' as const, content: 'a' }, user('two'), { role: 'assistant' as const, content: '', toolCalls: [{ id: 't1', name: 'time_now', args: {} }] },
+    { role: 'tool' as const, content: '12:00', toolCallId: 't1', name: 'time_now' }, { role: 'assistant' as const, content: 'noon' }, user('three'),
+  ];
+  const out = await compactHistory(history, model(summarizer), new AbortController().signal, 3);
+  assert.ok(out);
+  assert.equal(out.keepFrom, 3, 'the kept part starts at the tool call, not at its result');
+  assert.match(out.summary, /^\[EARLIER CONVERSATION, SUMMARIZED FOR REFERENCE\][\s\S]*Ana studies Accounting/);
+  assert.equal(await compactHistory(history.slice(0, 2), model(summarizer), new AbortController().signal), null, 'too little to compact');
 });

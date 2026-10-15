@@ -17,5 +17,5 @@ export { chunkPages, ragId, UserRags, type RagManifest, type RagSource, type Chu
 export { CRON_TOOLS, SCHEDULED_RUN_NOTE } from './cron/tools.js';
 export { isValidTimezone, nextRun, parseSchedule, planSchedule, MIN_INTERVAL_MS, type ParsedSchedule } from './cron/schedule.js';
 export { steerContent, wrapUntrusted, toProviderMessages } from './agent/prompt.js';
-export { estimateTokens, COMPACT_THRESHOLD } from './agent/compact.js';
+export { compactHistory, estimateTokens, COMPACT_THRESHOLD, SUMMARY_PREFIX } from './agent/compact.js';
 export { InMemoryMemoryStore, InMemoryRunStore, InMemoryScheduleStore, InMemorySkillStore, InMemoryWorkspace } from './memory-stores.js';
