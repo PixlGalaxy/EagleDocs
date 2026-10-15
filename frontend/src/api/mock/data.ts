@@ -221,9 +221,9 @@ export const schedules: Schedule[] = [
 ];
 
 export const tiers: Tier[] = [
-  { id: 'tier-free', name: 'Free', price_cents: 0, currency: 'usd', stripe_price_id: null, cpu: 0.5, mem_mb: 512, disk_mb: 5120, daily_messages: 100, max_background_jobs: 1, max_schedules: 3, is_default: true, enabled: true },
-  { id: 'tier-plus', name: 'Plus', price_cents: 499, currency: 'usd', stripe_price_id: 'price_123', cpu: 1, mem_mb: 1024, disk_mb: 15360, daily_messages: 400, max_background_jobs: 2, max_schedules: 10, is_default: false, enabled: true },
-  { id: 'tier-pro', name: 'Pro', price_cents: 999, currency: 'usd', stripe_price_id: 'price_456', cpu: 2, mem_mb: 2048, disk_mb: 30720, daily_messages: 1000, max_background_jobs: 4, max_schedules: 25, is_default: false, enabled: false },
+  { id: 'tier-free', name: 'Free', price_cents: 0, currency: 'usd', stripe_price_id: null, cpu: 0.5, mem_mb: 512, disk_mb: 5120, daily_messages: 100, max_background_jobs: 1, max_schedules: 3, max_parallel_subagents: 3, max_subagent_depth: 2, sort: 0, is_default: true, enabled: true },
+  { id: 'tier-plus', name: 'Plus', price_cents: 499, currency: 'usd', stripe_price_id: 'price_123', cpu: 1, mem_mb: 1024, disk_mb: 15360, daily_messages: 400, max_background_jobs: 2, max_schedules: 10, max_parallel_subagents: 5, max_subagent_depth: 2, sort: 1, is_default: false, enabled: true },
+  { id: 'tier-pro', name: 'Pro', price_cents: 999, currency: 'usd', stripe_price_id: 'price_456', cpu: 2, mem_mb: 2048, disk_mb: 30720, daily_messages: 1000, max_background_jobs: 4, max_schedules: 25, max_parallel_subagents: 8, max_subagent_depth: 3, sort: 2, is_default: false, enabled: false },
 ];
 
 export const endpoints: ModelEndpoint[] = [

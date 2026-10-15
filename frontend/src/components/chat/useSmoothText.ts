@@ -11,10 +11,14 @@ const CATCH_UP_FRAMES = 6;
  * false (a finished message) the full text shows at once.
  */
 export function useSmoothText(target: string, active: boolean): string {
-  const [shown, setShown] = useState('');
+  // A finished message starts complete, so saved answers never animate in.
+  const [shown, setShown] = useState(() => (active ? '' : target));
   // A reset (a correction, a new answer) starts over instead of animating backwards.
   const base = target.startsWith(shown) ? shown : '';
   if (active && base !== shown) setShown(base);
+  // While paused (waiting for an approval or a Duo push) the full text shows; keep it,
+  // so the answer does not shrink and type itself again when the agent resumes.
+  if (!active && shown !== target) setShown(target);
 
   useEffect(() => {
     if (!active) return;

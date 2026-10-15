@@ -29,8 +29,8 @@ const BackgroundJobCard = ({ chatId, job, onFinished }: { chatId: string; job: B
   return (
     <div className="rounded-xl border border-slate-200 bg-white/80 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-900/80">
       <div className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-        <Loader2 size={14} className="animate-spin text-[var(--accent-500)] motion-reduce:animate-none" aria-hidden="true" />
-        <span className="font-medium">{t('chat.backgroundTitle', { count: job.tasks.length })}</span>
+        <Loader2 size={14} className="shrink-0 animate-spin text-[var(--accent-500)] motion-reduce:animate-none" aria-hidden="true" />
+        <span className="min-w-0 font-medium">{t('chat.backgroundTitle', { count: job.tasks.length })}</span>
         <button
           type="button"
           disabled={stopping}
@@ -38,7 +38,7 @@ const BackgroundJobCard = ({ chatId, job, onFinished }: { chatId: string; job: B
             setStopping(true);
             void chatApi.cancel(job.id).catch(() => setStopping(false));
           }}
-          className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         >
           <Square size={11} aria-hidden="true" />
           {stopping ? t('chat.backgroundStopping') : t('chat.backgroundStop')}
@@ -53,7 +53,8 @@ const BackgroundJobCard = ({ chatId, job, onFinished }: { chatId: string; job: B
 const BackgroundTasks = ({ chatId, jobs, onFinished }: { chatId: string; jobs: BackgroundJob[]; onFinished: () => void }) => {
   if (jobs.length === 0) return null;
   return (
-    <div className="mx-auto mb-2 w-full max-w-3xl space-y-2" aria-live="polite">
+    // Capped so many helpers never squeeze the conversation on a phone.
+    <div className="scroll-thin mx-auto mb-2 max-h-[40vh] w-full max-w-3xl space-y-2 overflow-y-auto" aria-live="polite">
       {jobs.map((job) => (
         <BackgroundJobCard key={job.id} chatId={chatId} job={job} onFinished={onFinished} />
       ))}

@@ -1,15 +1,25 @@
 import { api, apiUrl } from './client';
-import type { Approval, BackgroundJob, Chat, CodexDeviceStart, Connection, Job, Message, ModelOption, Steer, StreamEvent, UserModelPrefs } from './types';
+import type { Approval, BackgroundJob, Chat, CodexDeviceStart, ContextUsage, Connection, Job, Message, ModelOption, Steer, StreamEvent, UserModelPrefs } from './types';
 
 export const chatApi = {
   list: () => api.get<Chat[]>('/chats'),
   create: (body: { title?: string; model_ref?: string | null }) => api.post<Chat>('/chats', body),
   get: (id: string) =>
-    api.get<{ chat: Chat; messages: Message[]; pending_approvals: Approval[]; background_jobs: BackgroundJob[] }>(`/chats/${id}`),
+    api.get<{
+      chat: Chat;
+      messages: Message[];
+      pending_approvals: Approval[];
+      background_jobs: BackgroundJob[];
+      /** Context use of the last run (null before the first one; missing on older servers). */
+      context?: ContextUsage | null;
+    }>(`/chats/${id}`),
   rename: (id: string, title: string) => api.patch<Chat>(`/chats/${id}`, { title }),
   remove: (id: string) => api.del<void>(`/chats/${id}`),
-  /** Queues a job and returns its id; the answer arrives through `stream`. */
-  send: (id: string, body: { content: string; model_ref: string }) =>
+  /**
+   * Queues a job and returns its id; the answer arrives through `stream`.
+   * `attachments`: workspace paths (max 10) sent with the message; the text may then be empty.
+   */
+  send: (id: string, body: { content: string; model_ref: string; attachments?: string[] }) =>
     api.post<{ job_id: string; message: Message }>(`/chats/${id}/messages`, body),
   cancel: (jobId: string) => api.post<void>(`/jobs/${jobId}/cancel`),
   /** Runs a stopped or failed turn again. */

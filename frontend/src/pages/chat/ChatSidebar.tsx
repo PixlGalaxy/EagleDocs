@@ -98,7 +98,8 @@ const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onDelete, onCl
                       )}
                       <span className="truncate">{chat.title}</span>
                     </NavLink>
-                    <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 gap-0.5 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
+                    {/* Shown on hover; always on touch screens, which have no hover to reveal them. */}
+                    <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 gap-0.5 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100 [@media(hover:none)]:opacity-100">
                       <button
                         type="button"
                         onClick={() => onRename(chat)}

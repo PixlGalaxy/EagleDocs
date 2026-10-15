@@ -3,8 +3,9 @@ import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CornerDownRight, Sparkles } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
-import type { ToolCall } from '../../api/types';
+import type { MessageAttachment, ToolCall } from '../../api/types';
 import ToolCallList from './ToolCallList';
+import { MessageAttachments } from './AttachmentViews';
 import { LOGO_SRC } from '../brand';
 import { useSmoothText } from './useSmoothText';
 
@@ -19,9 +20,14 @@ interface Props {
   typing?: boolean;
   /** A correction sent while the agent worked; `pending` until it was applied. */
   steer?: 'pending' | 'applied';
+  /** Where an applied correction reached the agent ("read after: Searching email"). */
+  steerNote?: string;
+  /** Files sent with a user message. */
+  attachments?: MessageAttachment[];
 }
 
-const MarkdownBody = memo(({ text }: { text: string }) => (
+/** Answers and reports share it: links always open in a new tab. */
+export const MarkdownBody = memo(({ text }: { text: string }) => (
   <Markdown
     remarkPlugins={[remarkGfm]}
     components={{
@@ -37,16 +43,17 @@ const MarkdownBody = memo(({ text }: { text: string }) => (
 ));
 
 /** One chat turn. Assistant answers render markdown; user turns stay plain text. */
-const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, typing = false, steer }: Props) => {
+const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, typing = false, steer, steerNote, attachments }: Props) => {
   const { t } = useI18n();
   const shown = useSmoothText(content, streaming);
   if (role === 'user' && steer) {
     return (
       <div className="flex flex-col items-end gap-1">
-        <p className="flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-          <CornerDownRight size={12} aria-hidden="true" />
+        <p className="flex max-w-[85%] items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-300">
+          <CornerDownRight size={12} className="shrink-0" aria-hidden="true" />
           {t('chat.correction')}
           {steer === 'pending' && <span className="font-normal text-slate-500 dark:text-slate-400">{t('chat.correctionPending')}</span>}
+          {steer === 'applied' && steerNote && <span className="min-w-0 truncate font-normal text-slate-500 dark:text-slate-400">· {steerNote}</span>}
         </p>
         <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md border border-amber-300 bg-amber-50 px-4 py-2.5 text-[15px] leading-relaxed text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
           {content}
@@ -56,13 +63,20 @@ const MessageView = ({ role, content, modelLabel, toolCalls, streaming = false, 
   }
   if (role === 'user') {
     return (
-      <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[var(--accent-600)] px-4 py-2.5 text-[15px] leading-relaxed text-white">
-          {content}
-        </div>
+      <div className="flex flex-col items-end gap-1.5">
+        {attachments && attachments.length > 0 && <MessageAttachments items={attachments} />}
+        {/* A message can be only files. */}
+        {content && (
+          <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-[var(--accent-600)] px-4 py-2.5 text-[15px] leading-relaxed text-white">
+            {content}
+          </div>
+        )}
       </div>
     );
   }
+
+  // Nothing to show yet (queued, or a part that only marks where a correction landed): no lone avatar.
+  if (!shown && !toolCalls?.length && !typing && !modelLabel) return null;
 
   return (
     <div className="flex gap-3">

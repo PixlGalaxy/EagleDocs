@@ -391,7 +391,6 @@ h3 {
   scrollbar-color: rgb(148 163 184 / 0.5) transparent;
 }
 
-/* Caret shown at the end of a streaming answer. */
 /* "Thinking" bubble in the chat: three dots that bounce in turn. */
 .typing-dots {
   display: inline-flex;
@@ -471,7 +470,18 @@ h3 {
   background: #0f172a;
   color: #e2e8f0;
 }
-.prose-chat pre code { padding: 0; background: none; }
+.prose-chat pre code { padding: 0; background: none; font-size: inherit; }
+/* Code blocks keep their own lines; the dark block needs an edge on the dark page. */
+.prose-chat pre { overflow-wrap: normal; border: 1px solid transparent; }
+.dark .prose-chat pre { background: #020617; border-color: rgb(51 65 85 / 0.7); }
+/* The first block lines up with the avatar, whatever it is (a heading has extra space above). */
+.prose-chat > :first-child { margin-top: 0; }
+.prose-chat li > ul,
+.prose-chat li > ol { margin-top: 0.25em; }
+.prose-chat ul ul { list-style: circle; }
+.prose-chat li::marker { color: rgb(100 116 139); }
+.prose-chat hr { border-color: rgb(148 163 184 / 0.35); margin-block: 1.25em; }
+.prose-chat img { border-radius: 0.5rem; }
 .prose-chat table { width: 100%; border-collapse: collapse; font-size: 0.875rem; display: block; overflow-x: auto; }
 .prose-chat th,
 .prose-chat td { border: 1px solid rgb(148 163 184 / 0.35); padding: 0.4rem 0.6rem; text-align: left; }
@@ -480,6 +490,7 @@ h3 {
 .prose-chat th { white-space: nowrap; }
 .prose-chat td { overflow-wrap: normal; min-width: 6ch; }
 .prose-chat blockquote { border-left: 3px solid rgb(148 163 184 / 0.5); padding-left: 0.875rem; color: rgb(100 116 139); }
+.dark .prose-chat blockquote { color: rgb(148 163 184); }
 
 /* Landing: provider logo marquee (the only marquee on the page). */
 .logo-marquee {

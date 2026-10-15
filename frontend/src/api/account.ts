@@ -1,4 +1,4 @@
-import { api, apiUrl } from './client';
+import { api, apiUrl, ApiError } from './client';
 import type {
   CanvasAnnouncement,
   CanvasCourse,
@@ -51,6 +51,38 @@ export const filesApi = {
     return api.upload<WorkspaceEntry>(`/files/upload?path=${encodeURIComponent(dir)}`, form);
   },
   downloadUrl: (path: string) => apiUrl(`/files/download?path=${encodeURIComponent(path)}`),
+  /**
+   * Same as `upload`, with progress (0..1) for the chat's attachment chips. XHR, because
+   * fetch cannot report upload progress; `signal` cancels it.
+   */
+  uploadWithProgress: (dir: string, file: File, onProgress: (fraction: number) => void, signal?: AbortSignal) =>
+    new Promise<WorkspaceEntry>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', apiUrl(`/files/upload?path=${encodeURIComponent(dir)}`));
+      xhr.withCredentials = true;
+      const csrf = document.cookie
+        .split('; ')
+        .find((part) => part.startsWith('csrf='))
+        ?.slice('csrf='.length);
+      if (csrf) xhr.setRequestHeader('X-CSRF-Token', decodeURIComponent(csrf));
+      xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+      xhr.onload = () => {
+        let body: { error?: string } & Partial<WorkspaceEntry> = {};
+        try {
+          body = JSON.parse(xhr.responseText || '{}');
+        } catch {
+          // Not JSON (a proxy error page): the status says enough.
+        }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(body as WorkspaceEntry);
+        else reject(new ApiError(xhr.status, body.error ?? xhr.statusText ?? 'Upload failed'));
+      };
+      xhr.onerror = () => reject(new ApiError(0, 'Network error'));
+      xhr.onabort = () => reject(new DOMException('Aborted', 'AbortError'));
+      signal?.addEventListener('abort', () => xhr.abort());
+      const form = new FormData();
+      form.append('file', file);
+      xhr.send(form);
+    }),
 };
 
 export const browserApi = {

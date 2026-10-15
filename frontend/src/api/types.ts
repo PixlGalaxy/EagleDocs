@@ -142,7 +142,23 @@ export interface Message {
   steer?: boolean;
   /** Reports of helper agents that worked in the background: shown as a card, not as the user's words. */
   background?: { job_id: string; tasks: { goal: string; status: string }[] };
+  /** Workspace files sent with a user message (photos go to vision models). */
+  attachments?: MessageAttachment[];
   created_at: string;
+}
+
+export interface MessageAttachment {
+  /** Workspace path, as `/files/download?path=` takes it. */
+  path: string;
+  name: string;
+  kind: 'image' | 'file';
+  size: number;
+}
+
+/** Estimated prompt tokens before a model call, against the model's context window. */
+export interface ContextUsage {
+  used: number;
+  window: number;
 }
 
 export interface Approval {
@@ -179,6 +195,8 @@ export type StreamEvent =
   /** The answer being written was cut short by a correction; a new one starts. */
   | { type: 'interrupted' }
   | { type: 'notice'; message: string }
+  /** How full the model's context window is, sent before each model call. */
+  | { type: 'context'; used: number; window: number }
   /** Progress of a helper agent started by the agent_delegate tool. */
   | { type: 'subagent'; parent_call_id: string; index: number; task: string; model_label?: string; event: StreamEvent }
   /** The reports of background helpers entered the chat, right before the answer that uses them. */
@@ -404,6 +422,10 @@ export interface Tier {
   daily_messages: number;
   max_background_jobs: number;
   max_schedules: number;
+  /** Helper agents per delegation, and how deep helpers may delegate. */
+  max_parallel_subagents: number;
+  max_subagent_depth: number;
+  sort: number;
   is_default: boolean;
   enabled: boolean;
 }
@@ -413,6 +435,10 @@ export interface PlanInfo {
   billing_enabled: boolean;
   subscription_status: string | null;
   current_period_end: string | null;
+  /** Cancelled in the portal: the plan ends at current_period_end. */
+  cancel_at_period_end: boolean;
+  /** A payment failed: the plan stays until then. */
+  grace_until: string | null;
   usage_today: { messages: number; tokens_in: number; tokens_out: number };
 }
 

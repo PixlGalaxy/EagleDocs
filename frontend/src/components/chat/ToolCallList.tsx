@@ -2,49 +2,15 @@ import { useState } from 'react';
 import { Bot, Check, ChevronRight, CircleAlert, Hourglass, Loader2, Ban } from 'lucide-react';
 import type { SubagentProgress, ToolCall } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
-import type { TranslationKey } from '../../i18n/translations';
+import { labelFor } from './toolLabels';
 
-// Tool names come from the backend registry (plans/03-fase2-chat-modelos.md).
-const TOOL_LABELS: Record<string, TranslationKey> = {
-  'canvas.courses': 'tools.canvasCourses',
-  'canvas.assignments': 'tools.canvasAssignments',
-  'canvas.upcoming': 'tools.canvasUpcoming',
-  'canvas.announcements': 'tools.canvasAnnouncements',
-  'canvas.grades': 'tools.canvasGrades',
-  'canvas.modules': 'tools.canvasModules',
-  'canvas.assignment_detail': 'tools.canvasAssignmentDetail',
-  'canvas.briefing': 'tools.canvasBriefing',
-  'email.ensure_session': 'tools.emailSession',
-  'email.search': 'tools.emailSearch',
-  'email.list_inbox': 'tools.emailInbox',
-  'email.read': 'tools.emailRead',
-  'email.draft': 'tools.emailDraft',
-  'email.send': 'tools.emailSend',
-  'degreeworks.audit': 'tools.degreeworksAudit',
-  'sandbox.exec': 'tools.sandboxExec',
-  'files.list': 'tools.filesList',
-  'files.read': 'tools.filesRead',
-  'files.write': 'tools.filesWrite',
-  'files.download_from_canvas': 'tools.filesDownload',
-  'memory.save': 'tools.memorySave',
-  'memory.search': 'tools.memorySearch',
-  'skills.load': 'tools.skillsLoad',
-  'skills.add_note': 'tools.skillsNote',
-  'schedule.create': 'tools.scheduleCreate',
-  'agent.delegate': 'tools.agentDelegate',
-};
-
-/** The engine names tools `canvas_briefing`; the labels above use `canvas.briefing`. */
-function labelFor(name: string): TranslationKey | undefined {
-  return TOOL_LABELS[name] ?? TOOL_LABELS[name.replace('_', '.')];
-}
-
+// shrink-0: a long tool or task name must not squeeze the icon.
 const STATUS_ICON = {
-  running: <Loader2 size={14} className="animate-spin text-[var(--accent-500)] motion-reduce:animate-none" />,
-  done: <Check size={14} className="text-emerald-500" />,
-  error: <CircleAlert size={14} className="text-rose-500" />,
-  waiting_approval: <Hourglass size={14} className="text-amber-500" />,
-  rejected: <Ban size={14} className="text-slate-400" />,
+  running: <Loader2 size={14} className="shrink-0 animate-spin text-[var(--accent-500)] motion-reduce:animate-none" />,
+  done: <Check size={14} className="shrink-0 text-emerald-500" />,
+  error: <CircleAlert size={14} className="shrink-0 text-rose-500" />,
+  waiting_approval: <Hourglass size={14} className="shrink-0 text-amber-500" />,
+  rejected: <Ban size={14} className="shrink-0 text-slate-400" />,
 } as const;
 
 const SUBAGENT_ICON = {
@@ -67,7 +33,7 @@ export const SubagentList = ({ subagents }: { subagents: SubagentProgress[] }) =
             <p className="flex min-w-0 items-center gap-1.5">
               {SUBAGENT_ICON[agent.status]}
               <Bot size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
-              <span className="truncate font-medium text-slate-700 dark:text-slate-300">{agent.task}</span>
+              <span className="min-w-0 truncate font-medium text-slate-700 dark:text-slate-300">{agent.task}</span>
               {agent.model && <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">{agent.model}</span>}
             </p>
             {agent.steps.length > 0 && (
@@ -91,7 +57,8 @@ const ToolCallList = ({ calls }: { calls: ToolCall[] }) => {
   if (!calls.length) return null;
 
   return (
-    <ul className="mb-3 space-y-1">
+    // No gap under the list when nothing follows it (a turn that only ran tools).
+    <ul className="mb-3 space-y-1 last:mb-0">
       {calls.map((call) => {
         const labelKey = labelFor(call.name);
         const expanded = open === call.id;
@@ -101,19 +68,19 @@ const ToolCallList = ({ calls }: { calls: ToolCall[] }) => {
               type="button"
               onClick={() => setOpen(expanded ? null : call.id)}
               aria-expanded={expanded}
-              className="flex max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              className="flex max-w-full items-center gap-2 rounded-md px-1.5 py-1 text-left text-slate-600 transition hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             >
               {STATUS_ICON[call.status]}
-              <span className="truncate">{labelKey ? t(labelKey) : call.name}</span>
+              <span className="min-w-0 truncate">{labelKey ? t(labelKey) : call.name}</span>
               <ChevronRight size={14} className={`shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} aria-hidden="true" />
             </button>
             {call.subagents && call.subagents.length > 0 && <SubagentList subagents={call.subagents} />}
             {expanded && (
-              <div className="ml-7 mt-1 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
+              <div className="ml-7 mt-1 min-w-0 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
                 <p className="break-all">
                   <span className="text-slate-400">{call.name}</span> {JSON.stringify(call.args)}
                 </p>
-                {call.result_preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap">{call.result_preview}</pre>}
+                {call.result_preview && <pre className="scroll-thin max-h-48 overflow-auto whitespace-pre-wrap break-words">{call.result_preview}</pre>}
               </div>
             )}
           </li>

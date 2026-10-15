@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { BookOpen, CalendarClock, GraduationCap, Map as MapIcon, Menu, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
+import { ArrowDown, BookOpen, CalendarClock, FolderTree, GraduationCap, Map as MapIcon, Menu, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError } from '../../api/client';
-import type { Approval, BackgroundJob, Chat, Message, ModelOption, StreamEvent, ToolCall } from '../../api/types';
+import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, StreamEvent, ToolCall, WorkspaceEntry } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
@@ -15,6 +15,12 @@ import BackgroundTasks from '../../components/chat/BackgroundTasks';
 import { applySubagentEvent, mergeCall } from '../../components/chat/subagents';
 import Composer from '../../components/chat/Composer';
 import ModelPicker from '../../components/chat/ModelPicker';
+import ContextMeter from '../../components/chat/ContextMeter';
+import { useDraftAttachments } from '../../components/chat/useDraftAttachments';
+import { toolLabel } from '../../components/chat/toolLabels';
+import { MAX_ATTACHMENTS } from '../../components/chat/attachments';
+import WorkspacePanel from './WorkspacePanel';
+import ResizableDock from './ResizableDock';
 import Modal from '../../components/ui/Modal';
 import { Notice, Skeleton } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
@@ -24,13 +30,29 @@ interface LiveAnswer {
   content: string;
   toolCalls: ToolCall[];
   modelLabel: string | null;
-  status: 'queued' | 'running' | 'waiting_approval' | 'waiting_mfa';
+  /** `finishing`: the answer is done and stays on screen until the saved version replaces it. */
+  status: 'queued' | 'running' | 'waiting_approval' | 'waiting_mfa' | 'finishing';
   queuePosition: number | null;
   mfa: string | null;
   /** Corrections sent while this answer runs. */
   /** `at`: how many tool calls had run when the agent read it, to show it at that point of the answer. */
   steers: { id: string; content: string; applied: boolean; at?: number }[];
   notice: string | null;
+}
+
+/** Adds a message unless the list has it already (a replayed event, a reload that got there first). */
+const withMessage = (list: Message[], message: Message) => (list.some((m) => m.id === message.id) ? list : [...list, message]);
+
+/** The workspace panel's open state on wide screens, kept per browser. */
+const FILES_PANEL_KEY = 'eagledocs.chat.filesPanel';
+const WIDE = '(min-width: 1024px)';
+
+function storedFilesPanel(): boolean {
+  try {
+    return localStorage.getItem(FILES_PANEL_KEY) === 'open';
+  } catch {
+    return false;
+  }
 }
 
 const SUGGESTIONS: { icon: typeof BookOpen; key: TranslationKey }[] = [
@@ -62,13 +84,30 @@ const ChatPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [renaming, setRenaming] = useState<Chat | null>(null);
   const [deleting, setDeleting] = useState<Chat | null>(null);
+  /** How full the model's context is (last run, then live while one runs). */
+  const [context, setContext] = useState<ContextUsage | null>(null);
+  const attachments = useDraftAttachments();
+  /** Workspace panel: docked on wide screens (remembered), a drawer on phones (always starts closed). */
+  const [filesDocked, setFilesDocked] = useState(storedFilesPanel);
+  const [filesDrawer, setFilesDrawer] = useState(false);
+  /** Bumped when a run ends, so the files panel reloads what the agent may have written. */
+  const [filesVersion, setFilesVersion] = useState(0);
 
   const closeStream = useRef<(() => void) | null>(null);
   /** The job the live answer follows, and jobs already finished (their row can still read as running for a moment). */
   const liveJob = useRef<string | null>(null);
   const finishedJobs = useRef(new Set<string>());
   const attachRef = useRef<(chatId: string, jobId: string) => void>(() => undefined);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  /** Jobs where the agent read a correction: their saved answer is laid out differently from the live one. */
+  const steeredJobs = useRef(new Set<string>());
+  /** The chat on screen, so late responses for another chat are dropped. */
+  const currentChat = useRef(chatId);
+  const sending = useRef(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  /** Follow new content only while the reader sits at the bottom; scrolling up lets them read in peace. */
+  const stuck = useRef(true);
+  const [awayFromBottom, setAwayFromBottom] = useState(false);
 
   const refreshChats = useCallback(() => {
     chatApi
@@ -94,16 +133,21 @@ const ChatPage = () => {
    * Reloads the saved conversation and the background helpers, and follows a
    * job that started on its own (the turn that answers with background reports).
    */
-  const reload = useCallback((id: string) => {
-    chatApi
-      .get(id)
-      .then(({ chat, messages: saved, background_jobs }) => {
-        setMessages(saved);
-        setBackground(background_jobs);
-        if (chat.active_job_id && !liveJob.current && !finishedJobs.current.has(chat.active_job_id)) attachRef.current(id, chat.active_job_id);
-      })
-      .catch(() => undefined);
-  }, []);
+  const reload = useCallback(
+    (id: string): Promise<boolean> =>
+      chatApi
+        .get(id)
+        .then(({ chat, messages: saved, background_jobs, context: usage }) => {
+          if (currentChat.current !== id) return true;
+          setMessages(saved);
+          setBackground(background_jobs);
+          if (usage) setContext(usage);
+          if (chat.active_job_id && !liveJob.current && !finishedJobs.current.has(chat.active_job_id)) attachRef.current(id, chat.active_job_id);
+          return true;
+        })
+        .catch(() => false),
+    [],
+  );
 
   const onEvent = useCallback(
     (event: StreamEvent, streamChatId: string, jobId: string) => {
@@ -121,11 +165,12 @@ const ChatPage = () => {
             return { ...prev, content: prev.content + event.text, status: 'running' };
           case 'tool_call':
           case 'tool_result': {
-            const before = prev.toolCalls.find((call) => call.id === event.call.id);
-            const others = prev.toolCalls.filter((call) => call.id !== event.call.id);
+            // A result updates its call in place: calls keep their order (and corrections their place).
+            const known = prev.toolCalls.some((call) => call.id === event.call.id);
+            const toolCalls = known ? prev.toolCalls.map((call) => (call.id === event.call.id ? mergeCall(call, event.call) : call)) : [...prev.toolCalls, event.call];
             // Text written before a tool and text written after it are separate paragraphs.
             const content = event.type === 'tool_call' && prev.content && !/\n\s*$/.test(prev.content) ? `${prev.content}\n\n` : prev.content;
-            return { ...prev, content, toolCalls: [...others, mergeCall(before, event.call)] };
+            return { ...prev, content, toolCalls };
           }
           case 'subagent':
             return {
@@ -155,10 +200,14 @@ const ChatPage = () => {
         }
       });
 
-      if (event.type === 'approval_required') {
+      if (event.type === 'context') {
+        setContext({ used: event.used, window: event.window });
+      } else if (event.type === 'steer_applied') {
+        steeredJobs.current.add(jobId);
+      } else if (event.type === 'approval_required') {
         setApprovals((prev) => [...prev.filter((a) => a.id !== event.approval.id), event.approval]);
       } else if (event.type === 'background_results') {
-        setMessages((prev) => [...prev, event.message]);
+        setMessages((prev) => withMessage(prev, event.message));
       } else if (event.type === 'tool_result' && event.call.name === 'agent_delegate' && event.call.args.background === true) {
         // Helpers went to the background: show them now, not when this answer ends.
         chatApi
@@ -168,19 +217,32 @@ const ChatPage = () => {
       } else if (event.type === 'done') {
         finishedJobs.current.add(jobId);
         liveJob.current = null;
-        setMessages((prev) => [...prev, event.message]);
         // Decided approvals were only context for the running turn; the tool list keeps the record.
         setApprovals((prev) => prev.filter((a) => a.status === 'pending'));
-        setLive(null);
         refreshChats();
-        // Reload so corrections sit exactly where the agent took them.
-        reload(streamChatId);
+        setFilesVersion((v) => v + 1);
+        const finish = () => setLive((cur) => (cur?.jobId === jobId ? null : cur));
+        if (steeredJobs.current.has(jobId)) {
+          // The saved answer is split where the agent read each correction: keep the live one
+          // until that version arrives, instead of flashing the answer without them.
+          setLive((cur) => (cur?.jobId === jobId ? { ...cur, status: 'finishing' } : cur));
+          void reload(streamChatId).then((ok) => {
+            if (!ok && currentChat.current === streamChatId) setMessages((prev) => withMessage(prev, event.message));
+            finish();
+          });
+        } else {
+          setMessages((prev) => withMessage(prev, event.message));
+          finish();
+          void reload(streamChatId);
+        }
       } else if (event.type === 'error') {
         finishedJobs.current.add(jobId);
         liveJob.current = null;
         setError(event.error);
         setLive(null);
         refreshChats();
+        // Whatever the agent saved before failing replaces the live view.
+        void reload(streamChatId);
       }
     },
     [refreshChats, reload],
@@ -201,7 +263,7 @@ const ChatPage = () => {
 
   // Background helpers finished: their reports and the answer that uses them come next.
   const onBackgroundFinished = useCallback(() => {
-    if (chatId) reload(chatId);
+    if (chatId) void reload(chatId);
   }, [chatId, reload]);
 
   // Switching chats resets the view during render (not in an effect), so the
@@ -215,6 +277,8 @@ const ChatPage = () => {
     setBackground([]);
     setMessages([]);
     setLoadingMessages(!!chatId);
+    setAwayFromBottom(false);
+    setContext(null);
   }
 
   // Load the selected chat and resume its job if one is still running server-side.
@@ -222,15 +286,19 @@ const ChatPage = () => {
     closeStream.current?.();
     closeStream.current = null;
     liveJob.current = null;
+    currentChat.current = chatId;
+    // A chat opens at its latest message.
+    stuck.current = true;
     if (!chatId) return;
     let cancelled = false;
     chatApi
       .get(chatId)
-      .then(({ chat, messages, pending_approvals, background_jobs }) => {
+      .then(({ chat, messages, pending_approvals, background_jobs, context: usage }) => {
         if (cancelled) return;
         setMessages(messages);
         setApprovals(pending_approvals);
         setBackground(background_jobs);
+        setContext(usage ?? null);
         if (chat.model_ref) setModelRef(chat.model_ref);
         if (chat.active_job_id) attach(chat.id, chat.active_job_id);
       })
@@ -258,30 +326,76 @@ const ChatPage = () => {
     return () => clearTimeout(timer);
   }, [liveContent]);
 
+  // Keeps the latest message in view whenever anything changes size: new text (also while it is
+  // revealed letter by letter), tool calls, approvals, or the composer area growing.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages, live?.content, live?.toolCalls.length, approvals.length]);
+    const el = scrollRef.current;
+    const content = contentRef.current;
+    if (!el || !content) return;
+    const observer = new ResizeObserver(() => {
+      if (stuck.current) el.scrollTop = el.scrollHeight;
+    });
+    observer.observe(el);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
+
+  const onScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 64;
+    stuck.current = atBottom;
+    setAwayFromBottom(!atBottom);
+  };
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stuck.current = true;
+    el.scrollTop = el.scrollHeight;
+  };
+
+  // Escape closes the drawers (chat list, files) on phones.
+  useEffect(() => {
+    if (!sidebarOpen && !filesDrawer) return;
+    const onKey = (e: KeyboardEvent) => {
+      // A dialog on top (a file preview) closes first.
+      if (e.key !== 'Escape' || document.querySelector('[aria-modal="true"]')) return;
+      setSidebarOpen(false);
+      setFilesDrawer(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [sidebarOpen, filesDrawer]);
 
   const send = async (text = draft) => {
     const content = text.trim();
-    if (!content || live) return;
+    const files = attachments.paths;
+    // `sending` blocks a second send (a double-clicked suggestion) before the job exists.
+    if ((!content && !files.length) || attachments.uploading || live || sending.current) return;
+    sending.current = true;
     setError('');
     setDraft('');
+    scrollToBottom();
     try {
       if (!chatId) {
         const chat = await chatApi.create({ model_ref: modelRef });
-        await chatApi.send(chat.id, { content, model_ref: modelRef });
+        await chatApi.send(chat.id, { content, model_ref: modelRef, ...(files.length ? { attachments: files } : {}) });
+        attachments.clear();
         // The loader effect picks up the running job from the new chat.
         navigate(`/chat/${chat.id}`);
         refreshChats();
         return;
       }
-      const { job_id, message } = await chatApi.send(chatId, { content, model_ref: modelRef });
-      setMessages((prev) => [...prev, message]);
+      const { job_id, message } = await chatApi.send(chatId, { content, model_ref: modelRef, ...(files.length ? { attachments: files } : {}) });
+      attachments.clear();
+      setMessages((prev) => withMessage(prev, message));
       attach(chatId, job_id);
     } catch (err) {
       setDraft(content);
       setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    } finally {
+      sending.current = false;
     }
   };
 
@@ -312,8 +426,13 @@ const ChatPage = () => {
   };
 
   const decide = async (approval: Approval, approve: boolean) => {
-    await chatApi.decide(approval.id, approve);
-    setApprovals((prev) => prev.map((a) => (a.id === approval.id ? { ...a, status: approve ? 'approved' : 'rejected' } : a)));
+    try {
+      await chatApi.decide(approval.id, approve);
+      setApprovals((prev) => prev.map((a) => (a.id === approval.id ? { ...a, status: approve ? 'approved' : 'rejected' } : a)));
+    } catch (err) {
+      // The card stays pending, so the student can try again.
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    }
   };
 
   const saveRename = async (e: FormEvent) => {
@@ -330,6 +449,32 @@ const ChatPage = () => {
     setChats((prev) => prev.filter((c) => c.id !== deleting.id));
     if (deleting.id === chatId) navigate('/chat');
     setDeleting(null);
+  };
+
+  const toggleFiles = () => {
+    // Phones get a drawer; wide screens dock the panel and remember it.
+    if (!window.matchMedia(WIDE).matches) {
+      setFilesDrawer(true);
+      return;
+    }
+    const next = !filesDocked;
+    setFilesDocked(next);
+    try {
+      localStorage.setItem(FILES_PANEL_KEY, next ? 'open' : 'closed');
+    } catch {
+      // Private mode: it just is not remembered.
+    }
+  };
+
+  const attachFromWorkspace = (entry: WorkspaceEntry) => {
+    if (!attachments.addExisting(entry)) setError(t('chat.attachLimit', { count: MAX_ATTACHMENTS }));
+    setFilesDrawer(false);
+  };
+
+  /** Where a correction reached the agent: after the last step it had taken. */
+  const steerNote = (calls: ToolCall[] | undefined) => {
+    const last = calls?.at(-1);
+    return last ? t('chat.correctionReadAfter', { step: toolLabel(last.name, t) }) : t('chat.correctionReadStart');
   };
 
   const activeChat = chats.find((c) => c.id === chatId);
@@ -377,139 +522,177 @@ const ChatPage = () => {
             <Menu size={20} />
           </button>
           <ModelPicker options={options ?? []} value={modelRef} onChange={setModelRef} disabled={!!live} />
-          <p className="ml-auto hidden truncate text-sm text-slate-500 dark:text-slate-400 sm:block">{activeChat?.title}</p>
+          <div className="ml-auto flex min-w-0 items-center gap-1">
+            <p className="hidden min-w-0 truncate pr-1 text-sm text-slate-500 dark:text-slate-400 sm:block">{activeChat?.title}</p>
+            {context && <ContextMeter usage={context} />}
+            <button
+              type="button"
+              onClick={toggleFiles}
+              aria-label={filesDocked ? t('chat.hideFiles') : t('chat.showFiles')}
+              title={filesDocked ? t('chat.hideFiles') : t('chat.showFiles')}
+              aria-pressed={filesDocked}
+              className={`shrink-0 rounded-lg p-2 transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+                filesDocked ? 'lg:bg-[var(--accent-50)] lg:text-[var(--accent-700)] lg:dark:bg-[var(--accent-500)]/15 lg:dark:text-[var(--accent-200)]' : ''
+              } text-slate-600 dark:text-slate-300`}
+            >
+              <FolderTree size={18} aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
-        <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
-            {noModels && (
-              <Notice tone="warning" icon={Plug}>
-                {t('chat.noModels')}{' '}
-                <Link to="/settings?section=models" className="font-medium underline underline-offset-2">
-                  {t('chat.noModelsLink')}
-                </Link>
-              </Notice>
-            )}
+        {/* The conversation; the jump-to-latest button floats over its bottom edge. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={scrollRef} onScroll={onScroll} className="scroll-thin min-h-0 flex-1 overflow-y-auto">
+            <div ref={contentRef} className="mx-auto w-full max-w-3xl space-y-6 px-4 py-6">
+              {noModels && (
+                <Notice tone="warning" icon={Plug}>
+                  {t('chat.noModels')}{' '}
+                  <Link to="/settings?section=models" className="font-medium underline underline-offset-2">
+                    {t('chat.noModelsLink')}
+                  </Link>
+                </Notice>
+              )}
 
-            {showEmpty && (
-              <div className="pt-[8vh]">
-                <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
-                  {t('chat.greeting', { name: user?.display_name?.split(' ')[0] || user?.username || '' })}
-                </h1>
-                <p className="mt-2 text-slate-600 dark:text-slate-400">{t('chat.greetingSub')}</p>
-                <div className="mt-8 grid gap-2 sm:grid-cols-2">
-                  {SUGGESTIONS.map(({ icon: Icon, key }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => void send(t(key))}
-                      className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left text-sm text-slate-700 transition hover:border-[var(--accent-300)] hover:bg-[var(--accent-50)]/40 active:scale-[0.99] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-[var(--accent-500)]/50 dark:hover:bg-[var(--accent-500)]/5"
-                    >
-                      <Icon size={18} className="mt-0.5 shrink-0 text-[var(--accent-600)] dark:text-[var(--accent-300)]" aria-hidden="true" />
-                      {t(key)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {loadingMessages && (
-              <div className="space-y-6" aria-busy="true">
-                <Skeleton className="ml-auto h-10 w-2/3 rounded-2xl" />
-                <div className="space-y-2">
-                  <Skeleton className="h-4 w-11/12" />
-                  <Skeleton className="h-4 w-4/5" />
-                  <Skeleton className="h-4 w-2/3" />
-                </div>
-              </div>
-            )}
-
-            {messages.map((m) =>
-              m.background ? (
-                <BackgroundReport key={m.id} message={m} />
-              ) : (
-                <MessageView key={m.id} role={m.role} content={m.content} modelLabel={m.model_label} toolCalls={m.tool_calls} steer={m.steer ? 'applied' : undefined} />
-              ),
-            )}
-
-            {/* Decided approvals shrink to one line above the answer in progress. */}
-            {approvals.some((a) => a.status !== 'pending') && (
-              <div className="space-y-1.5">
-                {approvals
-                  .filter((a) => a.status !== 'pending')
-                  .map((approval) => (
-                    <ApprovalCard key={approval.id} approval={approval} />
-                  ))}
-              </div>
-            )}
-
-            {live && (
-              <div aria-live="polite">
-                {live.status === 'queued' && (
-                  <p className="mb-3 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
-                    <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                    {live.queuePosition ? t('chat.queued', { position: live.queuePosition }) : t('chat.starting')}
-                  </p>
-                )}
-                {live.status === 'waiting_mfa' && (
-                  <div className="mb-4">
-                    <Notice tone="accent" icon={Smartphone}>
-                      <p className="font-medium">{t('chat.mfaTitle')}</p>
-                      <p className="mt-0.5">{live.mfa ?? t('chat.mfaBody')}</p>
-                    </Notice>
+              {showEmpty && (
+                <div className="pt-[8vh]">
+                  <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white sm:text-3xl">
+                    {t('chat.greeting', { name: user?.display_name?.split(' ')[0] || user?.username || '' })}
+                  </h1>
+                  <p className="mt-2 text-slate-600 dark:text-slate-400">{t('chat.greetingSub')}</p>
+                  <div className="mt-8 grid gap-2 sm:grid-cols-2">
+                    {SUGGESTIONS.map(({ icon: Icon, key }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => void send(t(key))}
+                        className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left text-sm text-slate-700 transition hover:border-[var(--accent-300)] hover:bg-[var(--accent-50)]/40 active:scale-[0.99] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-[var(--accent-500)]/50 dark:hover:bg-[var(--accent-500)]/5"
+                      >
+                        <Icon size={18} className="mt-0.5 shrink-0 text-[var(--accent-600)] dark:text-[var(--accent-300)]" aria-hidden="true" />
+                        {t(key)}
+                      </button>
+                    ))}
                   </div>
-                )}
-                {live.notice && (
-                  <div className="mb-4">
-                    <Notice tone="warning" icon={CircleAlert}>
-                      {live.notice}
-                    </Notice>
+                </div>
+              )}
+
+              {loadingMessages && (
+                <div className="space-y-6" aria-busy="true">
+                  <Skeleton className="ml-auto h-10 w-2/3 rounded-2xl" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-11/12" />
+                    <Skeleton className="h-4 w-4/5" />
+                    <Skeleton className="h-4 w-2/3" />
                   </div>
-                )}
-                {/* The answer in progress, cut where the agent read each correction. */}
-                {(() => {
-                  const applied = live.steers.filter((st) => st.applied).sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
-                  let from = 0;
-                  const parts = applied.map((st, i) => {
-                    const calls = live.toolCalls.slice(from, st.at ?? from);
-                    from = st.at ?? from;
+                </div>
+              )}
+
+              {messages.map((m, i) =>
+                m.background ? (
+                  <BackgroundReport key={m.id} message={m} />
+                ) : (
+                  <MessageView
+                    key={m.id}
+                    role={m.role}
+                    content={m.content}
+                    modelLabel={m.model_label}
+                    toolCalls={m.tool_calls}
+                    attachments={m.attachments}
+                    steer={m.steer ? 'applied' : undefined}
+                    // A saved correction comes right after the part of the answer the agent had done.
+                    steerNote={m.steer && messages[i - 1]?.tool_calls?.length ? steerNote(messages[i - 1].tool_calls) : undefined}
+                  />
+                ),
+              )}
+
+              {/* Decided approvals shrink to one line above the answer in progress. */}
+              {approvals.some((a) => a.status !== 'pending') && (
+                <div className="space-y-1.5">
+                  {approvals
+                    .filter((a) => a.status !== 'pending')
+                    .map((approval) => (
+                      <ApprovalCard key={approval.id} approval={approval} />
+                    ))}
+                </div>
+              )}
+
+              {live && (
+                <div aria-live="polite">
+                  {live.status === 'queued' && (
+                    <p className="mb-3 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+                      <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                      {live.queuePosition ? t('chat.queued', { position: live.queuePosition }) : t('chat.starting')}
+                    </p>
+                  )}
+                  {live.status === 'waiting_mfa' && (
+                    <div className="mb-4">
+                      <Notice tone="accent" icon={Smartphone}>
+                        <p className="font-medium">{t('chat.mfaTitle')}</p>
+                        <p className="mt-0.5">{live.mfa ?? t('chat.mfaBody')}</p>
+                      </Notice>
+                    </div>
+                  )}
+                  {live.notice && (
+                    <div className="mb-4">
+                      <Notice tone="warning" icon={CircleAlert}>
+                        {live.notice}
+                      </Notice>
+                    </div>
+                  )}
+                  {/* The answer in progress, cut where the agent read each correction. */}
+                  {(() => {
+                    const applied = live.steers.filter((st) => st.applied).sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
+                    let from = 0;
+                    const parts = applied.map((st, i) => {
+                      const calls = live.toolCalls.slice(from, st.at ?? from);
+                      from = st.at ?? from;
+                      return (
+                        <div key={st.id} className="space-y-6">
+                          {(calls.length > 0 || i === 0) && <MessageView role="assistant" content="" modelLabel={i === 0 ? live.modelLabel : null} toolCalls={calls} />}
+                          <MessageView role="user" content={st.content} steer="applied" steerNote={steerNote(live.toolCalls.slice(0, st.at ?? 0))} />
+                        </div>
+                      );
+                    });
                     return (
-                      <div key={st.id} className="space-y-6">
-                        {(calls.length > 0 || i === 0) && <MessageView role="assistant" content="" modelLabel={i === 0 ? live.modelLabel : null} toolCalls={calls} />}
-                        <MessageView role="user" content={st.content} steer="applied" />
+                      <div className="space-y-6">
+                        {parts}
+                        <MessageView
+                          role="assistant"
+                          content={live.content}
+                          modelLabel={applied.length ? null : live.modelLabel}
+                          toolCalls={live.toolCalls.slice(from)}
+                          streaming={live.status === 'running'}
+                          typing={live.status === 'running' && (!live.content || quiet)}
+                        />
                       </div>
                     );
-                  });
-                  return (
-                    <div className="space-y-6">
-                      {parts}
-                      <MessageView
-                        role="assistant"
-                        content={live.content}
-                        modelLabel={applied.length ? null : live.modelLabel}
-                        toolCalls={live.toolCalls.slice(from)}
-                        streaming={live.status === 'running'}
-                        typing={live.status === 'running' && (!live.content || quiet)}
-                      />
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
+                  })()}
+                </div>
+              )}
 
-            {approvals
-              .filter((a) => a.status === 'pending')
-              .map((approval) => (
-                <ApprovalCard key={approval.id} approval={approval} onDecide={(approve) => decide(approval, approve)} />
-              ))}
+              {approvals
+                .filter((a) => a.status === 'pending')
+                .map((approval) => (
+                  <ApprovalCard key={approval.id} approval={approval} onDecide={(approve) => decide(approval, approve)} />
+                ))}
 
-            {error && (
-              <Notice tone="danger" icon={CircleAlert}>
-                {error}
-              </Notice>
-            )}
-            <div ref={bottomRef} />
+              {error && (
+                <Notice tone="danger" icon={CircleAlert}>
+                  {error}
+                </Notice>
+              )}
+            </div>
           </div>
+          {awayFromBottom && (
+            <button
+              type="button"
+              onClick={scrollToBottom}
+              aria-label={t('chat.scrollToBottom')}
+              title={t('chat.scrollToBottom')}
+              className="absolute bottom-3 left-1/2 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-md transition hover:bg-slate-50 hover:text-slate-900 active:scale-[0.96] dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+            >
+              <ArrowDown size={17} aria-hidden="true" />
+            </button>
+          )}
         </div>
 
         <div className="shrink-0 px-4 pb-4 pt-2">
@@ -531,9 +714,29 @@ const ChatPage = () => {
             onStop={() => void stop()}
             onSteer={() => void steer()}
             busy={!!live}
+            attachments={attachments.items}
+            onAttach={attachments.add}
+            onRemoveAttachment={attachments.remove}
           />
         </div>
       </section>
+
+      {/* Workspace files, docked on wide screens; drag its left edge to resize. */}
+      {filesDocked && (
+        <ResizableDock className="hidden border-l border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 lg:block">
+          <WorkspacePanel onAttach={attachFromWorkspace} onClose={toggleFiles} refreshKey={filesVersion} />
+        </ResizableDock>
+      )}
+
+      {/* Workspace files as a drawer on phones and tablets. */}
+      {filesDrawer && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setFilesDrawer(false)} aria-hidden="true" />
+          <aside className="absolute inset-y-0 right-0 w-[85vw] max-w-sm overscroll-contain bg-white shadow-xl dark:bg-slate-900">
+            <WorkspacePanel onAttach={attachFromWorkspace} onClose={() => setFilesDrawer(false)} refreshKey={filesVersion} />
+          </aside>
+        </div>
+      )}
 
       {renaming && (
         <Modal title={t('chat.rename')} onClose={() => setRenaming(null)}>
