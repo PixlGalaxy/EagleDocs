@@ -31,3 +31,7 @@ dist-ssr
 /data/
 /WebinCloud/
 /hermes-webui/
+# Local dev databases and their encryption key (any DATA_ROOT): never commit them
+**/dev-postgres/
+**/dev-master.key
+/backend/fgcu-live/
