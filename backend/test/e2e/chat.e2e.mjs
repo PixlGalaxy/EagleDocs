@@ -198,6 +198,29 @@ res = await fetch(`${A}/files/download?path=${encodeURIComponent('Chat uploads/e
 check('other files always download', /attachment/.test(res.headers.get('content-disposition') ?? ''), res.headers.get('content-disposition'));
 for (const m of [smart, mini]) await admin.req(A, 'PATCH', `/admin/models/${m.id}`, { supports_vision: false });
 
+// ---------------------------------------------------------------- thinking level and compacting
+r = await user.req(A, 'GET', '/models');
+check('models say whether they take a thinking level', r.json.every((m) => typeof m.reasoning === 'boolean'), JSON.stringify(r.json.map((m) => m.reasoning)));
+const thinkChat = (await user.req(A, 'POST', '/chats', {})).json.id;
+r = await user.req(A, 'POST', `/chats/${thinkChat}/messages`, { content: '[echoreasoning]', model_ref: 'auto', reasoning: 'high' });
+events = await user.stream(B, thinkChat, r.json.job_id);
+check('the thinking level reaches the model', events.at(-1).message?.content === 'reasoning=high', events.at(-1).message?.content);
+r = await user.req(A, 'POST', `/chats/${thinkChat}/messages`, { content: '[echoreasoning]', model_ref: 'auto', reasoning: 'bogus' });
+events = await user.stream(B, thinkChat, r.json.job_id);
+check('an unknown level falls back to the default', events.at(-1).message?.content === 'reasoning=default', events.at(-1).message?.content);
+for (let i = 0; i < 7; i++) {
+  r = await user.req(A, 'POST', `/chats/${thinkChat}/messages`, { content: `filler ${i}`, model_ref: 'auto' });
+  await user.stream(B, thinkChat, r.json.job_id);
+}
+r = await user.req(A, 'POST', `/chats/${thinkChat}/compact`);
+check('compacting summarizes the older messages', r.status === 200 && r.json.summarized > 0 && r.json.context?.window > 0, JSON.stringify(r.json));
+const visible = (await user.req(A, 'GET', `/chats/${thinkChat}`)).json.messages.length;
+r = await user.req(A, 'POST', `/chats/${thinkChat}/messages`, { content: '[echohistory]', model_ref: 'auto' });
+events = await user.stream(B, thinkChat, r.json.job_id);
+check('the model now reads the summary first and fewer turns', /summarized=true/.test(events.at(-1).message?.content ?? '') && Number(/turns=(\d+)/.exec(events.at(-1).message?.content ?? '')?.[1]) < visible, `${events.at(-1).message?.content} vs ${visible} visible`);
+r = await user.req(A, 'GET', `/chats/${thinkChat}`);
+check('the student still sees the whole conversation', r.json.messages.length === visible + 2, `${r.json.messages.length} vs ${visible + 2}`);
+
 // ---------------------------------------------------------------- at most 2 running jobs per student
 const limitJobs = [];
 for (let i = 0; i < 3; i++) {

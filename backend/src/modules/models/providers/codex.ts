@@ -103,7 +103,7 @@ export class CodexProvider implements ModelProvider {
         ...(tools && { tools, tool_choice: 'auto', parallel_tool_calls: true }),
         store: false,
         stream: true,
-        reasoning: { effort: 'medium', summary: 'auto' },
+        reasoning: { effort: request.reasoning ?? 'medium', summary: 'auto' },
         include: [],
         prompt_cache_key: cacheKey,
       }),

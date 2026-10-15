@@ -1,4 +1,4 @@
-import { backgroundReportMessage, type DelegateReport, type DelegateTask, type Engine, type EngineEvent, type ToolCallView } from 'pixlai-engine';
+import { backgroundReportMessage, type DelegateReport, type DelegateTask, type Engine, type EngineEvent, type ReasoningLevel, type ToolCallView } from 'pixlai-engine';
 import type { Bus } from '../../bus/bus.js';
 import type { EnvConfig } from '../../config/env.js';
 import type { Db } from '../../db/pool.js';
@@ -61,6 +61,8 @@ interface JobRow {
     reports?: DelegateReport[];
     /** A chat turn that answers with the reports of this delegate job. */
     background_job_id?: string;
+    /** How hard the model thinks for this message (the composer's Thinking selector). */
+    reasoning?: ReasoningLevel;
   };
   cancel_requested: boolean;
 }
@@ -324,6 +326,7 @@ export class JobWorker {
         history,
         signal: controller.signal,
         kind: job.kind === 'scheduled' ? 'scheduled' : 'chat',
+        ...(job.payload.reasoning && { reasoning: job.payload.reasoning }),
         helperModels,
         toolFilter,
         ...(job.kind === 'chat' && { startBackground: (list: DelegateTask[]) => this.queueBackground(job, chatId, user.id, list) }),

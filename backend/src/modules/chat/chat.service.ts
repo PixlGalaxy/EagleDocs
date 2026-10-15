@@ -135,14 +135,38 @@ export class ChatService {
 
   /** What the model sees: everything, tool calls and results included, oldest first. */
   async history(chatId: string): Promise<(ChatMessage & { attachments?: Attachment[] })[]> {
-    const rows = await many<MessageRow>(this.db, 'SELECT * FROM messages WHERE chat_id = $1 ORDER BY seq', [chatId]);
-    return rows
+    return (await this.historyRows(chatId)).map((h) => h.message);
+  }
+
+  /**
+   * What the model sees, each message with its seq: after a compaction, the
+   * summary first (seq = where it ends) and only the messages after it.
+   */
+  async historyRows(chatId: string): Promise<{ seq: number; message: ChatMessage & { attachments?: Attachment[] } }[]> {
+    const chat = await maybe<{ summary: string | null; summary_until_seq: string | null }>(this.db, 'SELECT summary, summary_until_seq FROM chats WHERE id = $1', [chatId]);
+    const until = chat?.summary ? Number(chat.summary_until_seq) : 0;
+    const rows = await many<MessageRow & { seq: string }>(this.db, 'SELECT * FROM messages WHERE chat_id = $1 AND seq > $2 ORDER BY seq', [chatId, until]);
+    const kept = rows
       .filter((r) => !(r.role === 'assistant' && !r.content && !r.tool_calls?.length))
-      .map((r): ChatMessage => {
-        if (r.role === 'tool') return { role: 'tool', content: r.content, toolCallId: r.tool_call_id ?? '', name: r.tool_name ?? '' };
-        if (r.role === 'assistant') return { role: 'assistant', content: r.content, ...(r.tool_calls?.length && { toolCalls: r.tool_calls }) };
-        return { role: 'user', content: r.content, ...(r.meta.steer && { steer: true }), ...(r.meta.attachments?.length && { attachments: r.meta.attachments }) };
+      .map((r) => {
+        let message: ChatMessage & { attachments?: Attachment[] };
+        if (r.role === 'tool') message = { role: 'tool', content: r.content, toolCallId: r.tool_call_id ?? '', name: r.tool_name ?? '' };
+        else if (r.role === 'assistant') message = { role: 'assistant', content: r.content, ...(r.tool_calls?.length && { toolCalls: r.tool_calls }) };
+        else message = { role: 'user', content: r.content, ...(r.meta.steer && { steer: true }), ...(r.meta.attachments?.length && { attachments: r.meta.attachments }) };
+        return { seq: Number(r.seq), message };
       });
+    return chat?.summary ? [{ seq: until, message: { role: 'user', content: chat.summary } }, ...kept] : kept;
+  }
+
+  /** Stores a compaction: the summary stands for every message up to `untilSeq`. */
+  async saveSummary(chatId: string, summary: string, untilSeq: number, context: { used: number; window: number }): Promise<void> {
+    await this.db.query('UPDATE chats SET summary = $2, summary_until_seq = $3 WHERE id = $1', [chatId, summary, untilSeq]);
+    // The meter reads the newest answer's context.
+    await this.db.query(
+      `UPDATE messages SET meta = jsonb_set(meta, '{context}', $2::jsonb)
+        WHERE id = (SELECT id FROM messages WHERE chat_id = $1 AND role = 'assistant' AND meta ? 'context' ORDER BY seq DESC LIMIT 1)`,
+      [chatId, JSON.stringify(context)],
+    );
   }
 
   async addUserMessage(db: Queryable, chatId: string, content: string, meta: Record<string, unknown> = {}): Promise<MessageView> {

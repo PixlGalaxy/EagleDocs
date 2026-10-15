@@ -48,8 +48,9 @@ export class OllamaProvider implements ModelProvider {
           tools: request.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
         }),
         stream: true,
-        // Reasoning models: keep the thinking out of the visible answer.
-        think: false,
+        // Thinking only when asked for (it is slow on local hardware); it arrives apart from the answer, never in it.
+        // gpt-oss takes a level, other reasoning models on/off.
+        think: !request.reasoning || request.reasoning === 'none' ? false : /gpt-oss/i.test(request.model) ? ({ minimal: 'low', low: 'low', medium: 'medium', high: 'high', xhigh: 'high' } as const)[request.reasoning] : true,
         options: { num_ctx: this.contextWindow },
       }),
     });

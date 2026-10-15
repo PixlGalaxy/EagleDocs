@@ -70,6 +70,16 @@ const server = http.createServer(async (req, res) => {
   if (loadSkill && request.tools) return call('skills_load', { slug: loadSkill[1] });
   const note = /\[note ([a-z0-9-]+) ([^\]]+)\]/.exec(lastUser);
   if (note && request.tools) return call('skills_note', { slug: note[1], note: note[2] });
+  if (lastUser.includes('[echoreasoning]')) {
+    text(`reasoning=${request.reasoning_effort ?? 'default'}`);
+    return done();
+  }
+  if (lastUser.includes('[echohistory]')) {
+    const turns = messages.filter((m) => m.role !== 'system');
+    const first = typeof turns[0]?.content === 'string' ? turns[0].content : '';
+    text(`turns=${turns.length} summarized=${first.startsWith('[EARLIER CONVERSATION')}`);
+    return done();
+  }
   if (lastUser.includes('[echoimages]')) {
     text(`images=${imagesSeen} | ${lastUser.replace(/\s+/g, ' ').slice(0, 300)}`);
     return done();

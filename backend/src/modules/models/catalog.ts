@@ -24,6 +24,8 @@ export interface ModelOption {
   tags: ModelTier[];
   supports_tools: boolean;
   supports_vision: boolean;
+  /** Accepts a thinking level (the composer shows the selector). */
+  reasoning: boolean;
 }
 
 export interface ModelPrefs {
@@ -63,6 +65,11 @@ function guessTags(name: string): ModelTier[] {
 }
 
 /** `provider:source:model`; model names may contain colons themselves (ollama tags). */
+/** Reasoning models by name: local ones (Qwen3, DeepSeek R1, gpt-oss...) and OpenAI's o-series and GPT-5 family. */
+export function guessReasoning(name: string): boolean {
+  return /qwen3|qwq|qwopus|deepseek-r1|gpt-oss|magistral|reason|think|(^|\/)o[1-9]|gpt-5|gpt-6/i.test(name);
+}
+
 export function parseRef(ref: string): { provider: string; source: string; model: string } | null {
   const first = ref.indexOf(':');
   if (first < 0) return null;
@@ -117,6 +124,7 @@ export class ModelCatalog {
         tags: m.tags,
         supports_tools: m.supports_tools,
         supports_vision: m.supports_vision,
+        reasoning: guessReasoning(m.model_name),
       });
     }
     for (const conn of await this.connections.list(userId)) {
@@ -132,6 +140,7 @@ export class ModelCatalog {
             tags: guessTags(model),
             supports_tools: true,
             supports_vision: true,
+            reasoning: true,
           });
         }
       } else if (conn.kind === 'api_key') {
@@ -145,6 +154,7 @@ export class ModelCatalog {
             tags: guessTags(model),
             supports_tools: true,
             supports_vision: guessTags(model).includes('vision'),
+            reasoning: kind !== 'anthropic' && guessReasoning(model),
           });
         }
       }

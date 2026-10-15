@@ -59,6 +59,8 @@ export class OpenAICompatProvider implements ModelProvider {
         }),
         stream: true,
         stream_options: { include_usage: true },
+        // OpenAI reasoning models; servers that do not know it ignore it.
+        ...(request.reasoning && { reasoning_effort: request.reasoning === 'xhigh' ? 'high' : request.reasoning }),
       }),
     });
     if (!res.ok || !res.body) throw await errorFrom(res, this.label);

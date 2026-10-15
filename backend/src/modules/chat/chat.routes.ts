@@ -10,6 +10,10 @@ import { requireAuth } from '../auth/session.middleware.js';
 import { titleFrom, type ChatService } from './chat.service.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import { resolveAttachments } from './attachments.js';
+import { compactHistory, estimateTokens, type ReasoningLevel } from 'pixlai-engine';
+import type { ModelCatalog } from '../models/catalog.js';
+
+const REASONING: ReasoningLevel[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'];
 
 const MAX_MESSAGE_CHARS = 20_000;
 const MAX_STEER_CHARS = 2000;
@@ -23,7 +27,7 @@ function text(value: unknown, max: number): string {
   return value.trim();
 }
 
-export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace: DiskWorkspace) {
+export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace: DiskWorkspace, catalog: ModelCatalog) {
   const chatsRouter = Router();
   const jobsRouter = Router();
   const approvalsRouter = Router();
@@ -74,7 +78,9 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const userId = req.user!.id;
     const chat = await chats.get(userId, routeParam(req.params.id));
     if (chat.active_job_id) throw conflict('chat.busy');
-    const body = (req.body ?? {}) as { content?: unknown; model_ref?: unknown; attachments?: unknown };
+    const body = (req.body ?? {}) as { content?: unknown; model_ref?: unknown; attachments?: unknown; reasoning?: unknown };
+    // 'default' or nothing: the provider's own default.
+    const reasoning = REASONING.includes(body.reasoning as ReasoningLevel) ? (body.reasoning as ReasoningLevel) : undefined;
     const attachments = await resolveAttachments(workspace, userId, body.attachments);
     // A picture alone is a valid message.
     const content = attachments.length && (typeof body.content !== 'string' || !body.content.trim()) ? '' : text(body.content, MAX_MESSAGE_CHARS);
@@ -88,12 +94,42 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
       );
       const { rows } = await client.query<{ id: string }>(
         "INSERT INTO jobs (user_id, chat_id, kind, payload) VALUES ($1, $2, 'chat', $3) RETURNING id",
-        [userId, chat.id, { model_ref: modelRef }],
+        [userId, chat.id, { model_ref: modelRef, ...(reasoning && { reasoning }) }],
       );
       return { message: msg, jobId: rows[0]!.id };
     });
     await bus.publish('job_queued', { jobId });
     res.status(201).json({ job_id: jobId, message });
+  });
+
+  /**
+   * "Compact" from the context ring: the model summarizes the older messages and
+   * the summary replaces them in what it reads from now on. The chat the
+   * student sees does not change.
+   */
+  chatsRouter.post('/:id/compact', async (req: AppRequest, res) => {
+    const userId = req.user!.id;
+    const chat = await chats.get(userId, routeParam(req.params.id));
+    if (chat.active_job_id) throw conflict('chat.busy');
+    const rows = await chats.historyRows(chat.id);
+    const history = rows.map((r) => {
+      const { attachments: _files, ...message } = r.message;
+      return message;
+    });
+    const resolution = await catalog.resolve(userId, chat.model_ref, { text: '', historyChars: 0 });
+    if (resolution.isEagleDocs) await catalog.assertQuota(userId);
+    const result = await compactHistory(history, resolution.model, AbortSignal.timeout(120_000));
+    const before = await chats.lastContext(chat.id);
+    if (!result) {
+      res.json({ summarized: 0, context: before });
+      return;
+    }
+    const kept = history.slice(result.keepFrom);
+    // The system prompt and tools are not in the history: keep their share from the last measurement.
+    const saved = estimateTokens(history) - estimateTokens([{ role: 'user', content: result.summary }, ...kept]);
+    const context = { used: Math.max(0, (before?.used ?? estimateTokens(history)) - saved), window: before?.window ?? resolution.model.contextWindow };
+    await chats.saveSummary(chat.id, result.summary, rows[result.keepFrom - 1]!.seq, context);
+    res.json({ summarized: result.keepFrom, context });
   });
 
   /**
