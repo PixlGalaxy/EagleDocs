@@ -170,20 +170,52 @@ export class ChatService {
   }
 
   /**
-   * The chat's workspace folder ("Chats/<title>"), named the first time it is
-   * needed and kept when the chat is renamed. Another chat already using that
-   * name gets this one's short id added. `titleHint` names a chat whose title
-   * is not saved yet (its first message).
+   * The chat's workspace folder, "Chats/<chat id>": unique, and it never changes
+   * with the title (the Files views show the title instead). Older chats named
+   * after their title are moved by migrateChatFolders.
    */
-  async folderOf(userId: string, chatId: string, titleHint = ''): Promise<string> {
-    const row = await maybe<{ folder: string | null; title: string }>(this.db, 'SELECT folder, title FROM chats WHERE id = $1 AND user_id = $2', [chatId, userId]);
+  async folderOf(userId: string, chatId: string): Promise<string> {
+    const row = await maybe<{ folder: string | null }>(this.db, 'SELECT folder FROM chats WHERE id = $1 AND user_id = $2', [chatId, userId]);
     if (!row) throw notFound();
     if (row.folder) return row.folder;
-    const base = `${CHATS_FOLDER}/${folderSafe(row.title || titleHint) || 'Chat'}`;
-    const taken = await maybe(this.db, 'SELECT 1 FROM chats WHERE user_id = $1 AND folder = $2', [userId, base]);
-    const name = taken ? `${base} (${chatId.slice(0, 6)})` : base;
-    const saved = await maybe<{ folder: string }>(this.db, 'UPDATE chats SET folder = COALESCE(folder, $2) WHERE id = $1 RETURNING folder', [chatId, name]);
+    const saved = await maybe<{ folder: string }>(this.db, 'UPDATE chats SET folder = COALESCE(folder, $2) WHERE id = $1 RETURNING folder', [chatId, chatFolder(chatId)]);
     return saved!.folder;
+  }
+
+  /** Titles of this user's chats by id, for showing "Chats/<id>" folders by name. */
+  async titlesById(userId: string, ids: string[]): Promise<Map<string, string>> {
+    const valid = ids.filter((id) => UUID.test(id));
+    if (!valid.length) return new Map();
+    const rows = await many<{ id: string; title: string }>(this.db, 'SELECT id, title FROM chats WHERE user_id = $1 AND id = ANY($2::uuid[])', [userId, valid]);
+    return new Map(rows.map((r) => [r.id, r.title]));
+  }
+
+  /** What the chat's info panel shows: messages, tokens, models and dates (its files come from the workspace). */
+  async info(userId: string, chatId: string) {
+    const chat = await this.get(userId, chatId);
+    const stats = await maybe<{ user_messages: string; answers: string; tokens_in: string | null; tokens_out: string | null; models: string[] | null; last_answer: Date | null }>(
+      this.db,
+      `SELECT COUNT(*) FILTER (WHERE role = 'user' AND NOT (meta ? 'internal')) AS user_messages,
+         COUNT(*) FILTER (WHERE role = 'assistant' AND NOT (meta ? 'internal')) AS answers,
+         SUM(tokens_in) AS tokens_in, SUM(tokens_out) AS tokens_out,
+         ARRAY_REMOVE(ARRAY_AGG(DISTINCT model_label), NULL) AS models,
+         MAX(created_at) FILTER (WHERE role = 'assistant') AS last_answer
+       FROM messages WHERE chat_id = $1`,
+      [chat.id],
+    );
+    return {
+      id: chat.id,
+      title: chat.title,
+      created_at: chat.created_at,
+      updated_at: chat.updated_at,
+      folder: await this.folderOf(userId, chat.id),
+      messages: Number(stats?.user_messages ?? 0),
+      answers: Number(stats?.answers ?? 0),
+      tokens_in: Number(stats?.tokens_in ?? 0),
+      tokens_out: Number(stats?.tokens_out ?? 0),
+      models: stats?.models ?? [],
+      last_answer_at: stats?.last_answer ?? null,
+    };
   }
 
   /** One page the agent showed in a message of this user's chat (show_html), or null. */
@@ -338,15 +370,8 @@ export class ChatService {
 /** Where every chat's folder lives in the workspace. */
 export const CHATS_FOLDER = 'Chats';
 
-/** A chat title as a folder name: no separators or characters Windows refuses, no leading dots, short. */
-export function folderSafe(title: string): string {
-  return title
-    .replace(/[\\/:*?"<>|\u0000-\u001f\u007f]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/^[\s.]+|[\s.]+$/g, '')
-    .slice(0, 60)
-    .trim();
-}
+/** A chat's workspace folder: its id, so it is unique and never changes with the title. */
+export const chatFolder = (chatId: string) => `${CHATS_FOLDER}/${chatId}`;
 
 /** A short title from the first message; good enough and free (no model call). */
 export function titleFrom(text: string): string {

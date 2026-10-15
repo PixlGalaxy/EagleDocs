@@ -207,7 +207,7 @@ const FilesPage = () => {
                       {entry.type === 'dir' ? (
                         <button type="button" onClick={() => open(entry.path)} className="flex max-w-full items-center gap-2.5 font-medium text-slate-900 hover:text-[var(--accent-700)] dark:text-slate-100 dark:hover:text-[var(--accent-300)]">
                           {entry.temp ? <FolderClock size={18} className="shrink-0 text-amber-500" aria-hidden="true" /> : <Folder size={18} className="shrink-0 text-[var(--accent-500)]" aria-hidden="true" />}
-                          <span className="truncate">{entry.name}</span>
+                          <span className="truncate">{entry.label ?? entry.name}</span>
                           {entry.temp && <Badge tone="warning">{t('files.tempBadge', { hours: ttl })}</Badge>}
                         </button>
                       ) : (

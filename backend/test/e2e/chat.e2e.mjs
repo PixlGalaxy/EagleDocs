@@ -222,8 +222,21 @@ await upload('board.png', PNG, 'image/png');
 const otherChat = (await user.req(A, 'POST', '/chats', {})).json.id;
 r = await user.req(A, 'POST', `/chats/${otherChat}/messages`, { content: 'second chat photo', model_ref: 'auto', attachments: ['Chat uploads/e2e/board.png'] });
 const otherPath = r.json.message?.attachments?.[0]?.path ?? '';
-check('each chat keeps its uploads in its own folder', otherPath === 'Chats/second chat photo/board.png' && !otherPath.startsWith(`${chatFolder}/`), otherPath);
+check('each chat keeps its uploads in its own folder, named by its id', otherPath === `Chats/${otherChat}/board.png` && chatFolder === `Chats/${attachChat}`, otherPath);
 await user.stream(B, otherChat, r.json.job_id);
+// The Files views show those id folders by the chat's title.
+r = await user.req(A, 'GET', `/files?path=Chats`);
+const listedFolder = (r.json.entries ?? []).find((e) => e.name === otherChat);
+check('the Chats folder lists each chat folder with its title', listedFolder?.type === 'dir' && typeof listedFolder.label === 'string' && listedFolder.label.length > 0, JSON.stringify(listedFolder));
+// The chat's info card: its numbers and its folder's files.
+r = await user.req(A, 'GET', `/chats/${otherChat}/info`);
+check("a chat's info has its messages, tokens, models and files", r.status === 200 && r.json.messages === 1 && r.json.answers === 1 && r.json.tokens_in + r.json.tokens_out > 0 && r.json.models.length === 1 && r.json.files.count === 1 && r.json.folder === `Chats/${otherChat}`, JSON.stringify(r.json));
+r = await admin.req(A, 'GET', `/chats/${otherChat}/info`);
+check("nobody else can read a chat's info", r.status === 404, String(r.status));
+// Deleting the chat deletes its folder.
+r = await user.req(A, 'DELETE', `/chats/${otherChat}`);
+r = await user.req(A, 'GET', `/files?path=Chats`);
+check('deleting a chat deletes its folder', !(r.json.entries ?? []).some((e) => e.name === otherChat), JSON.stringify(r.json.entries?.map((e) => e.name)));
 for (const m of [smart, mini]) await admin.req(A, 'PATCH', `/admin/models/${m.id}`, { supports_vision: false });
 
 // ---------------------------------------------------------------- thinking level and compacting

@@ -1,5 +1,5 @@
 import { api, apiUrl } from './client';
-import type { Approval, BackgroundJob, Chat, CodexDeviceStart, ContextUsage, Connection, Job, Message, ModelOption, ReasoningLevel, Steer, StreamEvent, UserModelPrefs } from './types';
+import type { Approval, BackgroundJob, Chat, CodexDeviceStart, ContextUsage, Connection, Job, Message, ModelOption, ReasoningLevel, Steer, StreamEvent, UserModelPrefs, ChatInfo } from './types';
 
 export const chatApi = {
   list: () => api.get<Chat[]>('/chats'),
@@ -15,6 +15,7 @@ export const chatApi = {
     }>(`/chats/${id}`),
   rename: (id: string, title: string) => api.patch<Chat>(`/chats/${id}`, { title }),
   remove: (id: string) => api.del<void>(`/chats/${id}`),
+  info: (id: string) => api.get<ChatInfo>(`/chats/${id}/info`),
   /**
    * Queues a job and returns its id; the answer arrives through `stream`.
    * `attachments`: workspace paths (max 10) sent with the message; the text may then be empty.

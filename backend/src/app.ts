@@ -135,7 +135,7 @@ export function createApp(deps: AppDeps): express.Application {
   const { canvasRouter, connectionRouter } = createCanvasRoutes(canvas, connections, courseFolders);
   app.use('/api/models', models);
   app.use('/api/canvas', canvasRouter);
-  const { files, rags } = createFilesRoutes(workspace);
+  const { files, rags } = createFilesRoutes(workspace, chats);
   app.use('/api/files', files);
   app.use('/api/rags', rags);
   // Canvas/SSO/Degree Works cards first, then the generic connection routes.

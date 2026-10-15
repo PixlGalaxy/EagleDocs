@@ -23,6 +23,7 @@ import { toolLabel } from '../../components/chat/toolLabels';
 import { MAX_ATTACHMENTS } from '../../components/chat/attachments';
 import WorkspacePanel from './WorkspacePanel';
 import ResizableDock from './ResizableDock';
+import ChatInfoDialog from './ChatInfoDialog';
 import { CHAT_COLUMN } from '../../components/chat/layout';
 import Modal from '../../components/ui/Modal';
 import Toast from '../../components/ui/Toast';
@@ -112,6 +113,7 @@ const ChatPage = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [renaming, setRenaming] = useState<Chat | null>(null);
   const [deleting, setDeleting] = useState<Chat | null>(null);
+  const [infoFor, setInfoFor] = useState<Chat | null>(null);
   /** How full the model's context is (last run, then live while one runs). */
   const [context, setContext] = useState<ContextUsage | null>(null);
   const [compacting, setCompacting] = useState(false);
@@ -625,7 +627,7 @@ const ChatPage = () => {
           label={t('chat.resizeList')}
           className="hidden border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block"
         >
-          <ChatSidebar chats={chats} loading={loadingChats} activeId={chatId} onNew={() => navigate('/chat')} onRename={setRenaming} onDelete={setDeleting} />
+          <ChatSidebar chats={chats} loading={loadingChats} activeId={chatId} onNew={() => navigate('/chat')} onRename={setRenaming} onInfo={setInfoFor} onDelete={setDeleting} />
         </ResizableDock>
       )}
 
@@ -643,6 +645,7 @@ const ChatPage = () => {
                 navigate('/chat');
               }}
               onRename={setRenaming}
+              onInfo={setInfoFor}
               onDelete={setDeleting}
               onClose={() => setSidebarOpen(false)}
             />
@@ -953,6 +956,7 @@ const ChatPage = () => {
         </Modal>
       )}
 
+      {infoFor && <ChatInfoDialog chat={infoFor} onClose={() => setInfoFor(null)} />}
       {deleting && (
         <Modal title={t('chat.deleteTitle')} onClose={() => setDeleting(null)}>
           <p className="text-sm text-slate-600 dark:text-slate-300">{t('chat.deleteBody', { title: deleting.title })}</p>

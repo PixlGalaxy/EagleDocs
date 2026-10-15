@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Loader2, MessageSquarePlus, Pencil, Search, Trash2, X } from 'lucide-react';
+import { Info, Loader2, MessageSquarePlus, Pencil, Search, Trash2, X } from 'lucide-react';
 import type { Chat } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { Skeleton } from '../../components/ui/kit';
@@ -12,6 +12,8 @@ interface Props {
   activeId: string | undefined;
   onNew: () => void;
   onRename: (chat: Chat) => void;
+  /** Opens the chat's info card (tokens, messages, files...). */
+  onInfo?: (chat: Chat) => void;
   onDelete: (chat: Chat) => void;
   onClose?: () => void;
 }
@@ -23,7 +25,7 @@ function bucket(iso: string): 'today' | 'week' | 'older' {
   return 'older';
 }
 
-const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onDelete, onClose }: Props) => {
+const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onInfo, onDelete, onClose }: Props) => {
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const helpersLabel = (count: number) => (count === 1 ? t('chat.helperOne') : t('chat.helpersCount', { count }));
@@ -128,6 +130,17 @@ const ChatSidebar = ({ chats, loading, activeId, onNew, onRename, onDelete, onCl
                         )}
                         {/* Shown on hover; always on touch screens, which have no hover to reveal them. */}
                         <div className="hidden shrink-0 gap-0.5 pr-1.5 group-focus-within:flex group-hover:flex [@media(hover:none)]:flex">
+                          {onInfo && (
+                            <button
+                              type="button"
+                              onClick={() => onInfo(chat)}
+                              aria-label={t('chat.info')}
+                              title={t('chat.info')}
+                              className="rounded-md p-1.5 text-slate-500 hover:bg-white hover:text-slate-900 dark:hover:bg-slate-700 dark:hover:text-white"
+                            >
+                              <Info size={14} />
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => onRename(chat)}

@@ -325,6 +325,24 @@ export interface WorkspaceEntry {
   modified_at: string;
   /** The TEMP folder: files there are deleted 24 h after their last change. */
   temp?: boolean;
+  /** A chat's folder (Chats/<id>): shown by the chat's title. */
+  label?: string;
+}
+
+/** A chat's numbers for its info card. */
+export interface ChatInfo {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  folder: string;
+  messages: number;
+  answers: number;
+  tokens_in: number;
+  tokens_out: number;
+  models: string[];
+  last_answer_at: string | null;
+  files: { count: number; bytes: number };
 }
 
 export interface WorkspaceUsage {

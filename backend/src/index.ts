@@ -1,4 +1,5 @@
 import { mkdirSync } from 'fs';
+import { migrateChatFolders } from './modules/chat/chat-folders.js';
 import { loadEnv } from './config/env.js';
 import { prepareDevEnvironment } from './dev/dev-env.js';
 import { Bus } from './bus/bus.js';
@@ -105,6 +106,8 @@ async function main() {
   const chats = new ChatService(db);
   const canvas = new CanvasService(db, connections);
   const workspace = new DiskWorkspace(config.DATA_ROOT, settings);
+  // Chats named their folder after the title before; they now use Chats/<id>.
+  await migrateChatFolders(db, workspace).catch((err: Error) => logger.warn(`Moving chat folders failed: ${err.message}`));
   // Every per-student limit comes from their plan (tiers): disk, sandbox, daily messages, jobs, schedules, helpers.
   const tiers = new TiersService(db);
   const billing = new BillingService(db, settings, tiers, config);

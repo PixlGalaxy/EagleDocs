@@ -10,6 +10,8 @@ import { requireAuth } from '../auth/session.middleware.js';
 import { titleFrom, type ChatService } from './chat.service.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import { intoChatFolder, resolveAttachments } from './attachments.js';
+import { deleteChatFolder } from './chat-folders.js';
+import { logger } from '../../logger.js';
 import { nameChat } from './titles.js';
 import { compactHistory, estimateTokens, type ReasoningLevel } from 'pixlai-engine';
 import type { ModelCatalog } from '../models/catalog.js';
@@ -49,6 +51,25 @@ function text(value: unknown, max: number): string {
   if (typeof value !== 'string' || !value.trim()) throw badRequest('chat.emptyMessage');
   if (value.length > max) throw badRequest('chat.messageTooLong');
   return value.trim();
+}
+
+/** Files and bytes in a folder, walked through the workspace (stops counting past 5,000 entries). */
+async function folderStats(workspace: DiskWorkspace, userId: string, folder: string): Promise<{ count: number; bytes: number }> {
+  let count = 0;
+  let bytes = 0;
+  const walk = async (path: string): Promise<void> => {
+    const entries = await workspace.list(userId, path).catch(() => []);
+    for (const e of entries) {
+      if (count > 5000) return;
+      if (e.type === 'dir') await walk(e.path);
+      else {
+        count++;
+        bytes += e.size;
+      }
+    }
+  };
+  if (await workspace.stat(userId, folder).catch(() => null)) await walk(folder);
+  return { count, bytes };
 }
 
 export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace: DiskWorkspace, catalog: ModelCatalog) {
@@ -112,9 +133,21 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     res.json(await chats.get(req.user!.id, routeParam(req.params.id)));
   });
 
+  /** Deleting a chat deletes its folder too (what was uploaded in it and what the agent made there). */
   chatsRouter.delete('/:id', async (req: AppRequest, res) => {
-    await chats.remove(req.user!.id, routeParam(req.params.id));
+    const userId = req.user!.id;
+    const chat = await chats.get(userId, routeParam(req.params.id));
+    const folder = await chats.folderOf(userId, chat.id);
+    await chats.remove(userId, chat.id);
+    await deleteChatFolder(workspace, userId, folder).catch((err: Error) => logger.warn(`Chat ${chat.id} deleted, its folder stays: ${err.message}`));
     res.status(204).end();
+  });
+
+  /** The chat's info card: messages, tokens, models, dates, and its folder's files. */
+  chatsRouter.get('/:id/info', async (req: AppRequest, res) => {
+    const userId = req.user!.id;
+    const info = await chats.info(userId, routeParam(req.params.id));
+    res.json({ ...info, files: await folderStats(workspace, userId, info.folder) });
   });
 
   /** Saves the message and queues the job; the answer arrives through /stream. */
@@ -130,7 +163,7 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
     const content = picked.length && (typeof body.content !== 'string' || !body.content.trim()) ? '' : text(body.content, MAX_MESSAGE_CHARS);
     // Uploads land in this chat's folder (named after its first message in a new chat).
     const attachments = picked.length
-      ? await intoChatFolder(workspace, userId, picked, await chats.folderOf(userId, chat.id, titleFrom(content || picked.map((a) => a.name).join(', '))))
+      ? await intoChatFolder(workspace, userId, picked, await chats.folderOf(userId, chat.id))
       : picked;
     const modelRef = modelRefOf(body.model_ref);
     // A new chat gets its first words as a title now, and a better one from a quick model right after.

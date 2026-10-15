@@ -7,6 +7,7 @@ import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAuth } from '../auth/session.middleware.js';
 import { IMAGE_TYPES } from '../chat/attachments.js';
+import { CHATS_FOLDER, type ChatService } from '../chat/chat.service.js';
 import { QuotaError, TEMP, TEMP_TTL_MS, type DiskWorkspace } from '../../engine/workspace.js';
 
 const MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
@@ -31,7 +32,7 @@ function asHttp(err: unknown): never {
 }
 
 /** The Files page and Settings -> RAGs: the same files the agent works with. */
-export function createFilesRoutes(workspace: DiskWorkspace) {
+export function createFilesRoutes(workspace: DiskWorkspace, chats: ChatService) {
   const files = Router();
   const rags = Router();
   files.use(requireAuth);
@@ -49,10 +50,20 @@ export function createFilesRoutes(workspace: DiskWorkspace) {
     const userId = req.user!.id;
     const path = pathParam(req.query.path);
     const entries = await workspace.list(userId, path).catch(asHttp);
+    // Chats/ holds one folder per chat, named by its id: show each one by the chat's title.
+    const titles = path === CHATS_FOLDER ? await chats.titlesById(userId, entries.map((e) => e.name)) : null;
     res.json({
       entries: entries
         .filter((e) => e.path !== RAG_DIR)
-        .map((e) => ({ name: e.name, path: e.path, type: e.type, size: e.size, modified_at: e.modifiedAt, ...(e.path === TEMP && { temp: true }) })),
+        .map((e) => ({
+          name: e.name,
+          path: e.path,
+          type: e.type,
+          size: e.size,
+          modified_at: e.modifiedAt,
+          ...(e.path === TEMP && { temp: true }),
+          ...(titles?.has(e.name) && { label: titles.get(e.name) || e.name }),
+        })),
       ...(await usage(userId)),
     });
   });

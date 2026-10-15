@@ -35,6 +35,8 @@ export const LOCKS = {
   pushKeys: 7_301_009,
   canvasFolders: 7_301_010,
   billingGrace: 7_301_011,
+  /** Moving chats' title-named folders to Chats/<id>, once. */
+  chatFolders: 7_301_012,
 } as const;
 
 /**

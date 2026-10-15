@@ -168,7 +168,7 @@ const WorkspacePanel = ({ onAttach, onClose, refreshKey }: Props) => {
               >
                 <ChevronRight size={13} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden="true" />
                 <FolderIcon size={15} className={`shrink-0 ${temp ? 'text-amber-500' : 'text-[var(--accent-500)]'}`} aria-hidden="true" />
-                <span className="min-w-0 truncate">{entry.name}</span>
+                <span className="min-w-0 truncate">{entry.label ?? entry.name}</span>
                 {entry.temp && (
                   <span className="ml-auto shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">24 h</span>
                 )}
