@@ -274,6 +274,7 @@
   "tools.memorySave": "Recordó algo sobre ti",
   "tools.memorySearch": "Revisó lo que recuerda",
   "tools.skillsLoad": "Cargó una skill",
+  "tools.toolsLoad": "Preparó herramientas",
   "tools.skillsNote": "Añadió una nota a una skill",
   "tools.scheduleCreate": "Creó una tarea programada",
   "models.auto": "Auto",

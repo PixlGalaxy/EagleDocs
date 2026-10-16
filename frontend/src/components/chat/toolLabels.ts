@@ -25,6 +25,7 @@ const TOOL_LABELS: Record<string, TranslationKey> = {
   'memory.save': 'tools.memorySave',
   'memory.search': 'tools.memorySearch',
   'skills.load': 'tools.skillsLoad',
+  'tools.load': 'tools.toolsLoad',
   'skills.add_note': 'tools.skillsNote',
   'schedule.create': 'tools.scheduleCreate',
   'agent.delegate': 'tools.agentDelegate',

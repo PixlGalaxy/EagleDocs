@@ -1,4 +1,4 @@
-import { createEngine, type Engine, type Logger } from 'pixlai-engine';
+import { createEngine, inGroup, type Engine, type Logger, type Tool } from 'pixlai-engine';
 import type { Bus } from '../bus/bus.js';
 import type { Db } from '../db/pool.js';
 import { logger } from '../logger.js';
@@ -16,6 +16,32 @@ import type { BuiltinSkills } from '../modules/skills/builtin.js';
 import { studyhawkSearch, SafeFetch } from './web.js';
 import type { SettingsService } from '../db/settings.js';
 import { SETTINGS_KEYS as K } from '../modules/admin/settings-keys.js';
+
+/** Canvas reads students need in almost every chat; the rest of Canvas loads on demand with the other groups. */
+const CANVAS_EVERYDAY = new Set(['canvas_courses', 'canvas_upcoming', 'canvas_briefing', 'canvas_assignment', 'canvas_announcements', 'canvas_find']);
+
+/**
+ * StudyHawk's own tools. With lazy groups the model sees about half of the
+ * catalog at first and loads the rest with tools_load: every tool schema
+ * travels with every model call (~65 tools were ~8,800 tokens a step).
+ */
+function hostTools(withSchool: boolean): Tool[] {
+  return [
+    ...CANVAS_TOOLS.filter((t) => CANVAS_EVERYDAY.has(t.name)),
+    ...inGroup('canvas', CANVAS_TOOLS.filter((t) => !CANVAS_EVERYDAY.has(t.name))),
+    ...inGroup('images', [...IMAGE_TOOLS, ...VISION_TOOLS]),
+    ...inGroup('chats', CHAT_TOOLS),
+    ...(withSchool ? inGroup('school', SCHOOL_TOOLS) : []),
+  ];
+}
+
+/** How the prompt's list of groups describes StudyHawk's groups (the engine describes its own). */
+const GROUP_NOTES: Record<string, string> = {
+  canvas: "Course content in Canvas: modules, pages, files and downloads into TEMP, past submissions and grades, full course details.",
+  images: "Create pictures, and look at or search the pictures in the user's files.",
+  chats: "Search and read the user's earlier conversations.",
+  school: "The user's school account: read, draft and send email (Outlook) and get the Degree Works audit.",
+};
 
 /** Who the agent is. The engine adds the user, memory, skills and its rules after this. */
 export const STUDYHAWK_PROMPT = `You are Hawk, the AI assistant (and mascot) of StudyHawk, an app for university students. You run inside StudyHawk, on its servers, and are built on PixlAI-Engine, StudyHawk's own agent engine (it plans, runs your tools and keeps working when the student closes the page). Call yourself Hawk; StudyHawk is the app.
@@ -50,7 +76,9 @@ export async function setupEngine(
   return createEngine({
     stores: { runs, memory: new PgMemoryStore(db), skills: new PgSkillStore(db, host.builtinSkills), schedules: new PgScheduleStore(db) },
     basePrompt: STUDYHAWK_PROMPT,
-    tools: [...CANVAS_TOOLS, ...IMAGE_TOOLS, ...VISION_TOOLS, ...CHAT_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
+    tools: hostTools(Boolean(sandbox)),
+    lazyToolGroups: true,
+    toolGroupNotes: GROUP_NOTES,
     workspace: host.workspace,
     extractor: documentExtractor,
     embeddings: host.embeddings,
