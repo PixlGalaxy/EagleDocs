@@ -94,12 +94,15 @@ const SandboxSection = () => {
                 </Link>
               </Notice>
             </div>
-            <div className="grid gap-5 sm:grid-cols-3">
+            <div className="grid gap-5 sm:grid-cols-2">
               <Field label={t('admin.maxActive')} hint={t('admin.maxActiveHint')}>
                 {(id, d) => <input id={id} aria-describedby={d} type="number" min={1} value={settings.max_active_per_node} onChange={num('max_active_per_node')} className={`${input} font-mono`} />}
               </Field>
               <Field label={t('admin.idle')}>
                 {(id) => <input id={id} type="number" min={1} value={settings.idle_timeout_minutes} onChange={num('idle_timeout_minutes')} className={`${input} font-mono`} />}
+              </Field>
+              <Field label={t('admin.throttleCpu')} hint={t('admin.throttleCpuHint')}>
+                {(id, d) => <input id={id} aria-describedby={d} type="number" min={0.05} max={8} step={0.05} value={settings.throttle_cpu} onChange={num('throttle_cpu')} className={`${input} font-mono`} />}
               </Field>
               <Field label={t('admin.network')} hint={t('admin.networkSoon')}>
                 {(id) => (

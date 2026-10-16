@@ -37,6 +37,8 @@ export function createSandboxAdminRoutes(deps: { db: Db; bus: Bus; config: EnvCo
       default_disk_mb: settings.getNumber(K.sandboxDiskMb, 5120),
       max_active_per_node: limits.maxActive,
       idle_timeout_minutes: limits.idleMinutes,
+      // Cores a sandbox keeps once its owner's Compute Units are used up.
+      throttle_cpu: settings.getNumber(K.sandboxThrottleCpu, 0.25),
       // Egress filtering needs a proxy (planned); today the sandbox network is open.
       network: 'open' as const,
       network_list: [] as string[],
@@ -61,6 +63,7 @@ export function createSandboxAdminRoutes(deps: { db: Db; bus: Bus; config: EnvCo
       [K.sandboxDiskMb]: Math.round(num('default_disk_mb', 100, 1_000_000)),
       [K.sandboxMaxActive]: Math.round(num('max_active_per_node', 1, 200)),
       [K.sandboxIdleMinutes]: Math.round(num('idle_timeout_minutes', 1, 1440)),
+      ...(body.throttle_cpu !== undefined && { [K.sandboxThrottleCpu]: num('throttle_cpu', 0.05, 8) }),
     });
     logger.system.info(`"${req.user!.username}" updated the sandbox settings`);
     res.json(view());

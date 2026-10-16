@@ -95,6 +95,7 @@ const free = tiers.find((t) => t.is_default);
 const plus = tiers.find((t) => t.name === 'Plus');
 check('plans are seeded: Free by default, Plus and Pro off', free?.name === 'Free' && plus && !plus.enabled, tiers.map((t) => `${t.name}${t.enabled ? '' : '(off)'}`).join(','));
 const userRow = (await admin.req('GET', '/admin/users?q=user')).json.find((u) => u.username === 'user');
+check('plans include Compute Units per day and week', free.compute_units_daily === 2 && free.compute_units_weekly === 10 && plus.compute_units_daily === 8, `${free.compute_units_daily}/${free.compute_units_weekly}, ${plus.compute_units_daily}`);
 
 // ---------------------------------------------------------------- billing off: manual plans and their limits
 r = await user.req('GET', '/config');
@@ -123,6 +124,10 @@ r = await admin.req('GET', '/admin/sandboxes');
 const box = r.json.find((s) => s.username === 'user');
 check('the next sandbox starts with the plan\'s memory', box?.mem_limit_mb === plus.mem_mb, `${box?.mem_limit_mb} vs ${plus.mem_mb}`);
 await admin.req('POST', `/admin/sandboxes/${userRow.id}/stop`);
+// Its CPU time was counted when it stopped: the windows started with that first use.
+r = await user.req('GET', '/usage');
+check('usage shows Plus compute units, with windows started by the first use', r.json.compute?.day.limit === plus.compute_units_daily && r.json.compute.week.limit === plus.compute_units_weekly && r.json.compute.day.resets_at && r.json.compute.week.resets_at && !r.json.compute.throttled, JSON.stringify(r.json.compute));
+check('usage shows the model, storage and 7 days of history', r.json.models?.studyhawk_messages >= 1 && r.json.storage?.limit_mb === plus.disk_mb && r.json.history?.length === 7 && r.json.history.every((h) => h.compute >= 0), JSON.stringify({ m: r.json.models, s: r.json.storage, h: r.json.history?.[6] }));
 r = await admin.req('PATCH', `/admin/users/${userRow.id}`, { tier_id: plus.id, tier_expires_at: new Date(Date.now() - 60_000).toISOString() });
 r = await user.req('GET', '/billing/plan');
 check('an expired manual plan falls back to Free', r.json.tier?.name === 'Free', r.json.tier?.name);

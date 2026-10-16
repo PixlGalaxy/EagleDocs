@@ -3,6 +3,7 @@ import { Link, NavLink } from 'react-router-dom';
 import {
   BookOpen,
   FolderOpen,
+  Gauge,
   LayoutDashboard,
   LogOut,
   MessageSquare,
@@ -39,6 +40,7 @@ const NAV_ITEMS: NavItem[] = [
 const ACCOUNT_MENU: (NavItem & { color: string })[] = [
   { to: '/settings?section=account', labelKey: 'nav.account', icon: UserRound, color: 'text-sky-500' },
   { to: '/settings?section=connections', labelKey: 'nav.connections', icon: Plug, color: 'text-emerald-500' },
+  { to: '/settings?section=usage', labelKey: 'usage.title', icon: Gauge, color: 'text-violet-500' },
   { to: '/settings?section=appearance', labelKey: 'nav.settings', icon: SlidersHorizontal, color: 'text-amber-500' },
 ];
 

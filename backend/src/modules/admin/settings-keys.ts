@@ -28,6 +28,8 @@ export const SETTINGS_KEYS = {
   sandboxDiskMb: 'sandbox.default_disk_mb',
   sandboxMaxActive: 'sandbox.max_active_per_node',
   sandboxIdleMinutes: 'sandbox.idle_timeout_minutes',
+  /** Cores a sandbox keeps while its owner's Compute Units are used up. */
+  sandboxThrottleCpu: 'sandbox.throttle_cpu',
   sandboxNetwork: 'sandbox.network',
   sandboxNetworkList: 'sandbox.network_list',
 

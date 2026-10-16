@@ -494,9 +494,36 @@ export interface Tier {
   /** Per day from ChatGPT/Claude (MCP); 0 = unlimited. */
   mcp_daily_calls: number;
   mcp_daily_code_runs: number;
+  /** Sandbox Compute Units per 24 h / 7 day window (each starts with the first use); 0 = unlimited. */
+  compute_units_daily: number;
+  compute_units_weekly: number;
   sort: number;
   is_default: boolean;
   enabled: boolean;
+}
+
+/** One Compute Unit window: used units, the plan's units (null = unlimited), and when it resets (null = starts with the next use). */
+export interface ComputeWindow {
+  used: number;
+  limit: number | null;
+  resets_at: string | null;
+}
+
+/** Settings → Usage. */
+export interface UsageInfo {
+  plan: { name: string; cpu: number; mem_mb: number };
+  compute: {
+    day: ComputeWindow;
+    week: ComputeWindow;
+    /** Past a limit: the sandbox runs at throttle_cpu cores until the window resets. */
+    throttled: boolean;
+    throttle_cpu: number;
+    /** The sandbox right now, when it runs. */
+    sandbox: { cpu_percent: number; mem_mb: number } | null;
+  };
+  models: { studyhawk_messages: number; daily_limit: number | null; messages: number; tokens_in: number; tokens_out: number };
+  storage: { used_mb: number; limit_mb: number; temp_used_mb: number; temp_limit_mb: number };
+  history: { day: string; compute: number; messages: number }[];
 }
 
 export interface PlanInfo {

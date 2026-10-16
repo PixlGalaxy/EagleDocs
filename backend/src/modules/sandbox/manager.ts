@@ -11,6 +11,7 @@ import { LOCKS } from '../../db/tx.js';
 import { logger } from '../../logger.js';
 import { NODE_OFFLINE_SECONDS } from '../../nodes/nodes.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
+import { ComputeMeter, type ComputeStatus } from './compute-meter.js';
 import { DockerClient } from './docker.js';
 
 const MB = 1024 * 1024;
@@ -21,6 +22,7 @@ const SLOT_WAIT_MS = 120_000;
 const ROOM_IDLE_MS = 30_000;
 const MIGRATE_WAIT_MS = 30_000;
 const REAP_EVERY_MS = 60_000;
+const METER_EVERY_MS = 60_000;
 /** last_active_at is written at most this often per sandbox. */
 const TOUCH_DB_MS = 60_000;
 
@@ -34,6 +36,14 @@ export interface SandboxHandle {
   baseUrl: string;
   token: string;
   lastUsed: number;
+}
+
+/** What a plan gives a sandbox (the tiers service passes the whole plan). */
+export interface PlanLimits {
+  cpu: number;
+  memMb: number;
+  computeUnitsDaily: number;
+  computeUnitsWeekly: number;
 }
 
 export interface SandboxLimits {
@@ -72,13 +82,36 @@ export class SandboxManager {
     private settings: SettingsService,
     private config: EnvConfig,
     readonly docker = new DockerClient(),
-  ) {}
+  ) {
+    this.meter = new ComputeMeter(
+      db,
+      docker,
+      async (userId) => {
+        const own = this.perUser ? await this.perUser(userId) : null;
+        return { computeUnitsDaily: own?.computeUnitsDaily ?? 0, computeUnitsWeekly: own?.computeUnitsWeekly ?? 0, cpu: (await this.limitsFor(userId)).cpu };
+      },
+      () => this.throttleCpu(),
+    );
+  }
 
-  /** CPU and memory of one student's sandbox (their plan); the admin defaults when unset. */
-  private perUser?: (userId: string) => Promise<{ cpu: number; memMb: number }>;
+  /** Real CPU time per student, and the slowdown once their plan's units are used. */
+  readonly meter: ComputeMeter;
 
-  setPerUserLimits(source: (userId: string) => Promise<{ cpu: number; memMb: number }>): void {
+  /** Cores a sandbox keeps while its owner's Compute Units are used up (Admin). */
+  private throttleCpu(): number {
+    return Math.min(8, Math.max(0.05, this.settings.getNumber(K.sandboxThrottleCpu, 0.25)));
+  }
+
+  /** CPU, memory and Compute Units of one student's sandbox (their plan); the admin defaults when unset. */
+  private perUser?: (userId: string) => Promise<PlanLimits>;
+
+  setPerUserLimits(source: (userId: string) => Promise<PlanLimits>): void {
     this.perUser = source;
+  }
+
+  /** A student's compute use and limits (Settings → Usage). */
+  computeStatus(userId: string): Promise<ComputeStatus> {
+    return this.meter.status(userId, this.local.get(userId)?.containerId);
   }
 
   async limitsFor(userId: string): Promise<SandboxLimits> {
@@ -130,6 +163,8 @@ export class SandboxManager {
       if (action === 'stop' && this.local.has(userId)) void this.stop(userId, 'requested by another replica');
     });
     setInterval(() => void this.reapIdle(), REAP_EVERY_MS).unref();
+    // Compute Units: every running sandbox's CPU time, once a minute.
+    setInterval(() => void this.meter.tick([...this.local.values()]), METER_EVERY_MS).unref();
     this.enabled = true;
     logger.info(`Sandboxes ready (image ${image}, network ${this.config.SANDBOX_NETWORK})`);
   }
@@ -275,6 +310,9 @@ export class SandboxManager {
 
   private async create(userId: string): Promise<SandboxHandle> {
     const limits = await this.limitsFor(userId);
+    // Units used up: it starts slowed down (and speeds up when the window ends).
+    const slowed = await this.meter.overLimit(userId).catch(() => false);
+    const cpu = slowed ? Math.min(limits.cpu, this.throttleCpu()) : limits.cpu;
     const token = randomBytes(32).toString('hex');
     const name = `studyhawk-sbx-${userId.slice(0, 8)}-${randomBytes(3).toString('hex')}`;
     const published = !this.insideDocker;
@@ -287,7 +325,7 @@ export class SandboxManager {
       Labels: { 'studyhawk.sandbox': '1', 'studyhawk.user': userId, 'studyhawk.node': this.config.NODE_ID },
       ExposedPorts: { [`${RUNNER_PORT}/tcp`]: {} },
       HostConfig: {
-        NanoCpus: Math.round(limits.cpu * 1e9),
+        NanoCpus: Math.round(cpu * 1e9),
         Memory: limits.memMb * MB,
         MemorySwap: limits.memMb * MB,
         // Linux counts threads here, and one Chromium alone uses ~250: this still stops a fork bomb.
@@ -321,6 +359,7 @@ export class SandboxManager {
       }
       await this.waitHealthy(baseUrl, token);
       const handle: SandboxHandle = { userId, containerId, name, baseUrl, token, lastUsed: Date.now() };
+      if (slowed) this.meter.markThrottled(containerId);
       this.local.set(userId, handle);
       await this.db.query(`UPDATE sandboxes SET status = 'running' WHERE user_id = $1`, [userId]);
       logger.info(`Sandbox started for ${userId} in ${Date.now() - started} ms (${this.local.size} active here)`);
@@ -354,6 +393,8 @@ export class SandboxManager {
     this.local.delete(userId);
     this.lastDbTouch.delete(userId);
     await this.db.query(`UPDATE sandboxes SET status = 'stopping' WHERE user_id = $1`, [userId]).catch(() => undefined);
+    // Its last minute of CPU still counts.
+    await this.meter.final(handle);
     await this.docker.remove(handle.containerId).catch((err) => logger.warn(`Could not remove sandbox ${handle.name}: ${(err as Error).message}`));
     await this.db.query('DELETE FROM sandboxes WHERE user_id = $1 AND container_id = $2', [userId, handle.containerId]);
     logger.info(`Sandbox of ${userId} stopped (${reason})`);

@@ -41,6 +41,7 @@ const PlanSection = () => {
     { label: t('plan.cpu'), value: `${tier.cpu} vCPU` },
     { label: t('plan.memory'), value: `${tier.mem_mb} MB` },
     { label: t('plan.disk'), value: `${(tier.disk_mb / 1024).toFixed(1)} GB` },
+    { label: t('plan.compute'), value: t('plan.computeValue', { day: tier.compute_units_daily || '∞', week: tier.compute_units_weekly || '∞' }) },
     { label: t('plan.messages'), value: tier.daily_messages ? `${usage_today.messages} / ${tier.daily_messages}` : `${usage_today.messages} / ${t('plan.unlimited')}` },
     { label: t('plan.jobs'), value: String(tier.max_background_jobs) },
     { label: t('plan.schedules'), value: String(tier.max_schedules) },
@@ -115,6 +116,7 @@ const PlanSection = () => {
                       `${(option.disk_mb / 1024).toFixed(1)} GB`,
                       option.daily_messages ? t('plan.perDay', { count: option.daily_messages }) : t('plan.unlimitedMessages'),
                       t('plan.helpersLine', { count: option.max_parallel_subagents }),
+                      t('plan.computeLine', { day: option.compute_units_daily || '∞', week: option.compute_units_weekly || '∞' }),
                     ].map((line) => (
                       <li key={line} className="flex items-center gap-2">
                         <Check size={14} className="text-[var(--accent-600)]" aria-hidden="true" />

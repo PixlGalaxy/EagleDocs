@@ -13,6 +13,7 @@ import type {
   RagSummary,
   OAuthConsent,
   PlanInfo,
+  UsageInfo,
   PushKind,
   Schedule,
   Skill,
@@ -137,6 +138,8 @@ export const mcpApi = {
 
 export const billingApi = {
   plan: () => api.get<PlanInfo>('/billing/plan'),
+  /** Settings → Usage: compute units, StudyHawk-model use and storage. */
+  usage: () => api.get<UsageInfo>('/usage'),
   tiers: () => api.get<PlanInfo['tier'][]>('/billing/tiers'),
   checkout: (tierId: string) => api.post<{ url: string }>('/billing/checkout', { tierId }),
   portal: () => api.post<{ url: string }>('/billing/portal'),

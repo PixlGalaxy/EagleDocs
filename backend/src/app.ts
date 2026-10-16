@@ -41,6 +41,7 @@ import { createPushRoutes, latestBroadcast } from './modules/push/push.routes.js
 import type { PushService } from './modules/push/push.service.js';
 import type { BuiltinSkills } from './modules/skills/builtin.js';
 import { createBillingRoutes } from './modules/billing/billing.routes.js';
+import { createUsageRoutes } from './modules/usage/usage.routes.js';
 import type { BillingService } from './modules/billing/billing.service.js';
 import type { TiersService } from './modules/billing/tiers.service.js';
 import { createMcpRoutes } from './modules/mcp/mcp.routes.js';
@@ -153,6 +154,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/oauth', mcpRoutes.consent);
   app.use('/api/mcp-apps', mcpRoutes.apps);
   app.use('/api/billing', billingRoutes.user);
+  app.use('/api/usage', createUsageRoutes({ db, tiers, sandboxes, workspace }));
   app.use('/api/admin', billingRoutes.admin);
   app.use('/api/admin', pushRoutes.admin);
   app.use('/api/admin/logs', createLogsRoutes(db));

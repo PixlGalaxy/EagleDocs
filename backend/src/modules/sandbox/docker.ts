@@ -141,6 +141,28 @@ export class DockerClient {
     return { cpuPercent: Math.round(cpuPercent * 10) / 10, memMb: Math.round(mem / 1048576) };
   }
 
+  /** The container's total CPU time so far (ns, all its processes), or null when it is gone. */
+  async cpuTotal(id: string): Promise<number | null> {
+    try {
+      const s = await this.request<{ cpu_stats?: { cpu_usage?: { total_usage?: number } } }>(
+        'GET',
+        `/containers/${id}/stats?stream=false&one-shot=true`,
+        undefined,
+        10_000,
+      );
+      const ns = s.cpu_stats?.cpu_usage?.total_usage;
+      return typeof ns === 'number' ? ns : null;
+    } catch (err) {
+      if (err instanceof DockerError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  /** Changes a running container's limits (e.g. NanoCpus to slow it down). */
+  async update(id: string, limits: { NanoCpus?: number }): Promise<void> {
+    await this.request('POST', `/containers/${id}/update`, limits);
+  }
+
   async imageExists(ref: string): Promise<boolean> {
     try {
       await this.request('GET', `/images/${encodeURIComponent(ref)}/json`);

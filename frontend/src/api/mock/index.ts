@@ -38,7 +38,7 @@ let codexPolls = 0;
 const mockSettings = {
   general: { registration_enabled: true, beta_test: false, default_language: 'en', default_theme_mode: 'system', default_theme_skin: 'hawk', studyhawk_daily_messages: 100, session_ttl_hours: 168, mcp_enabled: true, codex_enabled: true, codex_disabled_until: null as string | null },
   smtp: { host: 'smtp.gmail.com', port: 587, secure: false, user: 'no-reply@studyhawk.app', password_set: true, from_name: 'StudyHawk', from_email: 'no-reply@studyhawk.app' },
-  sandbox: { image: 'ghcr.io/pixlgalaxy/studyhawk-sandbox:latest', default_cpu: 0.5, default_mem_mb: 512, default_disk_mb: 5120, max_active_per_node: 4, idle_timeout_minutes: 15, network: 'open', network_list: [] as string[] },
+  sandbox: { image: 'ghcr.io/pixlgalaxy/studyhawk-sandbox:latest', default_cpu: 0.5, default_mem_mb: 512, default_disk_mb: 5120, max_active_per_node: 4, idle_timeout_minutes: 15, throttle_cpu: 0.25, network: 'open', network_list: [] as string[] },
   push: { vapid_public_key: 'BNbV3s3E4cPq0wP3u4oFv9M2u0n2T3x1Yb4ZQ7m8K1aJx0YfS2o9r6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3', subscriptions: 37, contact_email: 'admin@studyhawk.app' },
   billing: { enabled: false, stripe_secret_set: false, stripe_webhook_secret_set: false, grace_days: 3 },
   memoryPaused: false,
@@ -253,6 +253,19 @@ const routes: [string, RegExp, Handler][] = [
   ['DELETE', /^\/schedules\/([^/]+)$/, () => undefined],
   ['POST', /^\/push\/.*/, () => undefined],
   ['GET', /^\/billing\/plan$/, () => ({ tier: db.tiers[0], billing_enabled: true, subscription_status: null, current_period_end: null, usage_today: { messages: 23, tokens_in: 48211, tokens_out: 12007 } })],
+  ['GET', /^\/usage$/, () => ({
+    plan: { name: 'Free', cpu: 0.5, mem_mb: 512 },
+    compute: {
+      day: { used: 1.42, limit: 2, resets_at: new Date(Date.now() + 9 * 3_600_000).toISOString() },
+      week: { used: 6.1, limit: 10, resets_at: new Date(Date.now() + 80 * 3_600_000).toISOString() },
+      throttled: false,
+      throttle_cpu: 0.25,
+      sandbox: { cpu_percent: 37, mem_mb: 212 },
+    },
+    models: { studyhawk_messages: 23, daily_limit: 100, messages: 31, tokens_in: 48211, tokens_out: 12007 },
+    storage: { used_mb: 1830, limit_mb: 5120, temp_used_mb: 96, temp_limit_mb: 1024 },
+    history: [0.4, 1.9, 0, 0.8, 1.1, 0.5, 1.42].map((compute, i) => ({ day: new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10), compute, messages: [12, 40, 0, 18, 25, 9, 23][i] })),
+  })],
   ['GET', /^\/billing\/tiers$/, () => db.tiers.filter((t) => t.enabled)],
   ['POST', /^\/billing\/(checkout|portal)$/, () => ({ url: '#' })],
 

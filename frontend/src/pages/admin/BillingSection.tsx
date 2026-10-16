@@ -28,6 +28,8 @@ const NEW_TIER: Partial<Tier> & { name: string } = {
   max_subagent_depth: 2,
   mcp_daily_calls: 300,
   mcp_daily_code_runs: 40,
+  compute_units_daily: 2,
+  compute_units_weekly: 10,
   is_default: false,
   enabled: true,
 };
@@ -192,6 +194,12 @@ const BillingSection = () => {
             </Field>
             <Field label={t('admin.mcpCodeRuns')} hint={t('admin.zeroUnlimited')}>
               {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} value={draft.mcp_daily_code_runs} onChange={num('mcp_daily_code_runs')} className={`${input} font-mono`} />}
+            </Field>
+            <Field label={t('admin.computeDaily')} hint={t('admin.computeHint')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} step={0.5} value={draft.compute_units_daily} onChange={num('compute_units_daily')} className={`${input} font-mono`} />}
+            </Field>
+            <Field label={t('admin.computeWeekly')} hint={t('admin.zeroUnlimited')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="number" min={0} step={0.5} value={draft.compute_units_weekly} onChange={num('compute_units_weekly')} className={`${input} font-mono`} />}
             </Field>
             <Field label={t('admin.sortOrder')}>
               {(id) => <input id={id} type="number" value={draft.sort ?? 0} onChange={num('sort')} className={`${input} font-mono`} />}

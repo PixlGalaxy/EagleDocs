@@ -79,6 +79,8 @@ export interface SandboxSettings {
   default_disk_mb: number;
   max_active_per_node: number;
   idle_timeout_minutes: number;
+  /** Cores a sandbox keeps once its owner's Compute Units are used up. */
+  throttle_cpu: number;
   network: 'open' | 'blocklist' | 'allowlist';
   network_list: string[];
 }
