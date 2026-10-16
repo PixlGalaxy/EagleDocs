@@ -47,7 +47,8 @@ services:
     volumes:
       - pg-data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      # Only this machine: never the LAN.
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U studyhawk"]
       interval: 2s
@@ -76,7 +77,7 @@ services:
   balancer:
     image: nginx:alpine
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on: [node-a, node-b]
     configs:
       - source: balancer

@@ -69,28 +69,32 @@ To try two replicas behind a balancer, with Postgres and SearXNG:
 
 ```bash
 MASTER_KEY=$(openssl rand -base64 32) docker compose -f docker-compose.dev.yml up --build
-# http://localhost:8080  (admin / change-me-now)
+# http://localhost:8080  (admin / change-me-now; production refuses that password outside localhost)
 ```
 
 ## Production
 
-One container per machine from `ghcr.io/pixlgalaxy/studyhawk`, behind your own TLS proxy. Postgres and the shared
-`/data` storage are external.
+One container per machine from `ghcr.io/pixlgalaxy/studyhawk`, behind your own TLS proxy (for example Cloudflare
+Tunnel → Nginx Proxy Manager). Postgres and the shared `/data` storage are external.
 
 ```bash
 cp .env.example .env    # fill in DATABASE_URL, MASTER_KEY, PUBLIC_URL, ADMIN_*
-docker run -d --name studyhawk --env-file .env -e NODE_ID=node-1 -p 80:80 \
+docker network create edge   # StudyHawk, Nginx Proxy Manager and cloudflared share it; no port is published
+docker run -d --name studyhawk --network edge --env-file .env -e NODE_ID=node-1 \
   -v /mnt/studyhawk/data:/data \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -e SANDBOX_DATA_HOST_PATH=/mnt/studyhawk/data \
-  ghcr.io/pixlgalaxy/studyhawk:latest
+  ghcr.io/pixlgalaxy/studyhawk:<version>
 ```
 
 - `MASTER_KEY` must be identical on every replica. Losing it means every stored secret has to be entered again.
 - `SANDBOX_DATA_HOST_PATH` is where `/data` lives on the host, so Docker can mount each user's folder into their sandbox.
-- Set `COOKIE_SECURE=true`, a `https` `PUBLIC_URL`, and `TRUST_PROXY` to your proxies only.
+- A `https` `PUBLIC_URL` makes the session cookies `Secure`. Set `TRUST_PROXY` to the address of the proxy in front only,
+  and `CLIENT_IP_HEADER=cf-connecting-ip` behind Cloudflare.
+- The Docker socket gives the container control of the host's Docker; see the open items in SECURITY.md.
 - SMTP, models, institutions, plans, Stripe and web push are set in the admin panel after the first login.
-- Read "Deploying safely" and "Open items" in [SECURITY.md](SECURITY.md) before opening it to students.
+- Read "Deploying safely" (with the Nginx Proxy Manager and Cloudflare settings) and "Open items" in
+  [SECURITY.md](SECURITY.md) before opening it to students.
 
 Every variable is documented in [.env.example](.env.example). The ones you usually change:
 

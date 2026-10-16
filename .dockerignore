@@ -10,3 +10,14 @@ hermes-agent
 Skills
 plans
 sandbox
+# Secrets and local data must never reach the build context (or its cache).
+**/.env
+**/.env.*
+!.env.example
+**/dev-postgres
+**/dev-master.key
+**/*.pem
+**/*.key
+backend/fgcu-live
+backend/test
+testingelems
