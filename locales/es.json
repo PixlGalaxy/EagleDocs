@@ -9,6 +9,7 @@
   "common.edit": "Editar",
   "common.loading": "Cargando…",
   "common.networkError": "No se pudo conectar con el servidor. Revisa tu conexión e inténtalo de nuevo.",
+  "common.reconnecting": "Reconectando",
   "common.refresh": "Actualizar",
   "common.remove": "Quitar",
   "common.save": "Guardar",

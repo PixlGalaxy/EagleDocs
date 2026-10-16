@@ -9,6 +9,7 @@
   "common.edit": "Edit",
   "common.loading": "Loading…",
   "common.networkError": "Could not reach the server. Check your connection and try again.",
+  "common.reconnecting": "Reconnecting",
   "common.refresh": "Refresh",
   "common.remove": "Remove",
   "common.save": "Save",

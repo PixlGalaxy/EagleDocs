@@ -64,7 +64,7 @@ function Mark({ kind, size }: { kind: BrandLoaderVariant; size: number }) {
 }
 
 /** One cycle of every animation (brand-loader.css --bl-dur). */
-const CYCLE_MS = 2400;
+export const CYCLE_MS = 2400;
 
 /** Any animation but `not`, so the same one never plays twice in a row. */
 function pickOther(not?: BrandLoaderVariant): BrandLoaderVariant {
