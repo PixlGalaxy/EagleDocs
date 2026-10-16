@@ -53,7 +53,12 @@ const ReportDialog = ({ onClose }: { onClose: () => void }) => {
   const [sent, setSent] = useState(false);
 
   // Each preview URL is released when it is replaced or the dialog closes.
-  useEffect(() => () => shot && URL.revokeObjectURL(shot.url), [shot]);
+  useEffect(
+    () => () => {
+      if (shot) URL.revokeObjectURL(shot.url);
+    },
+    [shot],
+  );
 
   const pick = (candidate: File | null | undefined) => {
     if (!candidate) return;
