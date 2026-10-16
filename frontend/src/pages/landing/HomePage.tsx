@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useReducedMotion, useScroll, useTransform, type TargetAndTransition, type Transition } from 'motion/react';
+import { motion, useReducedMotion, type TargetAndTransition, type Transition } from 'motion/react';
 import { ArrowRight, BookOpen, Box, GraduationCap, KeyRound, Server, Sparkles, Wand2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
@@ -66,21 +66,19 @@ function Reveal({ children, delay = 0, className = '' }: { children: React.React
 
 /**
  * Real screenshots of the app (taken from the running UI), shown in a window
- * frame that starts tilted back and flattens as it scrolls into view.
+ * frame that rises into place, sharpening from a soft blur, once it comes into view.
  */
 function ProductShot() {
   const { t } = useI18n();
   const reduce = useReducedMotion();
-  const ref = useRef<HTMLDivElement>(null);
-  const { scrollYProgress } = useScroll({ target: ref, offset: ['start end', 'start 0.25'] });
-  const rotateX = useTransform(scrollYProgress, [0, 1], [24, 0]);
-  const scale = useTransform(scrollYProgress, [0, 1], [0.88, 1]);
-  const y = useTransform(scrollYProgress, [0, 1], [40, 0]);
 
   return (
-    <div ref={ref} className="mx-auto mt-16 max-w-6xl px-4 [perspective:1600px] sm:px-6 md:mt-20">
+    <div className="mx-auto mt-16 max-w-6xl px-4 sm:px-6 md:mt-20">
       <motion.div
-        style={reduce ? undefined : { rotateX, scale, y, transformOrigin: 'center top' }}
+        initial={reduce ? false : { opacity: 0, y: 64, scale: 0.94, filter: 'blur(10px)' }}
+        whileInView={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+        viewport={{ once: true, amount: 0.15 }}
+        transition={{ duration: 1.1, delay: 0.25, ease }}
         className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_50px_120px_-40px_rgb(0_70_209/0.45)] dark:border-slate-800 dark:bg-slate-900 md:rounded-[1.75rem]"
       >
         <div className="flex h-9 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 dark:border-slate-800 dark:bg-slate-900" aria-hidden="true">
@@ -157,15 +155,15 @@ function HeroLogo() {
       aria-label={eagleShown ? 'EagleDocs' : 'StudyHawk'}
       className="mx-auto mb-8 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]"
     >
-      <span className="relative block h-[72px] w-[72px]">
+      <span className="relative block h-24 w-24 md:h-32 md:w-32">
         <motion.span className="absolute inset-0 block" initial={false} {...sh}>
           <BrandIcon className="h-full w-full" />
         </motion.span>
         <motion.img
           src="/brand/eagledocs-legacy.webp"
           alt=""
-          width={72}
-          height={72}
+          width={128}
+          height={128}
           className="pointer-events-none absolute inset-0 h-full w-full"
           initial={{ opacity: 0 }}
           {...ed}

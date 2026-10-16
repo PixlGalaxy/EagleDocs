@@ -51,7 +51,7 @@
   "home.phrase8": "Tu compañero académico, estudies donde estudies.",
   "home.subtitle": "Pregunta por tus clases con tus propias palabras. StudyHawk lee Canvas y Degree Works y los convierte en un plan.",
   "home.demoQuestion": "¿Qué tengo que entregar esta semana?",
-  "home.demoModel": "Auto -> GPT-5",
+  "home.demoModel": "Auto -> ChatGPT gpt-5.5",
   "home.demoAnswer": "Tienes **3 entregas** antes del domingo:\n\n1. **ACG 2021, Guided Practice 6** (miércoles, 11:59 PM). Cerca de 1.5 h, vale 20 pts.\n2. **MAN 3025, Connect Quiz 4** (jueves). Cerca de 1 h.\n3. **ENC 1102, Draft 2** (sábado). Un anuncio nuevo dice que cambió la rúbrica, así que empieza por aquí.\n\n¿Quieres un plan de estudio para el quiz?",
   "home.demoCaption": "Conversación de ejemplo, con los mismos componentes que usa la app.",
   "home.connectTitle": "Hecho alrededor de lo que ya usan tus clases",

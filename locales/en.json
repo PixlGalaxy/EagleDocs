@@ -51,7 +51,7 @@
   "home.phrase8": "Your academic companion, wherever you study.",
   "home.subtitle": "Ask about your classes in plain language. StudyHawk reads Canvas and Degree Works and turns them into a plan.",
   "home.demoQuestion": "What do I have due this week?",
-  "home.demoModel": "Auto -> GPT-5",
+  "home.demoModel": "Auto -> ChatGPT gpt-5.5",
   "home.demoAnswer": "You have **3 things due** before Sunday:\n\n1. **ACG 2021, Guided Practice 6** (Wed, 11:59 PM). About 1.5 h, worth 20 pts.\n2. **MAN 3025, Connect Quiz 4** (Thu). About 1 h.\n3. **ENC 1102, Draft 2** (Sat). A new announcement says the rubric changed, so start here.\n\nWant a study plan for the quiz?",
   "home.demoCaption": "Example conversation, rendered with the same components as the app.",
   "home.connectTitle": "Built around the tools your classes already use",

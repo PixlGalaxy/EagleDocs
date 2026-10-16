@@ -27,10 +27,11 @@ function useIsDesktop() {
 function callsAt(step: number): ToolCall[] {
   const status = (doneAfter: number): ToolCall['status'] => (step > doneAfter ? 'done' : 'running');
   const calls: ToolCall[] = [];
-  if (step >= 1) calls.push({ id: 'up', name: 'canvas.upcoming', args: { days: 7 }, status: status(1) });
+  if (step >= 1) calls.push({ id: 'up', name: 'canvas_upcoming', args: { days: 7 }, status: status(1) });
   if (step >= 2) {
-    calls.push({ id: 'an', name: 'canvas.announcements', args: { since: '7d' }, status: status(2) });
-    calls.push({ id: 'dw', name: 'degreeworks.audit', args: {}, status: status(2) });
+    calls.push({ id: 'an', name: 'canvas_announcements', args: { days: 7 }, status: status(2) });
+    calls.push({ id: 'dw', name: 'degreeworks_audit', args: {}, status: status(2) });
+    calls.push({ id: 'ch', name: 'chats_search', args: { query: 'work schedule' }, status: status(2) });
   }
   return calls;
 }
@@ -58,7 +59,7 @@ const StoryScroll = () => {
   const shown = animated ? step : STEPS.length - 1;
 
   return (
-    <section ref={ref} className={animated ? 'relative h-[340vh] overflow-x-clip' : 'relative overflow-x-clip'} aria-labelledby="story-title">
+    <section ref={ref} className={animated ? 'relative h-[200vh] overflow-x-clip' : 'relative overflow-x-clip'} aria-labelledby="story-title">
       <div className={`${animated ? 'sticky top-16 flex h-[calc(100dvh-4rem)] items-center' : 'py-20'}`}>
         <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 sm:px-6 md:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:gap-20">
           <div>
