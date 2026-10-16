@@ -1,11 +1,6 @@
 import { BRAND_MARKS, type BrandMark } from '../brandMarks';
 
-const ORDER = ['claude', 'deepseek', 'codex', 'openai'] as const;
-
-// The track scrolls by exactly half its width, then restarts. That only looks
-// seamless if each half is wider than the screen, so one half repeats the
-// set this many times (4 marks x 4 is roughly 3300px, past 2560px ultrawides).
-const SETS_PER_HALF = 4;
+const ORDER = ['claude', 'codex', 'openai', 'gemini', 'deepseek', 'meta', 'kimi', 'ollama'] as const;
 
 function Mark({ mark }: { mark: BrandMark }) {
   return (
@@ -27,25 +22,15 @@ function Mark({ mark }: { mark: BrandMark }) {
   );
 }
 
-/**
- * The page's single marquee: model providers StudyHawk can use.
- * Pauses on hover; under reduced motion it becomes a static, wrapping row.
- */
-const LogoMarquee = ({ label }: { label: string }) => {
-  const marks = ORDER.map((key) => BRAND_MARKS[key]!);
-  const half = Array.from({ length: SETS_PER_HALF }, () => marks).flat();
-  return (
-    <div className="logo-marquee relative overflow-hidden" role="list" aria-label={label}>
-      <div className="logo-marquee-track flex w-max items-center gap-16 pr-16">
-        {[...half, ...half].map((mark, i) => (
-          // Only the first copy of each mark is announced to screen readers.
-          <span key={`${mark.title}-${i}`} role="listitem" aria-hidden={i >= marks.length || undefined}>
-            <Mark mark={mark} />
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-};
+/** The model providers StudyHawk can use, as a fixed, centered row that wraps on small screens. */
+const LogoMarquee = ({ label }: { label: string }) => (
+  <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-center gap-x-12 gap-y-6 px-4" role="list" aria-label={label}>
+    {ORDER.map((key) => (
+      <span key={key} role="listitem">
+        <Mark mark={BRAND_MARKS[key]!} />
+      </span>
+    ))}
+  </div>
+);
 
 export default LogoMarquee;

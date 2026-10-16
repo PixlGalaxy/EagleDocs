@@ -14,6 +14,7 @@ const FALLBACK: RuntimeConfig = {
   mcpEnabled: false,
   vapidPublicKey: null,
   broadcast: null,
+  statusPageUrl: null,
 };
 
 interface AppConfigValue extends RuntimeConfig {

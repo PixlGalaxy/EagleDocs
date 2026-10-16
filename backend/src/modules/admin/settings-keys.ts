@@ -47,6 +47,9 @@ export const SETTINGS_KEYS = {
   /** Secret (secret_enc): a Discord webhook URL. */
   contactDiscordWebhook: 'contact.discord_webhook',
 
+  /** Public Better Stack status page shown in the site's navbar; empty shows the state as unknown. */
+  statusPageUrl: 'status.page_url',
+
   /** Paid web search after the free ones: 'none', 'brave' or 'tavily'. */
   webSearchPaidProvider: 'web_search.paid_provider',
   /** Secret (secret_enc). */

@@ -18,6 +18,7 @@ import { SETTINGS_KEYS as K } from './settings-keys.js';
 import type { BuiltinSkills } from '../skills/builtin.js';
 import type { UsersAdminService } from './users-admin.service.js';
 import { checkCanvas } from '../institutions/canvas-check.js';
+import { DEFAULT_STATUS_PAGE_URL, normalizeStatusUrl } from '../status/status-page.js';
 
 const activePause = (until: string | null) => (until && new Date(until).getTime() > Date.now() ? until : null);
 
@@ -314,6 +315,7 @@ export function createAdminRoutes(deps: {
     codex_enabled: settings.getBoolean(K.codexEnabled, true),
     // A pause that already ended reads as healthy.
     codex_disabled_until: activePause(settings.getJson<string | null>(K.codexDisabledUntil, null)),
+    status_page_url: settings.getString(K.statusPageUrl, DEFAULT_STATUS_PAGE_URL),
   });
 
   router.get('/settings', (_req, res) => res.json(generalView()));
@@ -341,6 +343,12 @@ export function createAdminRoutes(deps: {
     if (body.codex_enabled !== undefined) updates[K.codexEnabled] = bool(body.codex_enabled);
     // Only clearing is allowed by hand ("turn back on now"); the breaker sets it.
     if (body.codex_disabled_until === null) updates[K.codexDisabledUntil] = null;
+    if (body.status_page_url !== undefined) {
+      if (typeof body.status_page_url !== 'string') throw badRequest('adminSettings.invalidValue');
+      const url = body.status_page_url.trim() ? normalizeStatusUrl(body.status_page_url) : '';
+      if (url === null) throw badRequest('adminSettings.invalidValue');
+      updates[K.statusPageUrl] = url;
+    }
 
     await settings.setMany(updates);
     logger.system.info(`"${req.user!.username}" updated settings: ${Object.keys(updates).join(', ')}`);

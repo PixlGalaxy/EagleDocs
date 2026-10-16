@@ -134,6 +134,8 @@ export interface GeneralSettings {
   codex_enabled: boolean;
   /** Set by the circuit breaker when OpenAI starts rejecting calls; null when healthy. */
   codex_disabled_until: string | null;
+  /** Better Stack status page shown in the site's navbar; empty shows the state as unknown. */
+  status_page_url: string;
 }
 
 export interface PushSettings {

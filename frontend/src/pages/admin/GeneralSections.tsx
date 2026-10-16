@@ -96,6 +96,11 @@ export const GeneralSection = () => {
           <Field label={t('admin.sessionTtl')} hint={t('admin.sessionTtlHint')}>
             {(id, d) => <input id={id} aria-describedby={d} type="number" min={1} value={s.session_ttl_hours} onChange={(e) => setS({ ...s, session_ttl_hours: Number(e.target.value) })} className={`${input} font-mono`} />}
           </Field>
+          <div className="sm:col-span-2">
+            <Field label={t('admin.statusPageUrl')} hint={t('admin.statusPageUrlHint')}>
+              {(id, d) => <input id={id} aria-describedby={d} type="url" value={s.status_page_url} onChange={(e) => setS({ ...s, status_page_url: e.target.value })} className={`${input} font-mono`} placeholder="https://status.example.com" />}
+            </Field>
+          </div>
         </div>
         <button type="button" onClick={() => void save()} disabled={saving} className={`${btn.primary} mt-6`}>
           {saving && <Loader2 size={16} className="animate-spin" />}

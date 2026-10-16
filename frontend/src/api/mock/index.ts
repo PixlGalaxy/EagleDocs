@@ -36,7 +36,7 @@ const mcpApps = [
 const approvals: Approval[] = [];
 let codexPolls = 0;
 const mockSettings = {
-  general: { registration_enabled: true, beta_test: false, default_language: 'en', default_theme_mode: 'system', default_theme_skin: 'hawk', studyhawk_daily_messages: 100, session_ttl_hours: 168, mcp_enabled: true, codex_enabled: true, codex_disabled_until: null as string | null },
+  general: { registration_enabled: true, beta_test: false, default_language: 'en', default_theme_mode: 'system', default_theme_skin: 'hawk', studyhawk_daily_messages: 100, session_ttl_hours: 168, mcp_enabled: true, codex_enabled: true, codex_disabled_until: null as string | null, status_page_url: 'https://onlinestatus.eagledocs.org' },
   smtp: { host: 'smtp.gmail.com', port: 587, secure: false, user: 'no-reply@studyhawk.app', password_set: true, from_name: 'StudyHawk', from_email: 'no-reply@studyhawk.app' },
   contact: { email_to: 'support@studyhawk.app', discord_webhook_set: false, smtp_configured: true },
   sandbox: { image: 'ghcr.io/pixlgalaxy/studyhawk-sandbox:latest', default_cpu: 0.5, default_mem_mb: 512, default_disk_mb: 5120, max_active_per_node: 4, idle_timeout_minutes: 15, throttle_cpu: 0.25, network: 'open', network_list: [] as string[] },
@@ -60,7 +60,9 @@ const routes: [string, RegExp, Handler][] = [
     mcpEnabled: mockSettings.general.mcp_enabled,
     vapidPublicKey: mockSettings.push.vapid_public_key,
     broadcast: null,
+    statusPageUrl: mockSettings.general.status_page_url || null,
   })],
+  ['GET', /^\/status$/, () => ({ url: mockSettings.general.status_page_url || null, state: mockSettings.general.status_page_url ? 'operational' : 'unknown' })],
 
   // auth
   ['GET', /^\/auth\/me$/, () => ({ user: db.asUser(sessionUser()) })],

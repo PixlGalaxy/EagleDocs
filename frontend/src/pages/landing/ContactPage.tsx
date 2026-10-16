@@ -4,7 +4,8 @@ import { useI18n } from '../../i18n/I18nContext';
 import PublicLayout from '../../components/layout/PublicLayout';
 import { Field, Notice } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
-import { DISCORD_URL, GITHUB_URL, STATUS_URL, SUPPORT_EMAIL } from '../../components/brand';
+import { DISCORD_URL, GITHUB_URL, SUPPORT_EMAIL } from '../../components/brand';
+import { useAppConfig } from '../../context/AppConfigContext';
 import { ApiError } from '../../api/client';
 import { contactApi } from '../../api/contact';
 
@@ -12,6 +13,7 @@ const EMPTY = { name: '', email: '', message: '', website: '' };
 
 const ContactPage = () => {
   const { t } = useI18n();
+  const { statusPageUrl: statusUrl } = useAppConfig();
   const [form, setForm] = useState(EMPTY);
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [error, setError] = useState('');
@@ -56,9 +58,11 @@ const ContactPage = () => {
                 <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
                   Discord
                 </a>
-                <a href={STATUS_URL} target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
-                  {t('landingNav.status')}
-                </a>
+                {statusUrl && (
+                  <a href={statusUrl} target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
+                    {t('landingNav.status')}
+                  </a>
+                )}
               </dd>
             </div>
           </dl>

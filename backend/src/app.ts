@@ -47,6 +47,7 @@ import type { BuiltinSkills } from './modules/skills/builtin.js';
 import { createBillingRoutes } from './modules/billing/billing.routes.js';
 import { createUsageRoutes } from './modules/usage/usage.routes.js';
 import { createExportRoutes } from './modules/export/export.routes.js';
+import { StatusPage } from './modules/status/status-page.js';
 import type { BillingService } from './modules/billing/billing.service.js';
 import type { TiersService } from './modules/billing/tiers.service.js';
 import { createMcpRoutes } from './modules/mcp/mcp.routes.js';
@@ -114,6 +115,12 @@ export function createApp(deps: AppDeps): express.Application {
     }
   });
 
+  // The public status page's overall state for the site's navbar (Admin -> General sets the page).
+  const statusPage = new StatusPage(settings);
+  app.get('/api/status', async (_req, res) => {
+    res.json(await statusPage.status());
+  });
+
   // Runtime settings for the static frontend (frontend/src/api/config.ts), read
   // fresh so an admin panel edit shows on the next request without a rebuild.
   app.get('/api/config', async (req: AppRequest, res) => {
@@ -130,6 +137,7 @@ export function createApp(deps: AppDeps): express.Application {
       mcpEnabled: settings.getBoolean(K.mcpEnabled, false),
       vapidPublicKey: push.publicKey(),
       broadcast: await latestBroadcast(db, req.user?.institution_id ?? null),
+      statusPageUrl: statusPage.url(),
     });
   });
 

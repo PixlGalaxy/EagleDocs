@@ -8,7 +8,7 @@ const PublicFooter = () => {
 
   return (
     <footer className="border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-      <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-6 text-sm text-slate-600 dark:text-slate-400 sm:px-6 md:flex-row md:items-center md:justify-between">
+      <div className="flex w-full flex-col gap-4 px-4 py-6 lg:px-10 text-sm text-slate-600 dark:text-slate-400 sm:px-6 md:flex-row md:items-center md:justify-between">
         <div className="flex flex-wrap gap-x-6 gap-y-2">
           <Link to="/tos" className="hover:text-slate-900 dark:hover:text-white">
             {t('footer.terms')}

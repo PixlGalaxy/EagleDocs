@@ -19,6 +19,15 @@ export interface RuntimeConfig {
   /** Public VAPID key; null while push is not configured. */
   vapidPublicKey: string | null;
   broadcast: { id: string; title: string; body: string; url: string | null } | null;
+  /** Public status page (Admin -> General); null when none is set. */
+  statusPageUrl: string | null;
+}
+
+/** The status page's overall state, read by the server (Better Stack's aggregate_state). */
+export type SiteStatusState = 'operational' | 'degraded' | 'downtime' | 'maintenance' | 'unknown';
+
+export function getSiteStatus(): Promise<{ url: string | null; state: SiteStatusState }> {
+  return api.get('/status');
 }
 
 let pending: Promise<RuntimeConfig> | null = null;

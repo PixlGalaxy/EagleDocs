@@ -553,35 +553,3 @@ h3 {
 .prose-chat td { overflow-wrap: normal; min-width: 6ch; }
 .prose-chat blockquote { border-left: 3px solid rgb(148 163 184 / 0.5); padding-left: 0.875rem; color: rgb(100 116 139); }
 .dark .prose-chat blockquote { color: rgb(148 163 184); }
-
-/* Landing: provider logo marquee (the only marquee on the page). */
-.logo-marquee {
-  mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
-}
-@media (prefers-reduced-motion: no-preference) {
-  .logo-marquee-track {
-    animation: marquee 75s linear infinite;
-  }
-  .logo-marquee:hover .logo-marquee-track {
-    animation-play-state: paused;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .logo-marquee {
-    mask-image: none;
-  }
-  .logo-marquee-track {
-    width: auto;
-    flex-wrap: wrap;
-    justify-content: center;
-    row-gap: 1.5rem;
-  }
-  .logo-marquee-track > [aria-hidden='true'] {
-    display: none;
-  }
-}
-@keyframes marquee {
-  to {
-    transform: translateX(-50%);
-  }
-}
