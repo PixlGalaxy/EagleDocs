@@ -203,7 +203,7 @@
   "chat.composerPlaceholder": "Pregúntale lo que sea a Hawk…",
   "chat.send": "Enviar",
   "chat.stop": "Detener",
-  "chat.disclaimer": "Hawk puede equivocarse. Verifica las fechas importantes en Canvas.",
+  "chat.disclaimer": "Hawk puede equivocarse. Verifica la información importante.",
   "chat.queued": "Esperando un espacio de trabajo libre (posición {position})",
   "chat.starting": "Iniciando…",
   "chat.mfaTitle": "Aprueba la solicitud de Duo en tu teléfono",
