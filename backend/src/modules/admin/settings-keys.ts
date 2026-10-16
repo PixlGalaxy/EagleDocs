@@ -6,6 +6,8 @@ export const SETTINGS_KEYS = {
   registrationEnabled: 'registration.enabled',
   /** Beta test: nobody signs up on their own; testers sign in with accounts the admin made. */
   betaTest: 'registration.beta_test',
+  /** Secret (secret_enc): the Discord webhook the BetaTest Bug Report button posts to. */
+  betaReportWebhook: 'beta.discord_webhook',
   sessionTtlHours: 'session.ttl_hours',
   studyhawkDailyMessages: 'models.studyhawk_daily_messages',
   mcpEnabled: 'mcp.enabled',

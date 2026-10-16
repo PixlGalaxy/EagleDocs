@@ -19,6 +19,8 @@ import { createAvatarsRoutes } from './modules/avatars/avatars.routes.js';
 import { createLogsRoutes } from './modules/logs/logs.routes.js';
 import { createContactRoutes } from './modules/contact/contact.routes.js';
 import { ContactService } from './modules/contact/contact.service.js';
+import { createBetaReportRoutes } from './modules/beta-report/beta-report.routes.js';
+import { BetaReportService } from './modules/beta-report/beta-report.service.js';
 import type { CourseSpaces } from './modules/canvas/course-spaces.js';
 import type { InstitutionsService } from './modules/institutions/institutions.service.js';
 import type { MailService } from './modules/mail/mail.service.js';
@@ -123,6 +125,10 @@ export function createApp(deps: AppDeps): express.Application {
 
   // Runtime settings for the static frontend (frontend/src/api/config.ts), read
   // fresh so an admin panel edit shows on the next request without a rebuild.
+  // DISCORD_WEBHOOK_TEST_BASE (a local fake for the e2e) never applies in production.
+  const discordTestBase = config.NODE_ENV === 'production' ? undefined : process.env.DISCORD_WEBHOOK_TEST_BASE || undefined;
+  const betaReports = new BetaReportService(settings, discordTestBase);
+
   app.get('/api/config', async (req: AppRequest, res) => {
     res.json({
       language: settings.getString(K.defaultLanguage, config.LANGUAGE),
@@ -131,6 +137,7 @@ export function createApp(deps: AppDeps): express.Application {
       registrationEnabled: settings.getBoolean(K.registrationEnabled, true),
       emailConfigured: mail.isConfigured(),
       betaTest: settings.getBoolean(K.betaTest, false),
+      betaReport: betaReports.enabled(),
       institutions: await institutions.listPublic(),
       billingEnabled: billing.enabled(),
       codexEnabled: catalog.codexAvailable(),
@@ -171,15 +178,19 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/usage', createUsageRoutes({ db, tiers, sandboxes, workspace }));
   app.use('/api/account/export', createExportRoutes({ db, workspace }));
   app.use('/api/admin', billingRoutes.admin);
-  // The public Contact page: email plus Discord. DISCORD_WEBHOOK_TEST_BASE (a local fake for the e2e) never applies in production.
+  // The public Contact page: email plus Discord.
   const contactRoutes = createContactRoutes({
     db,
     settings,
     mail,
-    contact: new ContactService(settings, mail, t, config.NODE_ENV === 'production' ? undefined : process.env.DISCORD_WEBHOOK_TEST_BASE || undefined),
+    contact: new ContactService(settings, mail, t, discordTestBase),
   });
   app.use('/api/contact', contactRoutes.open);
   app.use('/api/admin', contactRoutes.admin);
+  // The BetaTest Bug Report button: only while the beta test is on and its channel is set.
+  const betaReportRoutes = createBetaReportRoutes({ db, settings, reports: betaReports });
+  app.use('/api/beta-report', betaReportRoutes.user);
+  app.use('/api/admin', betaReportRoutes.admin);
   app.use('/api/admin', pushRoutes.admin);
   app.use('/api/admin/logs', createLogsRoutes(db));
   app.use('/api/admin/models', createAdminModelRoutes(db, secrets));
