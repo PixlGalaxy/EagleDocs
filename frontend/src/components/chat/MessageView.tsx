@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import Markdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CircleAlert, CornerDownRight, GitBranch, RotateCcw, Shuffle, Sparkles } from 'lucide-react';
@@ -6,8 +6,9 @@ import ModelPicker from './ModelPicker';
 import { useI18n } from '../../i18n/I18nContext';
 import type { MessageAttachment, ModelOption, ToolCall } from '../../api/types';
 import ToolCallList from './ToolCallList';
-import { MessageAttachments } from './AttachmentViews';
+import { ImageLightbox, MessageAttachments } from './AttachmentViews';
 import { BrandIcon } from '../BrandLogo';
+import { BrandLoaderCycle } from '../ui/BrandLoader';
 import { useSmoothText } from './useSmoothText';
 import QuestionCard from './QuestionCard';
 import HtmlDisplay from './HtmlDisplay';
@@ -16,6 +17,9 @@ import { FileCards } from './LinkedFiles';
 import UserBubble from './UserBubble';
 import type { UserQuestion } from '../../api/types';
 import { fileUrl, workspaceLinkPath } from './attachments';
+
+/** The agent's picture tool: shown as a loader square while it works, never as a tool card. */
+const IMAGE_TOOL = 'image_generate';
 
 interface Props {
   role: 'user' | 'assistant';
@@ -63,6 +67,20 @@ const urlTransform = (url: string, key: string) => {
   return path ? fileUrl(path, key === 'src') : defaultUrlTransform(url);
 };
 
+/** A picture from the workspace in an answer (e.g. one the agent made): kept to a readable size, a click shows it whole. */
+const AnswerImage = ({ src, alt }: { src: string; alt: string }) => {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} aria-label={t('chat.openImage', { name: alt || 'image' })} className="my-2 block max-w-full cursor-zoom-in">
+        <img src={src} alt={alt} loading="lazy" className="max-h-96 w-auto max-w-full rounded-xl border border-slate-200 object-contain dark:border-slate-700" />
+      </button>
+      {open && <ImageLightbox src={src} name={alt || 'image'} onClose={() => setOpen(false)} />}
+    </>
+  );
+};
+
 /**
  * Answers and reports share it: links always open in a new tab. Outside
  * pictures become links: an image loads without a click, so injected text
@@ -107,7 +125,7 @@ export const MarkdownBody = memo(({ text, fileCards = false }: { text: string; f
         ),
       img: ({ src, alt }) =>
         isOwnFile(src) ? (
-          <img src={src as string} alt={alt ?? ''} loading="lazy" />
+          <AnswerImage src={src as string} alt={alt ?? ''} />
         ) : (
           <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer">
             {alt || 'image'}
@@ -169,6 +187,10 @@ const MessageView = ({
     );
   }
 
+  // Pictures being made show as a loader square, not a tool card; a failed one keeps its card so the error shows.
+  const drawing = streaming ? (toolCalls ?? []).filter((c) => c.name === IMAGE_TOOL && c.status === 'running') : [];
+  const listedCalls = toolCalls?.filter((c) => c.name !== IMAGE_TOOL || c.status === 'error');
+
   // Nothing to show yet (queued, or a part that only marks where a correction landed): no lone avatar.
   if (!shown && !toolCalls?.length && !typing && !modelLabel && !failed) return null;
 
@@ -182,7 +204,13 @@ const MessageView = ({
             {modelLabel}
           </p>
         )}
-        {toolCalls && <ToolCallList calls={toolCalls} />}
+        {listedCalls && listedCalls.length > 0 && <ToolCallList calls={listedCalls} />}
+        {drawing.map((call) => (
+          // A picture on its way: a square with the SH loader where it will appear.
+          <div key={call.id} className="mb-3 flex aspect-square w-64 max-w-full items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
+            <BrandLoaderCycle size={56} label={t('chat.creatingImage')} />
+          </div>
+        ))}
         {displays && displays.length > 0 && (
           <div className="mb-3 space-y-3">
             {displays.map((d) => (
@@ -236,7 +264,7 @@ const MessageView = ({
             )}
           </div>
         )}
-        {typing && (
+        {typing && drawing.length === 0 && (
           <div
             className={`${shown ? 'mt-2' : ''} inline-flex rounded-2xl rounded-bl-md bg-slate-100 px-3.5 py-3 text-slate-500 dark:bg-slate-800 dark:text-slate-400`}
             role="status"

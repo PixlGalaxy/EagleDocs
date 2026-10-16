@@ -2,6 +2,11 @@ import { createHash } from 'crypto';
 import type { ChatMessage, ModelChunk, ModelProvider, ModelRequest } from 'pixlai-engine';
 import { errorFrom, parseArgs, sse, ProviderError } from './http.js';
 import { accountInfo } from './codex-auth.js';
+import type { GeneratedImage, ImageRequest } from '../images.js';
+
+/** The image request's only job; the account's model calls its image tool with the student's prompt. */
+const IMAGE_INSTRUCTIONS =
+  "Create the image the user describes with the image_generation tool, following their description closely (style, text, layout). If they attach pictures, use them as the starting point. Make exactly one image and do not ask questions.";
 
 export const CODEX_BASE_URL = 'https://chatgpt.com/backend-api/codex';
 /** Context window of the ChatGPT-account Codex backend (the API's is larger; this is the real limit here). */
@@ -54,7 +59,7 @@ function toInput(messages: ChatMessage[]): { instructions: string; input: InputI
 interface StreamEvent {
   type: string;
   delta?: string;
-  item?: { type: string; call_id?: string; name?: string; arguments?: string };
+  item?: { type: string; call_id?: string; name?: string; arguments?: string; result?: string; revised_prompt?: string };
   response?: {
     usage?: { input_tokens?: number; output_tokens?: number };
     error?: { code?: string; message?: string };
@@ -74,9 +79,76 @@ export class CodexProvider implements ModelProvider {
     private cacheScope: string,
   ) {}
 
-  async *stream(request: ModelRequest): AsyncIterable<ModelChunk> {
+  /** POST /responses as a stream, with this account's headers. */
+  private async post(body: Record<string, unknown>, requestId: string, signal: AbortSignal | undefined): Promise<ReadableStream<Uint8Array>> {
     const accessToken = await this.token();
     const { accountId, residency } = accountInfo(accessToken);
+    const res = await fetch(`${CODEX_BASE_URL}/responses`, {
+      method: 'POST',
+      signal,
+      headers: {
+        'content-type': 'application/json',
+        accept: 'text/event-stream',
+        authorization: `Bearer ${accessToken}`,
+        ...(accountId && { 'chatgpt-account-id': accountId }),
+        ...(residency && { 'x-openai-internal-codex-residency': residency }),
+        'x-client-request-id': requestId,
+        ...identityHeaders(this.appVersion),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok || !res.body) throw await errorFrom(res, 'ChatGPT');
+    return res.body;
+  }
+
+  /**
+   * A picture from the account's built-in image tool (the same one ChatGPT
+   * uses): one request that only offers that tool, returning the PNG.
+   */
+  async generateImage(model: string, request: ImageRequest): Promise<GeneratedImage> {
+    const body = await this.post(
+      {
+        model,
+        instructions: IMAGE_INSTRUCTIONS,
+        input: [
+          {
+            type: 'message',
+            role: 'user',
+            content: [
+              { type: 'input_text', text: request.prompt },
+              ...(request.references ?? []).map((r) => ({ type: 'input_image', image_url: `data:${r.mediaType};base64,${r.data.toString('base64')}` })),
+            ],
+          },
+        ],
+        tools: [{ type: 'image_generation', output_format: 'png', ...(request.size !== 'auto' && { size: request.size }) }],
+        tool_choice: 'auto',
+        parallel_tool_calls: false,
+        store: false,
+        stream: true,
+        reasoning: { effort: 'low' },
+        include: [],
+      },
+      `img_${createHash('sha256').update(`${this.cacheScope}\0${Date.now()}`).digest('hex').slice(0, 24)}`,
+      request.signal,
+    );
+    let image: GeneratedImage | null = null;
+    let said = '';
+    for await (const { data } of sse<StreamEvent>(body)) {
+      if (data.type === 'response.output_item.done' && data.item?.type === 'image_generation_call' && data.item.result) {
+        image = { data: Buffer.from(data.item.result, 'base64'), mediaType: 'image/png', ...(data.item.revised_prompt && { revisedPrompt: data.item.revised_prompt }) };
+      } else if (data.type === 'response.output_text.delta' && data.delta) {
+        said += data.delta;
+      } else if (data.type === 'response.failed' || data.type === 'error') {
+        const err = data.response?.error ?? data.error ?? { code: data.code, message: data.message };
+        throw new ProviderError(`ChatGPT: ${err?.message ?? 'the image failed'}`, err?.code === 'usage_limit_reached' ? 429 : 500, err?.code);
+      }
+    }
+    // The model may answer in words instead (e.g. it declined): pass that on.
+    if (!image) throw new ProviderError(`ChatGPT did not make the image${said ? `: ${said.slice(0, 300)}` : ''}`, 502);
+    return image;
+  }
+
+  async *stream(request: ModelRequest): AsyncIterable<ModelChunk> {
     const { instructions, input } = toInput(request.messages);
     const tools = request.tools?.map((t) => ({ type: 'function', name: t.name, description: t.description, strict: false, parameters: t.parameters }));
     const cacheKey = `pck_${createHash('sha256')
@@ -84,19 +156,8 @@ export class CodexProvider implements ModelProvider {
       .digest('hex')
       .slice(0, 24)}`;
 
-    const res = await fetch(`${CODEX_BASE_URL}/responses`, {
-      method: 'POST',
-      signal: request.signal,
-      headers: {
-        'content-type': 'application/json',
-        accept: 'text/event-stream',
-        authorization: `Bearer ${accessToken}`,
-        ...(accountId && { 'chatgpt-account-id': accountId }),
-        ...(residency && { 'x-openai-internal-codex-residency': residency }),
-        'x-client-request-id': cacheKey,
-        ...identityHeaders(this.appVersion),
-      },
-      body: JSON.stringify({
+    const body = await this.post(
+      {
         model: request.model,
         instructions,
         input,
@@ -106,12 +167,13 @@ export class CodexProvider implements ModelProvider {
         reasoning: { effort: request.reasoning ?? 'medium', summary: 'auto' },
         include: [],
         prompt_cache_key: cacheKey,
-      }),
-    });
-    if (!res.ok || !res.body) throw await errorFrom(res, 'ChatGPT');
+      },
+      cacheKey,
+      request.signal,
+    );
 
     let finished = false;
-    for await (const { data } of sse<StreamEvent>(res.body)) {
+    for await (const { data } of sse<StreamEvent>(body)) {
       switch (data.type) {
         case 'response.output_text.delta':
           if (data.delta) yield { type: 'text', text: data.delta };

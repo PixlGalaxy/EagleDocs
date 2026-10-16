@@ -106,6 +106,14 @@ function chatFolderNote(folder: string): string {
   ].join('\n');
 }
 
+/** Only when the student can make pictures: real images instead of hand-drawn SVG. */
+const IMAGES_NOTE = [
+  '## Images',
+  "You can make real pictures with image_generate (the student's own ChatGPT or OpenAI account). When they ask for an image,",
+  'picture, drawing, illustration, poster, logo or photo, use it rather than writing SVG or HTML, and show the result in your',
+  'answer as ![short description](workspace:<path>). Write SVG only when they ask for SVG or for an exact chart or diagram.',
+].join('\n');
+
 /**
  * Runs queued jobs on this replica. Any replica may claim any job (SKIP
  * LOCKED); the browser's stream can be on a different one, since events go
@@ -287,7 +295,10 @@ export class JobWorker {
       const timezone = user.timezone || 'America/New_York';
       // Where files go: this chat's folder, and each course's folder for course work (laid out here when missing).
       const courseNote = courseSpacesNote(await this.deps.courseSpaces.ensure(user.id).catch(() => []));
-      const notes = [chatId ? chatFolderNote(await chats.folderOf(user.id, chatId)) : '', courseNote].filter(Boolean).join('\n\n') || undefined;
+      const chatFolder = chatId ? await chats.folderOf(user.id, chatId) : null;
+      // Pictures with the student's own ChatGPT or OpenAI key, whatever model this chat runs on.
+      const imageGenerator = await catalog.imageGenerator(user.id, resolution.model.ref).catch(() => null);
+      const notes = [chatFolder ? chatFolderNote(chatFolder) : '', courseNote, imageGenerator ? IMAGES_NOTE : ''].filter(Boolean).join('\n\n') || undefined;
       const agent = engine.forUser({
         id: user.id,
         name: user.display_name || user.username,
@@ -303,6 +314,7 @@ export class JobWorker {
         host: {
           canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace, spaces: this.deps.courseSpaces },
           school: { service: this.deps.school, userId: user.id, workspace: this.deps.workspace },
+          ...(imageGenerator && { images: { generator: imageGenerator, userId: user.id, workspace: this.deps.workspace, folder: chatFolder ?? 'TEMP' } }),
         },
       });
       // RAG tools compare this with each collection's model.
@@ -311,7 +323,7 @@ export class JobWorker {
       const helperModels = await catalog.helperModels(user.id, resolution.model.ref);
       // Email or Degree Works tools only where the institution offers them and has not switched them off.
       const hidden = await this.deps.builtinSkills.hiddenTools(user.id);
-      const toolFilter = (tool: { name: string }) => !hidden(tool.name);
+      const toolFilter = (tool: { name: string }) => !hidden(tool.name) && (tool.name !== 'image_generate' || imageGenerator !== null);
 
       if (job.kind === 'delegate') {
         const { reports, usage } = await agent.runSubagents({

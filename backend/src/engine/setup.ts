@@ -4,6 +4,7 @@ import type { Db } from '../db/pool.js';
 import { logger } from '../logger.js';
 import { PgMemoryStore, PgRunStore, PgScheduleStore, PgSkillStore } from './stores.js';
 import { CANVAS_TOOLS } from './tools/canvas.js';
+import { IMAGE_TOOLS } from './tools/images.js';
 import { AdminEmbeddings, documentExtractor } from './documents.js';
 import type { DiskWorkspace } from './workspace.js';
 import type { SandboxTools } from './sandbox.js';
@@ -45,7 +46,7 @@ export async function setupEngine(
   return createEngine({
     stores: { runs, memory: new PgMemoryStore(db), skills: new PgSkillStore(db, host.builtinSkills), schedules: new PgScheduleStore(db) },
     basePrompt: STUDYHAWK_PROMPT,
-    tools: [...CANVAS_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
+    tools: [...CANVAS_TOOLS, ...IMAGE_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
     workspace: host.workspace,
     extractor: documentExtractor,
     embeddings: host.embeddings,

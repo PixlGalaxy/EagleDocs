@@ -8,7 +8,8 @@ import { logger } from '../../logger.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
 import { KEY_PROVIDERS, type ConnectionRow, type ConnectionsService } from '../connections/connections.service.js';
 import { AnthropicProvider } from './providers/anthropic.js';
-import { CODEX_CONTEXT_WINDOW, CodexProvider, isAccessBlock } from './providers/codex.js';
+import { CODEX_CONTEXT_WINDOW, CodexProvider, FALLBACK_CODEX_MODELS, isAccessBlock } from './providers/codex.js';
+import { OpenAIImages, type GeneratedImage, type ImageGenerator, type ImageRequest } from './images.js';
 import { OllamaProvider } from './providers/ollama.js';
 import { OpenAICompatProvider } from './providers/openai-compat.js';
 import { assertPublicUrl } from '../../engine/web.js';
@@ -356,6 +357,33 @@ export class ModelCatalog {
     };
   }
 
+  /**
+   * What makes pictures for this student, whatever model the chat runs on:
+   * their ChatGPT account first (the chat's own one when it is a ChatGPT
+   * model), then an OpenAI API key. null when they have neither.
+   */
+  async imageGenerator(userId: string, chatRef?: string): Promise<ImageGenerator | null> {
+    const conns = (await this.connections.list(userId)).filter((c) => c.status !== 'error');
+    const chat = chatRef ? parseRef(chatRef) : null;
+    if (this.codexAvailable()) {
+      const codex = conns.find((c) => c.kind === 'codex' && chat?.provider === 'codex' && c.id === chat.source) ?? conns.find((c) => c.kind === 'codex');
+      if (codex) {
+        const listed = Array.isArray(codex.meta.models) ? (codex.meta.models as string[]) : [];
+        const model = chat?.provider === 'codex' && chat.source === codex.id ? chat.model : (listed[0] ?? FALLBACK_CODEX_MODELS[0]!);
+        const provider = new GuardedCodexProvider(
+          new CodexProvider(() => this.connections.codexAccessToken(codex.id), this.appVersion, userId),
+          this.db,
+          this.settings,
+          codex.id,
+        );
+        return { label: 'ChatGPT', generate: (request) => provider.generateImage(model, request) };
+      }
+    }
+    const openai = conns.find((c) => c.kind === 'api_key' && c.provider === 'openai');
+    if (openai) return new OpenAIImages(String(openai.meta.base_url ?? KEY_PROVIDERS.openai!.baseUrl), this.connections.secretOf(openai));
+    return null;
+  }
+
   /** The student's daily StudyHawk-model turns (their plan); the admin default when unset. */
   private dailyLimit?: (userId: string) => Promise<number>;
 
@@ -408,6 +436,25 @@ class GuardedCodexProvider implements ModelProvider {
       await client.query('SELECT pg_advisory_lock(hashtext($1))', [lockKey]);
       try {
         yield* this.inner.stream(request);
+      } catch (err) {
+        if (isAccessBlock(err)) await this.recordRefusal(err as Error & { status: number });
+        throw err;
+      } finally {
+        await client.query('SELECT pg_advisory_unlock(hashtext($1))', [lockKey]).catch(() => undefined);
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  /** A picture, under the same one-request-per-account lock and breaker as chat. */
+  async generateImage(model: string, request: ImageRequest): Promise<GeneratedImage> {
+    const client = await this.db.connect();
+    const lockKey = `codex:${this.connectionId}`;
+    try {
+      await client.query('SELECT pg_advisory_lock(hashtext($1))', [lockKey]);
+      try {
+        return await this.inner.generateImage(model, request);
       } catch (err) {
         if (isAccessBlock(err)) await this.recordRefusal(err as Error & { status: number });
         throw err;

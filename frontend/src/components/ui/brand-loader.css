@@ -54,8 +54,17 @@
 @keyframes bl-magnet-h { 0%, 15%, 85%, 100% { transform: none; } 45%, 55% { transform: translate(28%, -18%) rotate(8deg); } }
 @keyframes bl-magnet-s { 0%, 15%, 85%, 100% { transform: none; } 45%, 55% { transform: translate(-16%, 10%) rotate(-5deg); } }
 
+/* BrandLoaderCycle: the finished animation freezes and fades while the next one starts under it. */
+.bl-leaving { animation: bl-fade-out .35s ease forwards; }
+.bl-leaving .brand-loader, .bl-leaving .brand-loader * { animation-play-state: paused !important; }
+.bl-entering { animation: bl-fade-in .35s ease both; }
+@keyframes bl-fade-out { to { opacity: 0; } }
+@keyframes bl-fade-in { from { opacity: 0; } }
+
 /* Reduced motion: the logo stays still and fully drawn. */
 @media (prefers-reduced-motion: reduce) {
   .brand-loader *, .brand-loader { animation: none !important; }
   .bl-draw .bl-line { display: none; }
+  .bl-entering { animation: none; }
+  .bl-leaving { display: none; }
 }

@@ -38,6 +38,7 @@ const TOOL_LABELS: Record<string, TranslationKey> = {
   'canvas.find': 'tools.canvasFind',
   'canvas.page': 'tools.canvasPage',
   'canvas.submissions': 'tools.canvasSubmissions',
+  'image.generate': 'tools.imageGenerate',
   'email.inbox': 'tools.emailInbox',
   'time.now': 'tools.timeNow',
   'files.search': 'tools.filesSearch',
