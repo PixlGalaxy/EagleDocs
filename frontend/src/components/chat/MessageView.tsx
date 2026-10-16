@@ -7,7 +7,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import type { MessageAttachment, ModelOption, ToolCall } from '../../api/types';
 import ToolCallList from './ToolCallList';
 import { ImageLightbox, MessageAttachments } from './AttachmentViews';
-import { BrandIcon } from '../BrandLogo';
+import HawkAvatar from './HawkAvatar';
 import { BrandLoaderCycle } from '../ui/BrandLoader';
 import { useSmoothText } from './useSmoothText';
 import QuestionCard from './QuestionCard';
@@ -196,7 +196,7 @@ const MessageView = ({
 
   return (
     <div className="flex gap-3">
-      <BrandIcon className="mt-0.5 h-7 w-7 shrink-0" />
+      <HawkAvatar className="mt-0.5" />
       <div className="min-w-0 flex-1">
         {modelLabel && (
           <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">

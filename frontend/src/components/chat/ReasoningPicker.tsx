@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Brain, Check, ChevronDown } from 'lucide-react';
+import { Check, ChevronDown, Lightbulb } from 'lucide-react';
 import type { ReasoningLevel } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
@@ -58,7 +58,7 @@ const ReasoningPicker = ({ value, onChange, disabled }: Props) => {
         title={`${t('chat.reasoning')}: ${label}`}
         className={`${toolbarButton} gap-1.5 px-2`}
       >
-        <Brain size={16} className={`shrink-0 ${value !== 'default' && value !== 'none' ? 'text-[var(--accent-600)] dark:text-[var(--accent-300)]' : ''}`} aria-hidden="true" />
+        <Lightbulb size={16} className={`shrink-0 ${value !== 'default' && value !== 'none' ? 'text-[var(--accent-600)] dark:text-[var(--accent-300)]' : ''}`} aria-hidden="true" />
         <span className="hidden whitespace-nowrap sm:inline">{label}</span>
         <ChevronDown size={14} className="shrink-0 opacity-70" aria-hidden="true" />
       </button>

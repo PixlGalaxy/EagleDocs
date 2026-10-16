@@ -4,6 +4,7 @@ import { ArrowUp, CornerDownRight, ListPlus, Mic, Paperclip, SkipForward, Square
 import type { BusyInput } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { AttachmentTray } from './AttachmentViews';
+import BusyModeSwitch from './BusyModeSwitch';
 import { MAX_ATTACHMENTS, type DraftAttachment } from './attachments';
 import { toolbarButton } from './toolbar';
 import { useDictation, type DictationError } from './useDictation';
@@ -18,6 +19,8 @@ interface Props {
   onSteer?: () => void;
   /** 'steer' corrects the running task (default), 'queue' sends it when the task ends, 'interrupt' stops the task and sends it. */
   busyMode?: BusyInput;
+  /** Switches the mode from the composer (saved as the student's setting). */
+  onBusyModeChange?: (mode: BusyInput) => void;
   busy: boolean;
   disabled?: boolean;
   /** Files waiting to go with the next message; omit to hide the paperclip. */
@@ -52,7 +55,7 @@ const BUSY = {
   interrupt: { label: 'chat.interruptLabel', placeholder: 'chat.interruptPlaceholder', hint: 'chat.interruptHint', button: 'chat.interrupt', icon: SkipForward, color: 'bg-rose-500 text-white hover:bg-rose-600' },
 } as const;
 
-const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busyMode = 'steer', busy, disabled, attachments = [], onAttach, onRemoveAttachment, controls, status }: Props) => {
+const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busyMode = 'steer', onBusyModeChange, busy, disabled, attachments = [], onAttach, onRemoveAttachment, controls, status }: Props) => {
   const { t, language } = useI18n();
   const ref = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -234,6 +237,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busyMode = 'stee
 
           <div className="ml-auto flex items-center gap-1.5">
             {status}
+            {onBusyModeChange && <BusyModeSwitch value={busyMode} onChange={onBusyModeChange} />}
             {steering && (
               <button
                 type="submit"

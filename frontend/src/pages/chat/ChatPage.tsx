@@ -3,8 +3,9 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown, BookOpen, CalendarClock, Folder, FolderOpen, GraduationCap, Map as MapIcon, Menu, PanelLeftClose, PanelLeftOpen, X, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError, apiUrl } from '../../api/client';
-import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, PlanStep, ReasoningLevel, StreamEvent, ToolCall, UserModelPrefs, WorkspaceEntry } from '../../api/types';
+import type { Approval, BackgroundJob, BusyInput, Chat, ContextUsage, Message, ModelOption, PlanStep, ReasoningLevel, StreamEvent, ToolCall, UserModelPrefs, WorkspaceEntry } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
+import { authApi } from '../../api/auth';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
 import ChatSidebar from './ChatSidebar';
@@ -99,7 +100,7 @@ const SUGGESTIONS: { icon: typeof BookOpen; key: TranslationKey }[] = [
 const ChatPage = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const { t } = useI18n();
 
   const [chats, setChats] = useState<Chat[]>([]);
@@ -526,6 +527,13 @@ const ChatPage = () => {
   /** A message written while the agent worked (queue or interrupt mode), sent as soon as the answer ends. */
   const [queued, setQueued] = useState<string | null>(null);
   const busyMode = user?.busy_input ?? 'steer';
+  // Picked in the composer while it works: the student's setting, so the next chat starts with it.
+  const changeBusyMode = (mode: BusyInput) => {
+    if (!user) return;
+    const before = user;
+    updateUser({ ...user, busy_input: mode });
+    authApi.appearance({ busy_input: mode }).then(updateUser, () => updateUser(before));
+  };
   useEffect(() => {
     if (live || !queued || sending.current) return;
     const text = queued;
@@ -1022,6 +1030,7 @@ const ChatPage = () => {
             onStop={() => void stop()}
             onSteer={busySubmit}
             busyMode={busyMode}
+            onBusyModeChange={changeBusyMode}
             busy={!!live}
             attachments={attachments.items}
             onAttach={attachments.add}

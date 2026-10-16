@@ -5,11 +5,13 @@ interface Props {
   text: string;
   /** Milliseconds of hover before the description appears. */
   delay?: number;
+  /** Keeps it hidden (e.g. while the trigger is being dragged). */
+  hidden?: boolean;
   children?: ReactNode;
 }
 
 /** Hover (or focus, for keyboard users) for a beat and a short description appears above the trigger — an info icon by default. */
-const Tooltip = ({ text, delay = 1200, children }: Props) => {
+const Tooltip = ({ text, delay = 1200, hidden = false, children }: Props) => {
   const [visible, setVisible] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,7 +32,7 @@ const Tooltip = ({ text, delay = 1200, children }: Props) => {
       onBlur={hide}
     >
       {children ?? <Info size={13} className="cursor-help text-slate-400 dark:text-slate-500" tabIndex={0} />}
-      {visible && (
+      {visible && !hidden && (
         <div className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-56 -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs leading-relaxed text-slate-600 shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
           {text}
         </div>
