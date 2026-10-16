@@ -100,7 +100,7 @@ interface EndpointRow {
   api_key_enc: Buffer | null;
 }
 
-/** Admin -> Models: the servers behind the EagleDocs model and which of their models students get. */
+/** Admin -> Models: the servers behind the StudyHawk model and which of their models students get. */
 export function createAdminModelRoutes(db: Db, secrets: Secrets) {
   const router = Router();
   router.use(requireAdmin);

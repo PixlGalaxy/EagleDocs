@@ -1,4 +1,4 @@
-name: Build and Push Docker Image for EagleDocs
+name: Build and Push Docker Image for StudyHawk
 
 on:
   push:
@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: 🚀 Display Startup Message
-        run: echo "🚀 Hello from Galaxy! | Building unified EagleDocs container (Frontend + Backend) with Node 26..."
+        run: echo "🚀 Hello from Galaxy! | Building unified StudyHawk container (Frontend + Backend) with Node 26..."
 
       - name: 📂 Checkout Repository
         uses: actions/checkout@v4
@@ -32,7 +32,8 @@ jobs:
         id: vars
         run: |
           echo "REPOSITORY_OWNER=$(echo $GITHUB_REPOSITORY_OWNER | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "IMAGE_NAME=eagledocs" >> $GITHUB_ENV
+          echo "IMAGE_NAME=studyhawk" >> $GITHUB_ENV
+          echo "APP_VERSION=$(node -p "require('./backend/package.json').version")" >> $GITHUB_ENV
           if [ "${GITHUB_REF_NAME}" = "main" ]; then
             echo "IMAGE_TAG=latest" >> $GITHUB_ENV
           else
@@ -60,6 +61,7 @@ jobs:
           tags: |
             ghcr.io/${{ env.REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
             ghcr.io/${{ env.REPOSITORY_OWNER }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_TAG == 'latest' && format('ghcr.io/{0}/{1}:{2}', env.REPOSITORY_OWNER, env.IMAGE_NAME, env.APP_VERSION) || '' }}
           build-args: |
             APP_IMAGE_REF=${{ env.IMAGE_TAG }}
             APP_IMAGE_REVISION=${{ github.sha }}
@@ -71,5 +73,6 @@ jobs:
           context: ./sandbox
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/${{ env.REPOSITORY_OWNER }}/eagledocs-sandbox:${{ env.IMAGE_TAG }}
-            ghcr.io/${{ env.REPOSITORY_OWNER }}/eagledocs-sandbox:${{ github.sha }}
+            ghcr.io/${{ env.REPOSITORY_OWNER }}/studyhawk-sandbox:${{ env.IMAGE_TAG }}
+            ghcr.io/${{ env.REPOSITORY_OWNER }}/studyhawk-sandbox:${{ github.sha }}
+            ${{ env.IMAGE_TAG == 'latest' && format('ghcr.io/{0}/studyhawk-sandbox:{1}', env.REPOSITORY_OWNER, env.APP_VERSION) || '' }}

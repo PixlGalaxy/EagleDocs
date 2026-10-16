@@ -1,5 +1,5 @@
 // Phase 4 end-to-end: per-user sandbox (code_run), the browser with its approval policy, Admin → Sandbox and the
-// Admin → Users status dot. Needs Docker with the eagledocs-sandbox:dev image (docker build -t eagledocs-sandbox:dev sandbox),
+// Admin → Users status dot. Needs Docker with the studyhawk-sandbox:dev image (docker build -t studyhawk-sandbox:dev sandbox),
 // a dev backend on E2E_A (dev seed accounts), fake-llm.mjs on 4999, and internet (example.com, instructure.com).
 const A = process.env.E2E_A ?? 'http://localhost:4000/api';
 const LLM = process.env.E2E_LLM ?? 'http://localhost:4999/v1';
@@ -71,7 +71,7 @@ const user = await login('user', 'user');
 let r = await admin.req('POST', '/admin/models/endpoints', { kind: 'openai_compat', name: 'Fake GPU', base_url: LLM });
 r = await admin.req('POST', `/admin/models/endpoints/${r.json.id}/discover`);
 for (const m of r.json.models) await admin.req('PATCH', `/admin/models/${m.id}`, { enabled: true, tags: ['smart', 'fast'], supports_tools: true });
-await admin.req('PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await admin.req('PATCH', '/admin/settings', { studyhawk_daily_messages: 0 });
 
 // ---------------------------------------------------------------- Admin → Sandbox
 r = await admin.req('GET', '/admin/sandbox');

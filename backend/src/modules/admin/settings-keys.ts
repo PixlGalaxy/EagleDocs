@@ -5,7 +5,7 @@ export const SETTINGS_KEYS = {
   defaultThemeSkin: 'app.default_theme_skin',
   registrationEnabled: 'registration.enabled',
   sessionTtlHours: 'session.ttl_hours',
-  eagledocsDailyMessages: 'models.eagledocs_daily_messages',
+  studyhawkDailyMessages: 'models.studyhawk_daily_messages',
   mcpEnabled: 'mcp.enabled',
   /** Web push (VAPID). The private key is a secret (secret_enc). */
   pushVapidPublic: 'push.vapid_public',

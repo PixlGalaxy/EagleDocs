@@ -64,7 +64,7 @@ async function assertUtf8(db: Db): Promise<void> {
   const encoding = rows[0]?.server_encoding;
   if (encoding !== 'UTF8') {
     throw new Error(
-      `The database uses ${encoding} encoding; EagleDocs needs UTF8 (CREATE DATABASE ... ENCODING 'UTF8'). ` +
+      `The database uses ${encoding} encoding; StudyHawk needs UTF8 (CREATE DATABASE ... ENCODING 'UTF8'). ` +
         'In development, delete data/dev-postgres so it is recreated.',
     );
   }
@@ -130,7 +130,7 @@ async function main() {
   const builtinSkills = new BuiltinSkills(db, loadBuiltinSkills());
   logger.info(`Loaded ${builtinSkills.all.length} built-in skills`);
   const engine = await setupEngine(db, bus, { workspace, embeddings, sandbox, searxngUrl: config.SEARXNG_URL, builtinSkills, settings });
-  // EagleDocs as an MCP app: the same tools as the web agent, for ChatGPT, Claude and other clients.
+  // StudyHawk as an MCP app: the same tools as the web agent, for ChatGPT, Claude and other clients.
   const oauth = new OAuthService(db, config.PUBLIC_URL);
   const mcp = new McpServer({
     db,

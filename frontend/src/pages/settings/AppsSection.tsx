@@ -29,7 +29,7 @@ function Mark({ name }: { name: 'openai' | 'claude' }) {
   );
 }
 
-/** Settings -> Apps: use EagleDocs from ChatGPT, Claude or any MCP client. */
+/** Settings -> Apps: use StudyHawk from ChatGPT, Claude or any MCP client. */
 const AppsSection = () => {
   const { t, language } = useI18n();
   const ask = useConfirm();

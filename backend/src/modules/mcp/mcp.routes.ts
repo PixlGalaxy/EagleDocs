@@ -33,8 +33,8 @@ const oauthJson = (res: Response, err: unknown) => {
 
 /** A plain page for authorize errors that cannot go back to the client (unknown client or redirect URI). */
 const errorPage = (message: string) =>
-  `<!doctype html><meta charset="utf-8"><title>EagleDocs</title><body style="font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem">` +
-  `<h1>This app could not connect</h1><p>${message.replace(/[<>&"]/g, '')}</p><p>Go back to the app and try adding EagleDocs again.</p></body>`;
+  `<!doctype html><meta charset="utf-8"><title>StudyHawk</title><body style="font-family:system-ui;max-width:32rem;margin:4rem auto;padding:0 1rem">` +
+  `<h1>This app could not connect</h1><p>${message.replace(/[<>&"]/g, '')}</p><p>Go back to the app and try adding StudyHawk again.</p></body>`;
 
 /**
  * Public OAuth and MCP endpoints (no session, no CSRF: clients use tokens),
@@ -79,7 +79,7 @@ export function createMcpRoutes(deps: { db: Db; oauth: OAuthService; server: Mcp
   });
 
   open.get('/oauth/authorize', perIp('authorize', 60_000, 60), async (req, res) => {
-    if (!enabled()) return void res.status(404).type('html').send(errorPage('EagleDocs apps are turned off on this server.'));
+    if (!enabled()) return void res.status(404).type('html').send(errorPage('StudyHawk apps are turned off on this server.'));
     try {
       const next = await oauth.authorize(req.query as Record<string, unknown>);
       res.redirect(302, 'consent' in next ? next.consent : next.redirect);
@@ -111,7 +111,7 @@ export function createMcpRoutes(deps: { db: Db; oauth: OAuthService; server: Mcp
       res.setHeader('Allow', 'POST');
       return void res.status(405).json({ error: 'Use POST' });
     }
-    if (!enabled()) return void res.status(404).json({ error: 'EagleDocs apps are turned off on this server' });
+    if (!enabled()) return void res.status(404).json({ error: 'StudyHawk apps are turned off on this server' });
     const bearer = /^Bearer\s+(\S+)$/i.exec(req.get('authorization') ?? '')?.[1] ?? '';
     const principal = bearer ? await oauth.verify(bearer) : null;
     if (!principal) {

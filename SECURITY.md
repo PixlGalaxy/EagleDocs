@@ -1,6 +1,6 @@
 # Security
 
-How EagleDocs protects accounts, data and the servers it runs on, what was reviewed, and what is still open.
+How StudyHawk protects accounts, data and the servers it runs on, what was reviewed, and what is still open.
 Last full review: 2026-10-15.
 
 ## Reporting a problem
@@ -78,7 +78,7 @@ Email fabrizio.gamboa.p@gmail.com with the steps to reproduce. Please do not ope
 
 - PKCE S256 only. Exact redirect URI match, https only, or http on localhost; each URI is at most 2,000 characters.
 - Single-use codes; refresh tokens rotate; reusing one revokes the whole grant. Tokens are stored as SHA-256.
-- Errors before consent show an EagleDocs page instead of redirecting, so `/oauth/authorize` is not an open redirect.
+- Errors before consent show an StudyHawk page instead of redirecting, so `/oauth/authorize` is not an open redirect.
 - **Rate limits per IP:**
 
   | Endpoint | Limit |
@@ -116,11 +116,11 @@ Email fabrizio.gamboa.p@gmail.com with the steps to reproduce. Please do not ope
 ## Deploying safely
 
 - Set `MASTER_KEY`, `COOKIE_SECURE=true` and `PUBLIC_URL` (https). Set `TRUST_PROXY` only to the proxies in front
-  of EagleDocs, or rate limits by IP can be dodged with a forged `X-Forwarded-For`.
+  of StudyHawk, or rate limits by IP can be dodged with a forged `X-Forwarded-For`.
 - Mount `/data` on the backend with `nosymfollow` (Linux 5.10+). This is the strongest guard against links planted
   by the sandbox.
 - Keep Postgres off public interfaces and use a strong password. The dev compose publishes it on 5432 with
-  `eagledocs`/`eagledocs`: development only.
+  `studyhawk`/`studyhawk`: development only.
 - Put `/data` on its own disk or volume, so a full workspace cannot fill the database's disk.
 
 ## Open items

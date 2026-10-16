@@ -3,7 +3,7 @@
 // Starts its own replicas A and B (one job worker each) on a shared database and data root:
 //   E2E_DATABASE_URL  Postgres both replicas use (fresh, e.g. docker run postgres:17-alpine)
 //   E2E_DATA_ROOT     shared data root (fresh folder)
-// Needs Docker with eagledocs-sandbox:dev, fake-llm.mjs on 4999 and fake-school.mjs on 4997.
+// Needs Docker with studyhawk-sandbox:dev, fake-llm.mjs on 4999 and fake-school.mjs on 4997.
 import { spawn } from 'child_process';
 import { once } from 'events';
 
@@ -120,7 +120,7 @@ try {
   let r = await admin.req('POST', '/admin/models/endpoints', { kind: 'openai_compat', name: 'Fake GPU', base_url: LLM });
   r = await admin.req('POST', `/admin/models/endpoints/${r.json.id}/discover`);
   for (const m of r.json.models) await admin.req('PATCH', `/admin/models/${m.id}`, { enabled: true, tags: ['smart', 'fast'], supports_tools: true });
-  await admin.req('PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+  await admin.req('PATCH', '/admin/settings', { studyhawk_daily_messages: 0 });
   const inst = (await admin.req('GET', '/admin/institutions')).json.find((i) => i.slug === 'dev-university');
   await admin.req('PUT', `/admin/institutions/${inst.id}`, { ...inst, outlook_url: `${SCHOOL}/mail/`, degreeworks_url: `${SCHOOL}/dw/` });
   const sandboxSettings = (await admin.req('GET', '/admin/sandbox')).json;

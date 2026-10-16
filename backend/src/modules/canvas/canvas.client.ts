@@ -1,5 +1,5 @@
 /**
- * Read-only Canvas REST client. Only GET exists here on purpose: EagleDocs
+ * Read-only Canvas REST client. Only GET exists here on purpose: StudyHawk
  * never changes anything in a student's Canvas. Ported from the canvas-lms
  * skill (per_page=100, `Link: rel="next"` pagination, 30 s timeout).
  */

@@ -60,7 +60,7 @@ function tail(path: string, parse: (line: string) => Parsed, after: Date): void 
   setInterval(poll, POLL_MS).unref();
 }
 
-// Mirrors nginx.conf's `eagledocs` log_format:
+// Mirrors nginx.conf's `studyhawk` log_format:
 // $time_iso8601 $status $request_method $request_uri ${body_bytes_sent}b ${request_time}s "..."
 const NGINX_LINE = /^(\S+) (\d{3}) (\S+) (\S+) \d+b ([\d.]+)s/;
 // entrypoint.sh: `2026-10-13T22:09:01Z message`

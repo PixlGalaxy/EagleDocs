@@ -15,7 +15,7 @@ interface I18nContextValue {
 
 const I18nContext = createContext<I18nContextValue | undefined>(undefined);
 
-const STORAGE_KEY = 'eagledocs.language';
+const STORAGE_KEY = 'studyhawk.language';
 
 function storedLanguage(): Language | null {
   try {

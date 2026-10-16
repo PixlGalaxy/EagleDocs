@@ -1,6 +1,6 @@
 {
-  "name": "eagledocs-backend",
-  "version": "2.0.0",
+  "name": "studyhawk-backend",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx watch --env-file-if-exists=../.env --include ../locales/*.json --include ../.env src/index.ts",

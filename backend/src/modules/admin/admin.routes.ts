@@ -304,8 +304,8 @@ export function createAdminRoutes(deps: {
     registration_enabled: settings.getBoolean(K.registrationEnabled, true),
     default_language: settings.getString(K.defaultLanguage, config.LANGUAGE),
     default_theme_mode: settings.getString(K.defaultThemeMode, 'system'),
-    default_theme_skin: settings.getString(K.defaultThemeSkin, 'eagle'),
-    eagledocs_daily_messages: settings.getNumber(K.eagledocsDailyMessages, 50),
+    default_theme_skin: settings.getString(K.defaultThemeSkin, 'hawk'),
+    studyhawk_daily_messages: settings.getNumber(K.studyhawkDailyMessages, 50),
     session_ttl_hours: settings.getNumber(K.sessionTtlHours, config.SESSION_TTL_HOURS),
     mcp_enabled: settings.getBoolean(K.mcpEnabled, false),
     codex_enabled: settings.getBoolean(K.codexEnabled, true),
@@ -331,7 +331,7 @@ export function createAdminRoutes(deps: {
       if (!THEME_SKINS.includes(body.default_theme_skin as never)) throw badRequest('adminSettings.invalidValue');
       updates[K.defaultThemeSkin] = body.default_theme_skin;
     }
-    if (body.eagledocs_daily_messages !== undefined) updates[K.eagledocsDailyMessages] = numberIn(body.eagledocs_daily_messages, 0, 100_000);
+    if (body.studyhawk_daily_messages !== undefined) updates[K.studyhawkDailyMessages] = numberIn(body.studyhawk_daily_messages, 0, 100_000);
     if (body.session_ttl_hours !== undefined) updates[K.sessionTtlHours] = numberIn(body.session_ttl_hours, 1, 24 * 90);
     if (body.mcp_enabled !== undefined) updates[K.mcpEnabled] = bool(body.mcp_enabled);
     if (body.codex_enabled !== undefined) updates[K.codexEnabled] = bool(body.codex_enabled);

@@ -11,7 +11,7 @@ export const FALLBACK_CODEX_MODELS = ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini'];
 
 /** Our own client identity, never another product's. */
 function identityHeaders(version: string): Record<string, string> {
-  return { originator: 'eagledocs', 'user-agent': `EagleDocs/${version}` };
+  return { originator: 'studyhawk', 'user-agent': `StudyHawk/${version}` };
 }
 
 /** Gives the provider a valid access token, refreshing it (once, serialized) when needed. */

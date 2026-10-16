@@ -1,4 +1,4 @@
-// A fake Canvas LMS (read-only endpoints EagleDocs uses), with dates relative to now.
+// A fake Canvas LMS (read-only endpoints StudyHawk uses), with dates relative to now.
 // Valid token: canvas-test-token-0123456789. POST /__revoke makes every token invalid (simulates a revoked token).
 import http from 'http';
 
@@ -62,7 +62,7 @@ http
     };
 
     let m;
-    if (path === 'users/self/profile') return send(res, 200, { id: 9, name: 'Dev Student', primary_email: 'user@eagledocs.test' });
+    if (path === 'users/self/profile') return send(res, 200, { id: 9, name: 'Dev Student', primary_email: 'user@studyhawk.test' });
     if (path === 'courses') return paged(courses);
     if ((m = /^courses\/(\d+)\/assignments$/.exec(path))) {
       return paged((assignments[m[1]] ?? []).map((a) => ({ ...a, course_id: Number(m[1]), html_url: `http://localhost:${port}/courses/${m[1]}/assignments/${a.id}` })));

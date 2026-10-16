@@ -32,7 +32,7 @@ export interface TierLimits {
   cpu: number;
   memMb: number;
   diskMb: number;
-  /** EagleDocs-model turns per day; 0 = unlimited. */
+  /** StudyHawk-model turns per day; 0 = unlimited. */
   dailyMessages: number;
   maxBackgroundJobs: number;
   maxSchedules: number;

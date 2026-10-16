@@ -15,7 +15,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
 import Avatar from '../ui/Avatar';
-import { LOGO_SRC } from '../brand';
+import { BrandIcon, BrandLogo } from '../BrandLogo';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-base font-medium transition sm:px-4 ${
@@ -74,8 +74,8 @@ const AppNavbar = () => {
           to="/chat"
           className="flex shrink-0 items-center gap-2.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]"
         >
-          <img src={LOGO_SRC} alt="" width={44} height={44} className="h-9 w-9 sm:h-11 sm:w-11" />
-          <span className="hidden text-xl font-semibold tracking-tight text-slate-900 dark:text-white md:inline" translate="no">EagleDocs</span>
+          <BrandIcon label="StudyHawk" className="h-9 w-9 sm:h-10 sm:w-10 md:hidden" />
+          <BrandLogo className="hidden h-8 w-auto md:block" />
         </Link>
 
         <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">

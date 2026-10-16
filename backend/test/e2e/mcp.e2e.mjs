@@ -1,4 +1,4 @@
-// Phase 7 end-to-end: EagleDocs as an MCP app. The script plays an MCP client (what ChatGPT or Claude do): discovery,
+// Phase 7 end-to-end: StudyHawk as an MCP app. The script plays an MCP client (what ChatGPT or Claude do): discovery,
 // dynamic registration, authorize with PKCE, the student's consent, token exchange and rotation, MCP calls, revocation.
 // Needs a dev backend on E2E_A (E2E_ORIGIN is its public origin, the PUBLIC_URL the backend was started with).
 import { createHash, randomBytes } from 'node:crypto';
@@ -115,7 +115,7 @@ check('a code works only once', res.body?.error === 'invalid_grant');
 
 // ---------------------------------------------------------------- MCP calls
 res = await rpc(tokens.access_token, 'initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } });
-check('initialize', res.body?.result?.serverInfo?.name === 'EagleDocs' && res.body.result.protocolVersion === '2025-06-18' && res.body.result.capabilities.tools, JSON.stringify(res.body)?.slice(0, 160));
+check('initialize', res.body?.result?.serverInfo?.name === 'StudyHawk' && res.body.result.protocolVersion === '2025-06-18' && res.body.result.capabilities.tools, JSON.stringify(res.body)?.slice(0, 160));
 res = await rpc(tokens.access_token, 'notifications/initialized', {}, true);
 check('notifications get 202 with no body', res.status === 202);
 res = await rpc(tokens.access_token, 'tools/list');
@@ -141,7 +141,7 @@ const prompts = (res.body?.result?.prompts ?? []).map((x) => x.name);
 check('skills are offered as prompts', prompts.includes('canvas-lms') && prompts.includes('study-coaching'), prompts.join(','));
 res = await rpc(tokens.access_token, 'prompts/get', { name: 'study-coaching' });
 check('a prompt carries the skill with the student filled in', /Study Coaching|study/i.test(res.body?.result?.messages?.[0]?.content?.text ?? '') && !/\{\{/.test(res.body?.result?.messages?.[0]?.content?.text ?? ''));
-res = await rpc(tokens.access_token, 'resources/read', { uri: 'eagledocs://profile' });
+res = await rpc(tokens.access_token, 'resources/read', { uri: 'studyhawk://profile' });
 check('the profile resource personalizes from the first message', /Works Tuesday nights/.test(res.body?.result?.contents?.[0]?.text ?? ''), res.body?.result?.contents?.[0]?.text?.slice(0, 120));
 res = await rpc(tokens.access_token, 'no/such/method');
 check('unknown methods get a JSON-RPC error', res.body?.error?.code === -32601);

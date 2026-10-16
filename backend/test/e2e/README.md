@@ -1,6 +1,6 @@
 # End-to-end checks
 
-Scripts that drive a running EagleDocs over HTTP, the way the browser does. They need two replicas
+Scripts that drive a running StudyHawk over HTTP, the way the browser does. They need two replicas
 (A and B) on the same database to cover the multi-replica paths. Each prints `PASS`/`FAIL` per check.
 
 ## Chat and agent (`chat.e2e.mjs`)
@@ -11,7 +11,7 @@ Uses the dev seed accounts (`admin/admin`, `user/user`) and a fake OpenAI-compat
 node test/e2e/fake-llm.mjs 4999 &
 # Replica A starts the embedded dev Postgres; note the port it logs.
 PORT=4001 NODE_ID=node-a npx tsx src/index.ts &
-DATABASE_URL=postgres://eagledocs:eagledocs@localhost:<port>/eagledocs MASTER_KEY=$(cat ../data/dev-master.key) \
+DATABASE_URL=postgres://studyhawk:studyhawk@localhost:<port>/studyhawk MASTER_KEY=$(cat ../data/dev-master.key) \
   PORT=4002 NODE_ID=node-b npx tsx src/index.ts &
 node test/e2e/chat.e2e.mjs
 ```
@@ -46,14 +46,14 @@ The script starts replicas A and B itself (one job worker each) on a shared Post
 `[py] <code>` makes the fake model run that Python.
 
 ```bash
-docker run -d --name eagledocs-e2e-pg -e POSTGRES_USER=eagledocs -e POSTGRES_PASSWORD=eagledocs -e POSTGRES_DB=eagledocs \
+docker run -d --name studyhawk-e2e-pg -e POSTGRES_USER=studyhawk -e POSTGRES_PASSWORD=studyhawk -e POSTGRES_DB=studyhawk \
   -p 55433:5432 postgres:17-alpine
 node test/e2e/fake-llm.mjs 4999 & node test/e2e/fake-school.mjs 4997 &
-E2E_DATABASE_URL=postgres://eagledocs:eagledocs@localhost:55433/eagledocs E2E_DATA_ROOT=/tmp/e2e-nodes \
+E2E_DATABASE_URL=postgres://studyhawk:studyhawk@localhost:55433/studyhawk E2E_DATA_ROOT=/tmp/e2e-nodes \
   node test/e2e/sandbox-nodes.e2e.mjs
 ```
 
-## EagleDocs as an MCP app (`mcp.e2e.mjs`)
+## StudyHawk as an MCP app (`mcp.e2e.mjs`)
 
 The script plays an MCP client the way ChatGPT or Claude do: discovery (RFC 9728 and 8414), dynamic registration,
 authorize with PKCE, the student's consent (narrowing scopes), the token exchange, MCP calls (tools per scope, memory

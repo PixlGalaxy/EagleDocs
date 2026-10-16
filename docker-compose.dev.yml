@@ -1,4 +1,4 @@
-# Local development only: Postgres + two EagleDocs replicas + a round-robin
+# Local development only: Postgres + two StudyHawk replicas + a round-robin
 # balancer, to exercise the multi-replica paths (shared sessions, NOTIFY,
 # advisory locks). Production uses an external Postgres and one `docker run`
 # per machine; see README.
@@ -10,24 +10,24 @@
 # For that, run the backend with `npm run dev` (NODE_ENV unset).
 #
 # Sandboxes: the replicas create one container per user through the host's Docker
-# (docker.sock). Build the image first: docker build -t eagledocs-sandbox:dev sandbox
+# (docker.sock). Build the image first: docker build -t studyhawk-sandbox:dev sandbox
 
-name: eagledocs
+name: studyhawk
 
-x-eagledocs: &eagledocs
+x-studyhawk: &studyhawk
   build: .
-  image: eagledocs:dev
+  image: studyhawk:dev
   environment: &env
-    DATABASE_URL: postgres://eagledocs:eagledocs@postgres:5432/eagledocs
+    DATABASE_URL: postgres://studyhawk:studyhawk@postgres:5432/studyhawk
     MASTER_KEY: ${MASTER_KEY:?set MASTER_KEY (openssl rand -base64 32)}
     ADMIN_USERNAME: admin
-    ADMIN_EMAIL: admin@eagledocs.test
+    ADMIN_EMAIL: admin@studyhawk.test
     ADMIN_PASSWORD: change-me-now
     PUBLIC_URL: http://localhost:8080
     TRUST_PROXY: uniquelocal
-    SANDBOX_IMAGE: eagledocs-sandbox:dev
+    SANDBOX_IMAGE: studyhawk-sandbox:dev
     # The sandboxes mount the users' folders from the same volume (with a subpath).
-    SANDBOX_DATA_VOLUME: eagledocs_shared-data
+    SANDBOX_DATA_VOLUME: studyhawk_shared-data
     # web_search: metasearch without API keys (DuckDuckGo is the fallback when it is down).
     SEARXNG_URL: http://searxng:8080
   volumes:
@@ -41,26 +41,26 @@ services:
   postgres:
     image: postgres:17-alpine
     environment:
-      POSTGRES_USER: eagledocs
-      POSTGRES_PASSWORD: eagledocs
-      POSTGRES_DB: eagledocs
+      POSTGRES_USER: studyhawk
+      POSTGRES_PASSWORD: studyhawk
+      POSTGRES_DB: studyhawk
     volumes:
       - pg-data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U eagledocs"]
+      test: ["CMD-SHELL", "pg_isready -U studyhawk"]
       interval: 2s
       retries: 30
 
   node-a:
-    <<: *eagledocs
+    <<: *studyhawk
     environment:
       <<: *env
       NODE_ID: node-a
 
   node-b:
-    <<: *eagledocs
+    <<: *studyhawk
     environment:
       <<: *env
       NODE_ID: node-b
@@ -94,11 +94,11 @@ configs:
         formats: [html, json]
   balancer:
     content: |
-      upstream eagledocs { server node-a:80; server node-b:80; }
+      upstream studyhawk { server node-a:80; server node-b:80; }
       server {
         listen 80;
         location / {
-          proxy_pass http://eagledocs;
+          proxy_pass http://studyhawk;
           proxy_http_version 1.1;
           proxy_set_header Host $$host;
           proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;

@@ -9,6 +9,7 @@ export function isThemeMode(value: unknown): value is ThemeMode {
 }
 
 export const SKIN_IDS = [
+  'hawk',
   'eagle',
   'default',
   'ocean',
@@ -54,6 +55,7 @@ interface SkinDef {
 // balance Tailwind already tuned for that family — only the hue changes. A skin
 // never picks the surface mode itself; it just recolors whichever mode is active.
 export const SKINS: SkinDef[] = [
+  { id: 'hawk', labelKey: 'settings.skinHawk', dots: ['#67e8f9', '#22d3ee', '#04647f'] },
   { id: 'eagle', labelKey: 'settings.skinEagle', dots: ['#8fb4ff', '#2b6bff', '#0046d1'] },
   { id: 'default', labelKey: 'settings.skinDefault', dots: ['#a5b4fc', '#6366f1', '#4338ca'] },
   { id: 'ocean', labelKey: 'settings.skinOcean', dots: ['#67e8f9', '#06b6d4', '#0e7490'] },

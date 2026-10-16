@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Pencil } from "lucide-react";
-import { useI18n } from "../../i18n/I18nContext";
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
+import { useI18n } from '../../i18n/I18nContext';
 
 interface Props {
   content: string;
@@ -29,7 +29,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
     if (!el) return;
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
-    el.style.height = "auto";
+    el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 320)}px`;
   }, [editing]);
 
@@ -44,7 +44,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
     return (
       <div className="w-full max-w-[85%] rounded-2xl border border-[var(--accent-300)] bg-white p-3 dark:border-[var(--accent-500)]/40 dark:bg-slate-900">
         <label htmlFor="edit-message" className="sr-only">
-          {t("chat.editMessage")}
+          {t('chat.editMessage')}
         </label>
         <textarea
           id="edit-message"
@@ -52,16 +52,12 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
           value={draft}
           onChange={(e) => {
             setDraft(e.target.value);
-            e.target.style.height = "auto";
+            e.target.style.height = 'auto';
             e.target.style.height = `${Math.min(e.target.scrollHeight, 320)}px`;
           }}
           onKeyDown={(e) => {
-            if (e.key === "Escape") setEditing(false);
-            if (
-              e.key === "Enter" &&
-              !e.shiftKey &&
-              !e.nativeEvent.isComposing
-            ) {
+            if (e.key === 'Escape') setEditing(false);
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
               save();
             }
@@ -78,7 +74,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
             }}
             className="rounded-lg px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            {t("common.cancel")}
+            {t('common.cancel')}
           </button>
           <button
             type="button"
@@ -86,7 +82,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
             disabled={!draft.trim()}
             className="rounded-lg bg-[var(--accent-600)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent-700)] disabled:opacity-50"
           >
-            {t("chat.editSend")}
+            {t('chat.editSend')}
           </button>
         </div>
       </div>
@@ -95,10 +91,10 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
 
   const time = sentAt
     ? new Date(sentAt).toLocaleTimeString(language, {
-        hour: "numeric",
-        minute: "2-digit",
+        hour: 'numeric',
+        minute: '2-digit',
       })
-    : "";
+    : '';
   const versions = version && version.total > 1;
 
   return (
@@ -125,8 +121,8 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
                 setDraft(content);
                 setEditing(true);
               }}
-              aria-label={t("chat.editMessage")}
-              title={t("chat.editMessage")}
+              aria-label={t('chat.editMessage')}
+              title={t('chat.editMessage')}
               className="rounded-md p-1.5 text-slate-400 opacity-0 transition hover:bg-slate-100 hover:text-slate-700 group-hover:opacity-100 focus-visible:opacity-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 [@media(hover:none)]:opacity-100"
             >
               <Pencil size={14} />
@@ -135,7 +131,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
           {version && versions && (
             <div
               className="flex items-center gap-1"
-              aria-label={t("chat.versionOf", {
+              aria-label={t('chat.versionOf', {
                 n: version.current,
                 total: version.total,
               })}
@@ -144,7 +140,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
                 type="button"
                 onClick={() => version.onSwitch(version.current - 1)}
                 disabled={version.current <= 1}
-                aria-label={t("chat.versionPrevious")}
+                aria-label={t('chat.versionPrevious')}
                 className="rounded-md p-1 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
               >
                 <ChevronLeft size={14} />
@@ -156,7 +152,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
                 type="button"
                 onClick={() => version.onSwitch(version.current + 1)}
                 disabled={version.current >= version.total}
-                aria-label={t("chat.versionNext")}
+                aria-label={t('chat.versionNext')}
                 className="rounded-md p-1 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
               >
                 <ChevronRight size={14} />

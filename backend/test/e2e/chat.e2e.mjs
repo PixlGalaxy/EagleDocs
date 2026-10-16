@@ -75,7 +75,7 @@ const login = async (base, user, pass) => {
 const admin = await login(A, 'admin', 'admin');
 const user = await login(B, 'user', 'user');
 
-// ---------------------------------------------------------------- admin sets up the EagleDocs model
+// ---------------------------------------------------------------- admin sets up the StudyHawk model
 let r = await admin.req(A, 'POST', '/admin/models/endpoints', { kind: 'openai_compat', name: 'Fake GPU', base_url: LLM });
 check('create endpoint', r.status === 201, JSON.stringify(r.json).slice(0, 120));
 const endpointId = r.json.id;
@@ -83,13 +83,13 @@ r = await admin.req(A, 'POST', `/admin/models/endpoints/${endpointId}/discover`)
 check('discover models', r.status === 200 && r.json.models.length === 2, JSON.stringify(r.json).slice(0, 160));
 const smart = r.json.models.find((m) => m.model_name === 'fake-smart');
 const mini = r.json.models.find((m) => m.model_name === 'fake-mini');
-r = await admin.req(B, 'PATCH', `/admin/models/${smart.id}`, { enabled: true, tags: ['smart', 'code'], display_name: 'EagleDocs Smart', supports_tools: true });
+r = await admin.req(B, 'PATCH', `/admin/models/${smart.id}`, { enabled: true, tags: ['smart', 'code'], display_name: 'StudyHawk Smart', supports_tools: true });
 check('enable smart model', r.status === 200 && r.json.enabled);
-await admin.req(B, 'PATCH', `/admin/models/${mini.id}`, { enabled: true, tags: ['fast'], display_name: 'EagleDocs Mini', supports_tools: true });
-await admin.req(A, 'PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await admin.req(B, 'PATCH', `/admin/models/${mini.id}`, { enabled: true, tags: ['fast'], display_name: 'StudyHawk Mini', supports_tools: true });
+await admin.req(A, 'PATCH', '/admin/settings', { studyhawk_daily_messages: 0 });
 
 r = await user.req(B, 'GET', '/models');
-check('user sees EagleDocs models', r.status === 200 && r.json.filter((m) => m.provider === 'eagledocs').length === 2);
+check('user sees StudyHawk models', r.status === 200 && r.json.filter((m) => m.provider === 'studyhawk').length === 2);
 
 // ---------------------------------------------------------------- simple chat, stream on the other replica
 r = await user.req(B, 'POST', '/chats', {});
@@ -100,7 +100,7 @@ let jobId = r.json.job_id;
 let events = await user.stream(A, chatId, jobId);
 const done = events.at(-1);
 check('stream on A finishes with done', done?.type === 'done', events.map((e) => e.type).join(','));
-check('auto picked the fast model for "hola"', events.some((e) => e.type === 'model' && /Auto -> EagleDocs Mini/.test(e.model_label)), JSON.stringify(events.find((e) => e.type === 'model')));
+check('auto picked the fast model for "hola"', events.some((e) => e.type === 'model' && /Auto -> StudyHawk Mini/.test(e.model_label)), JSON.stringify(events.find((e) => e.type === 'model')));
 check('answer text', done?.message?.content === 'echo: hola', done?.message?.content);
 // The first words are the title at once; a quick model replaces them with a short name right after.
 let titled = '';
@@ -292,7 +292,7 @@ events = await user.stream(B, delegateChat, r.json.job_id);
 const helperSteps = events.filter((e) => e.type === 'subagent' && e.event.type === 'tool_result');
 check('helpers report their steps live', helperSteps.some((e) => e.index === 0 && e.event.call.name === 'time_now'), events.map((e) => e.type).join(','));
 const helperModelOf = (i) => events.find((e) => e.type === 'subagent' && e.index === i)?.model_label;
-check('each helper runs on the model the agent picked', helperModelOf(0) === 'EagleDocs Mini' && helperModelOf(1) === 'EagleDocs Smart', `${helperModelOf(0)} / ${helperModelOf(1)}`);
+check('each helper runs on the model the agent picked', helperModelOf(0) === 'StudyHawk Mini' && helperModelOf(1) === 'StudyHawk Smart', `${helperModelOf(0)} / ${helperModelOf(1)}`);
 check("helpers' tokens are not stored as events", !events.some((e) => e.type === 'subagent' && e.event.type === 'delta'));
 check('waiting delegation answers with the reports', /tool said/.test(events.at(-1).message?.content ?? ''), events.at(-1).message?.content);
 // The chat list: a finished answer nobody opened is unread, with the helpers of its delegation; opening it reads it.
@@ -361,9 +361,9 @@ check('only stopped or failed turns can run again', r.status === 409, r.json?.er
 
 // ---------------------------------------------------------------- try again, with the same or another model
 const retryChat = (await user.req(A, 'POST', '/chats', {})).json.id;
-r = await user.req(A, 'POST', `/chats/${retryChat}/messages`, { content: 'say it again', model_ref: `eagledocs:${mini.id}` });
+r = await user.req(A, 'POST', `/chats/${retryChat}/messages`, { content: 'say it again', model_ref: `studyhawk:${mini.id}` });
 await user.stream(B, retryChat, r.json.job_id);
-r = await user.req(A, 'POST', `/chats/${retryChat}/regenerate`, { model_ref: `eagledocs:${smart.id}` });
+r = await user.req(A, 'POST', `/chats/${retryChat}/regenerate`, { model_ref: `studyhawk:${smart.id}` });
 check('trying again queues a new answer', r.status === 201 && r.json.job_id, JSON.stringify(r.json));
 events = await user.stream(B, retryChat, r.json.job_id);
 r = await user.req(A, 'GET', `/chats/${retryChat}`);

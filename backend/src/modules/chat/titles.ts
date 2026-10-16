@@ -46,9 +46,9 @@ export async function nameChat(
   }
   const errors: string[] = [];
   // One model may be down (a LAN server switched off): the next one names the chat.
-  for (const { model, isEagleDocs } of candidates) {
+  for (const { model, isStudyHawk } of candidates) {
     try {
-      const text = await ask(model, message, reasoningFor(model.ref), (usage) => deps.catalog.recordUsage(chat.userId, isEagleDocs, usage.inputTokens, usage.outputTokens));
+      const text = await ask(model, message, reasoningFor(model.ref), (usage) => deps.catalog.recordUsage(chat.userId, isStudyHawk, usage.inputTokens, usage.outputTokens));
       const title = cleanTitle(text);
       if (!title) {
         errors.push(`${model.label}: no usable title`);
@@ -66,7 +66,7 @@ export async function nameChat(
 
 /** Quick models think as little as their provider allows: Ollama can switch it off, ChatGPT goes low, other APIs keep their default. */
 function reasoningFor(ref: string): ReasoningLevel | undefined {
-  if (ref.startsWith('eagledocs:')) return 'none';
+  if (ref.startsWith('studyhawk:')) return 'none';
   if (ref.startsWith('codex:')) return 'low';
   return undefined;
 }

@@ -6,7 +6,7 @@ import type { CanvasService, CourseView } from './canvas.service.js';
 
 /** Between automatic syncs of one student's course folders. */
 export const SYNC_EVERY_HOURS = 6;
-const GENERATED_NOTE = '_Kept up to date from Canvas by EagleDocs. Changes here are replaced on the next sync; keep your own notes in other files._';
+const GENERATED_NOTE = '_Kept up to date from Canvas by StudyHawk. Changes here are replaced on the next sync; keep your own notes in other files._';
 
 export interface SyncResult {
   term: string;

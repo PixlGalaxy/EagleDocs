@@ -1,5 +1,5 @@
 // Phase 5 web push end-to-end: a fake push service (this script) plays the browser's vendor, decrypts what
-// EagleDocs sends (RFC 8291) and checks the VAPID signature. Needs a dev backend on E2E_A (development allows
+// StudyHawk sends (RFC 8291) and checks the VAPID signature. Needs a dev backend on E2E_A (development allows
 // local endpoints) and fake-llm.mjs on 4999.
 import { createDecipheriv, createECDH, createHmac, createPublicKey, randomBytes, verify } from 'node:crypto';
 import http from 'node:http';
@@ -122,7 +122,7 @@ const subscription = (path) => ({
 let r = await admin.req('POST', '/admin/models/endpoints', { kind: 'openai_compat', name: 'Fake GPU', base_url: LLM });
 r = await admin.req('POST', `/admin/models/endpoints/${r.json.id}/discover`);
 for (const m of r.json.models) await admin.req('PATCH', `/admin/models/${m.id}`, { enabled: true, tags: ['smart', 'fast'], supports_tools: true });
-await admin.req('PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await admin.req('PATCH', '/admin/settings', { studyhawk_daily_messages: 0 });
 
 // ---------------------------------------------------------------- keys and subscribing
 r = await user.req('GET', '/config');
@@ -143,7 +143,8 @@ const chat = (await user.req('POST', '/chats', {})).json;
 r = await user.req('POST', `/chats/${chat.id}/messages`, { content: 'hola desde el telefono', model_ref: 'auto' });
 push = await waitFor((p) => p.payload?.kind === 'job_done');
 check('a turn finished with the app closed is pushed', push?.payload?.body === 'echo: hola desde el telefono' && push.payload.url === `/chat/${chat.id}`, JSON.stringify(push?.payload));
-check('the push carries the chat title', push?.payload?.title === 'hola desde el telefono', push?.payload?.title);
+// The chat's title at that moment: the first message, or the quick model's name for it if that came first.
+check('the push carries the chat title', ['hola desde el telefono', 'Chat about hola'].includes(push?.payload?.title), push?.payload?.title);
 const before = received.length;
 r = await user.req('POST', `/chats/${chat.id}/messages`, { content: 'otra con el chat abierto', model_ref: 'auto' });
 await user.stream(chat.id, r.json.job_id);
@@ -167,9 +168,9 @@ r = await admin.req('PUT', '/admin/push', { contact_email: 'not-an-email' });
 check('invalid contact email refused', r.status === 400);
 r = await admin.req('PUT', '/admin/push', { contact_email: 'it@uni.example' });
 check('contact email saved', r.json?.contact_email === 'it@uni.example');
-r = await admin.req('POST', '/admin/push/broadcast', { title: 'Mantenimiento', body: 'EagleDocs se reinicia a las 2 am', url: 'javascript:alert(1)', institution_id: null });
+r = await admin.req('POST', '/admin/push/broadcast', { title: 'Mantenimiento', body: 'StudyHawk se reinicia a las 2 am', url: 'javascript:alert(1)', institution_id: null });
 check('a javascript: link is refused', r.status === 400);
-r = await admin.req('POST', '/admin/push/broadcast', { title: 'Mantenimiento', body: 'EagleDocs se reinicia a las 2 am', url: '/chat', institution_id: null });
+r = await admin.req('POST', '/admin/push/broadcast', { title: 'Mantenimiento', body: 'StudyHawk se reinicia a las 2 am', url: '/chat', institution_id: null });
 push = await waitFor((p) => p.payload?.kind === 'broadcast');
 check('broadcast reaches the device', r.json?.sent === 1 && push?.payload?.title === 'Mantenimiento', JSON.stringify(r.json));
 r = await admin.req('GET', '/admin/push');

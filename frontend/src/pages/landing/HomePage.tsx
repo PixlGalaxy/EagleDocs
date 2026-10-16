@@ -10,7 +10,7 @@ import ApprovalCard from '../../components/chat/ApprovalCard';
 import LogoMarquee from '../../components/landing/LogoMarquee';
 import StoryScroll from '../../components/landing/StoryScroll';
 import PoweredBy from '../../components/landing/PoweredBy';
-import { LOGO_SRC } from '../../components/brand';
+import { BrandIcon } from '../../components/BrandLogo';
 import { BRAND_MARKS } from '../../components/brandMarks';
 
 const PHRASES: TranslationKey[] = ['home.phrase1', 'home.phrase2', 'home.phrase3', 'home.phrase4', 'home.phrase5', 'home.phrase6', 'home.phrase7', 'home.phrase8'];
@@ -116,13 +116,13 @@ const HomePage = () => {
 
   const models = [
     { icon: Sparkles, title: t('home.modelChatgpt'), body: t('home.modelChatgptBody') },
-    { icon: Server, title: t('home.modelEagle'), body: t('home.modelEagleBody') },
+    { icon: Server, title: t('home.modelHawk'), body: t('home.modelHawkBody') },
     { icon: KeyRound, title: t('home.modelKeys'), body: t('home.modelKeysBody') },
     { icon: Wand2, title: t('home.modelAuto'), body: t('home.modelAutoBody') },
   ];
 
   return (
-    <PublicLayout title="EagleDocs">
+    <PublicLayout title="StudyHawk">
       {/* Hero: a launch announcement, so the message is centered and the product follows. */}
       <section className="relative overflow-hidden pt-16 md:pt-24">
         <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[38rem] bg-[radial-gradient(60%_50%_at_50%_0%,var(--accent-100),transparent)] dark:bg-[radial-gradient(60%_50%_at_50%_0%,rgb(0_70_209/0.25),transparent)]" />
@@ -132,16 +132,14 @@ const HomePage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease }}
         >
-          <button type="button" onClick={onLogoClick} aria-label="EagleDocs" className="mx-auto mb-8 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]">
-            <motion.img
-              src={LOGO_SRC}
-              alt=""
-              width={72}
-              height={72}
+          <button type="button" onClick={onLogoClick} aria-label="StudyHawk" className="mx-auto mb-8 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]">
+            <motion.div
               className="h-[72px] w-[72px]"
               animate={falling && !reduce ? { y: 480, rotate: 90, opacity: 0 } : { y: 0, rotate: 0, opacity: 1 }}
               transition={{ duration: falling ? 1.8 : 0.6, ease: falling ? 'easeIn' : ease }}
-            />
+            >
+              <BrandIcon className="h-full w-full" />
+            </motion.div>
           </button>
           <h1 className="text-5xl font-semibold leading-[1.02] tracking-[-0.045em] text-slate-950 sm:text-6xl md:text-8xl dark:text-white">{t('home.title')}</h1>
           <div className="mt-6">

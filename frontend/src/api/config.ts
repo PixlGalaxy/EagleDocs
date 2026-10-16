@@ -12,7 +12,7 @@ export interface RuntimeConfig {
   billingEnabled: boolean;
   /** Admin switch and circuit breaker combined: false hides "Connect ChatGPT". */
   codexEnabled: boolean;
-  /** EagleDocs as an MCP app for ChatGPT/Claude. */
+  /** StudyHawk as an MCP app for ChatGPT/Claude. */
   mcpEnabled: boolean;
   /** Public VAPID key; null while push is not configured. */
   vapidPublicKey: string | null;

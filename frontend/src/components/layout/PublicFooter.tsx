@@ -36,7 +36,7 @@ const PublicFooter = () => {
               ))}
             </select>
           </label>
-          <p>{new Date().getFullYear()} EagleDocs</p>
+          <p>{new Date().getFullYear()} StudyHawk</p>
         </div>
       </div>
     </footer>

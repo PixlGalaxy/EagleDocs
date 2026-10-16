@@ -265,7 +265,7 @@ export class JobWorker {
       let resolution;
       try {
         resolution = await catalog.resolve(user.id, job.payload.model_ref ?? null, { text: latest, historyChars });
-        if (resolution.isEagleDocs) await catalog.assertQuota(user.id);
+        if (resolution.isStudyHawk) await catalog.assertQuota(user.id);
       } catch (err) {
         return await fail(err instanceof AppError ? t(err.key, user.language) : (err as Error).message);
       }
@@ -316,7 +316,7 @@ export class JobWorker {
             },
           },
         });
-        await catalog.recordUsage(user.id, resolution.isEagleDocs, usage.inputTokens, usage.outputTokens);
+        await catalog.recordUsage(user.id, resolution.isStudyHawk, usage.inputTokens, usage.outputTokens);
         if (controller.signal.aborted) {
           events.emit({ type: 'error', error: 'Stopped' });
           await events.flush();
@@ -392,7 +392,7 @@ export class JobWorker {
           },
         },
       });
-      await catalog.recordUsage(user.id, resolution.isEagleDocs, result.usage.inputTokens, result.usage.outputTokens);
+      await catalog.recordUsage(user.id, resolution.isStudyHawk, result.usage.inputTokens, result.usage.outputTokens);
 
       if (status === 'failed') {
         events.emit({ type: 'error', error: result.error ?? 'The agent failed' });

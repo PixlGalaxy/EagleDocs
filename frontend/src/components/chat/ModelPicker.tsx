@@ -16,7 +16,7 @@ interface Props {
   trigger?: { label: string; icon: LucideIcon };
 }
 
-/** "Auto" first, then every model grouped by where it comes from (EagleDocs, ChatGPT, API keys). */
+/** "Auto" first, then every model grouped by where it comes from (StudyHawk, ChatGPT, API keys). */
 const ModelPicker = ({ options, value, onChange, disabled, trigger: custom }: Props) => {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);

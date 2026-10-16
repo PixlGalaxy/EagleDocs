@@ -17,7 +17,7 @@ export function createPool(config: EnvConfig): Db {
     connectionString: config.DATABASE_URL,
     max: config.DB_POOL_MAX,
     ssl: config.DB_SSL ? { rejectUnauthorized: false } : undefined,
-    application_name: `eagledocs:${config.NODE_ID}`,
+    application_name: `studyhawk:${config.NODE_ID}`,
   });
   // An idle client losing its connection (DB restart, failover) must not crash
   // the process; the pool drops it and opens a new one on the next query.

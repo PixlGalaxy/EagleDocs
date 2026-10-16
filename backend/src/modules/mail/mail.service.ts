@@ -7,8 +7,8 @@ import { logger } from '../../logger.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
 import { renderEmail } from './templates.js';
 
-/** The product name is fixed: EagleDocs is not white-labelled. */
-const APP_NAME = 'EagleDocs';
+/** The product name is fixed: StudyHawk is not white-labelled. */
+const APP_NAME = 'StudyHawk';
 
 export interface SmtpConfig {
   host: string;

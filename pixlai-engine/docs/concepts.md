@@ -225,7 +225,7 @@ The host then runs the helpers and answers with their reports:
 2. Add `backgroundReportMessage(reports)` to the conversation as a user-role message. It says it comes from the system, not the user.
 3. Start a normal `run` on that conversation. The agent reads the reports and answers.
 
-Add the reports only when no other run of that conversation is in progress, so the history stays in order. EagleDocs keeps the reports on the helpers' job and inserts them when the follow-up turn starts.
+Add the reports only when no other run of that conversation is in progress, so the history stays in order. StudyHawk keeps the reports on the helpers' job and inserts them when the follow-up turn starts.
 
 ## Schedules
 

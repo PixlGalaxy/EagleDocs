@@ -146,7 +146,7 @@ export const emailSend = defineTool<{ draft_id: string }>({
   name: 'email_send',
   description:
     'Send a draft made with email_draft from the student\'s school email (Outlook). The student must approve it in the ' +
-    'app first. EagleDocs then checks Sent Items; if it cannot confirm, say so and do NOT send again.',
+    'app first. StudyHawk then checks Sent Items; if it cannot confirm, say so and do NOT send again.',
   parameters: { type: 'object', properties: { draft_id: { type: 'string' } }, required: ['draft_id'] },
   sideEffect: 'external',
   mainAgentOnly: true,

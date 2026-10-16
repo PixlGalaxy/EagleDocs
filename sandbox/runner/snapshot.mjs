@@ -1,7 +1,7 @@
 /**
  * Runs inside the page (page.evaluate). Turns the visible DOM into an outline
  * for the model, in reading order: headings, text, list items, links and form
- * controls. Every element the agent can use gets `data-eagle-ref="eN"` and is
+ * controls. Every element the agent can use gets `data-hawk-ref="eN"` and is
  * shown as [@eN], so the runner can click or type on it later.
  */
 export function pageOutline(maxChars) {
@@ -13,7 +13,7 @@ export function pageOutline(maxChars) {
   let n = 0;
   let full = false;
 
-  for (const el of document.querySelectorAll('[data-eagle-ref]')) el.removeAttribute('data-eagle-ref');
+  for (const el of document.querySelectorAll('[data-hawk-ref]')) el.removeAttribute('data-hawk-ref');
 
   const clip = (s, max = 120) => {
     const t = String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -52,7 +52,7 @@ export function pageOutline(maxChars) {
   };
   const ref = (el) => {
     const id = `e${++n}`;
-    el.setAttribute('data-eagle-ref', id);
+    el.setAttribute('data-hawk-ref', id);
     return `[@${id}]`;
   };
 

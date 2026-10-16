@@ -78,7 +78,7 @@ const user = await login('user', 'user');
 let r = await admin.req('POST', '/admin/models/endpoints', { kind: 'openai_compat', name: 'Fake GPU', base_url: LLM });
 r = await admin.req('POST', `/admin/models/endpoints/${r.json.id}/discover`);
 for (const m of r.json.models) await admin.req('PATCH', `/admin/models/${m.id}`, { enabled: true, tags: ['smart', 'fast'], supports_tools: true });
-await admin.req('PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await admin.req('PATCH', '/admin/settings', { studyhawk_daily_messages: 0 });
 await user.req('PATCH', '/auth/profile', { display_name: 'Ana Student', major: 'Accounting' });
 const inst = (await admin.req('GET', '/admin/institutions')).json.find((i) => i.slug === 'dev-university');
 const saveInst = (patch) => admin.req('PUT', `/admin/institutions/${inst.id}`, { ...inst, outlook_url: 'https://outlook.office.com/mail/', degreeworks_url: 'https://dw.uni.example/', ...patch });

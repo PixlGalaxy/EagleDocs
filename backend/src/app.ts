@@ -113,7 +113,7 @@ export function createApp(deps: AppDeps): express.Application {
     res.json({
       language: settings.getString(K.defaultLanguage, config.LANGUAGE),
       defaultThemeMode: settings.getString(K.defaultThemeMode, 'system'),
-      defaultThemeSkin: settings.getString(K.defaultThemeSkin, 'eagle'),
+      defaultThemeSkin: settings.getString(K.defaultThemeSkin, 'hawk'),
       registrationEnabled: settings.getBoolean(K.registrationEnabled, true),
       emailConfigured: mail.isConfigured(),
       institutions: await institutions.listPublic(),

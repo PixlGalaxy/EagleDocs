@@ -62,7 +62,7 @@ const ApprovalCard = ({ approval, onDecide }: Props) => {
           )}
 
           <p className="mt-3 text-sm font-medium text-amber-900 dark:text-amber-200">
-            {/* Sending is the one action the product says EagleDocs should not take for the student. */}
+            {/* Sending is the one action the product says StudyHawk should not take for the student. */}
             {/(^|[._])send$/.test(approval.tool_name) ? t('approval.warningSend') : t('approval.warning')}
           </p>
 

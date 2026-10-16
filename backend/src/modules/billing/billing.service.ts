@@ -109,7 +109,7 @@ export class BillingService {
     const sub = await this.subscription(userId);
     const usage = await maybe<{ messages: number; tokens_in: number; tokens_out: number; mcp_calls: number; mcp_code_runs: number }>(
       this.db,
-      'SELECT eagledocs_messages AS messages, tokens_in, tokens_out, mcp_calls, mcp_code_runs FROM usage_daily WHERE user_id = $1 AND day = current_date',
+      'SELECT studyhawk_messages AS messages, tokens_in, tokens_out, mcp_calls, mcp_code_runs FROM usage_daily WHERE user_id = $1 AND day = current_date',
       [userId],
     );
     return {

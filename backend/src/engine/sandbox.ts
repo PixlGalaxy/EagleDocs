@@ -75,7 +75,7 @@ export class SandboxTools implements SandboxPort, BrowserPort {
       this.workspace.forgetUsage(userId);
       const after = await this.overQuota(userId);
       if (after) result.stderr = `${result.stderr}
-[EagleDocs] The workspace is now over its quota (${after}): delete files before writing more.`.trim();
+[StudyHawk] The workspace is now over its quota (${after}): delete files before writing more.`.trim();
     }
     return result;
   }

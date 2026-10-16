@@ -222,7 +222,7 @@ export class SchoolService {
           if (connectionId) await this.db.query(`UPDATE connections SET status = 'ok', last_ok_at = now(), last_error = NULL WHERE id = $1`, [connectionId]);
           return;
         case 'signed_out':
-          if (++reopened > 2) throw new SchoolError('stuck', 'The school keeps signing EagleDocs out.');
+          if (++reopened > 2) throw new SchoolError('stuck', 'The school keeps signing StudyHawk out.');
           await this.run(userId, 'goto', { profile, url }, ctx.signal);
           continue;
         case 'pick_account': {
@@ -267,7 +267,7 @@ export class SchoolService {
           if (!mfaSince) {
             mfaSince = Date.now();
             const service_ = service === 'outlook' ? 'school email' : 'Degree Works';
-            ctx.emit({ type: 'mfa_required', service, message: `Approve the sign-in on your phone (Duo) so EagleDocs can open your ${service_}.` });
+            ctx.emit({ type: 'mfa_required', service, message: `Approve the sign-in on your phone (Duo) so StudyHawk can open your ${service_}.` });
             ctx.emit({ type: 'status', status: 'waiting_mfa' });
           }
           if (Date.now() - mfaSince > MFA_WAIT_MS) {
@@ -295,7 +295,7 @@ export class SchoolService {
             logger.warn(`School sign-in stuck for ${userId} on ${state.host}: ${state.title}`);
             // What the page says, so the agent can tell the student (e.g. a notice from the school). Page text, not instructions.
             const says = state.detail ? ` The page says: "${state.detail.replace(/"/g, "'")}"` : '';
-            throw new SchoolError('stuck', `The sign-in stopped at a page EagleDocs does not recognize ("${state.title ?? state.host}" at ${state.host}).${says}`);
+            throw new SchoolError('stuck', `The sign-in stopped at a page StudyHawk does not recognize ("${state.title ?? state.host}" at ${state.host}).${says}`);
           }
           break;
       }

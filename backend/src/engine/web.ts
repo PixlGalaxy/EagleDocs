@@ -7,7 +7,7 @@ import type { FetchPort, FetchedPage, SearchHit, SearchPort } from 'pixlai-engin
 import { decodeEntities, SearchChain } from 'pixlai-engine';
 import { logger } from '../logger.js';
 
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 EagleDocs';
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36 StudyHawk';
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 30_000;
 
@@ -36,9 +36,9 @@ export function isPrivateAddress(address: string): boolean {
 /** Resolves a host and refuses it when any of its addresses is internal. Returns the address to connect to. */
 async function publicAddress(hostname: string): Promise<{ address: string; family: number }> {
   const host = hostname.replace(/^\[|\]$/g, '');
-  if (/^localhost$|\.localhost$|\.local$|\.internal$/i.test(host)) throw new Error('That address is not reachable from EagleDocs');
+  if (/^localhost$|\.localhost$|\.local$|\.internal$/i.test(host)) throw new Error('That address is not reachable from StudyHawk');
   const addresses = isIP(host) ? [{ address: host, family: isIP(host) }] : await dns.lookup(host, { all: true, verbatim: true });
-  if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address))) throw new Error('That address is not reachable from EagleDocs');
+  if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address))) throw new Error('That address is not reachable from StudyHawk');
   return addresses[0]!;
 }
 
@@ -299,11 +299,11 @@ export class BrowserSearch implements SearchPort {
 // ------------------------------------------------------------------ the chain
 
 /**
- * EagleDocs' search, cheapest first: SearXNG (when configured), DuckDuckGo, the
+ * StudyHawk' search, cheapest first: SearXNG (when configured), DuckDuckGo, the
  * paid API the admin set (off without a key), and Chromium in the user's
  * sandbox. The engine's SearchChain moves on when one fails or finds nothing.
  */
-export function eagledocsSearch(deps: {
+export function studyhawkSearch(deps: {
   searxngUrl: string | undefined;
   /** The paid provider and key from Admin → Web search; read on every search, so changes apply at once. */
   paid: () => { provider: string; apiKey: string | undefined };

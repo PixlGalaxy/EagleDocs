@@ -16,7 +16,7 @@ const KINDS: { id: PushKind; label: TranslationKey; hint: TranslationKey }[] = [
   { id: 'broadcast', label: 'push.kindBroadcast', hint: 'push.kindBroadcastHint' },
 ];
 
-const KINDS_KEY = 'eagledocs.pushKinds';
+const KINDS_KEY = 'studyhawk.pushKinds';
 
 function loadKinds(): PushKind[] {
   try {

@@ -1,4 +1,4 @@
-# EagleDocs sandbox: one container per user, started on demand by the backend.
+# StudyHawk sandbox: one container per user, started on demand by the backend.
 # Chromium (Playwright's headless shell only) + Python with document/data libraries + Node + the runner.
 # Debian slim rather than Alpine: Playwright's Chromium and the Python wheels need glibc.
 FROM node:24-bookworm-slim
@@ -32,6 +32,8 @@ RUN mkdir -p /workspace && chown 1000:1000 /workspace
 USER 1000:1000
 WORKDIR /workspace
 
-LABEL eagledocs.sandbox.image="1"
+LABEL studyhawk.sandbox.image="1" \
+      org.opencontainers.image.title="StudyHawk sandbox" \
+      org.opencontainers.image.version="1.0.0"
 EXPOSE 7070
 ENTRYPOINT ["/usr/bin/tini", "--", "node", "/opt/runner/runner.mjs"]

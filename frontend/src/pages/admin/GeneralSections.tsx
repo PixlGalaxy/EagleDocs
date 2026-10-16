@@ -91,7 +91,7 @@ export const GeneralSection = () => {
       <Panel title={t('admin.defaultAppearance')} description={t('admin.defaultAppearanceBody')}>
         <ThemePicker
           mode={isThemeMode(s.default_theme_mode) ? s.default_theme_mode : 'system'}
-          skin={isSkinId(s.default_theme_skin) ? s.default_theme_skin : 'eagle'}
+          skin={isSkinId(s.default_theme_skin) ? s.default_theme_skin : 'hawk'}
           onModeChange={(mode: ThemeMode) => void save({ default_theme_mode: mode })}
           onSkinChange={(skin: SkinId) => void save({ default_theme_skin: skin })}
         />

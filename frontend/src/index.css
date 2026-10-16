@@ -41,10 +41,25 @@ h3 {
 /*
  * Skins (from Webin Cloud): each is a full color scale used as --accent-*.
  * Components only reference [var(--accent-NNN)], so a skin recolors every
- * button, link and focus ring. "eagle" is the EagleDocs logo blue (#0057ff
- * at 600) and is the default; light/dark is governed by the .dark class.
+ * button, link and focus ring. "hawk" is the StudyHawk logo cyan (#22d3ee at
+ * 400; 600 and up are darker so white text on buttons stays readable) and is the
+ * default; light/dark is governed by the .dark class.
  */
 :root,
+[data-skin='hawk'] {
+  --accent-50: #ecfeff;
+  --accent-100: #cffafe;
+  --accent-200: #a5f3fc;
+  --accent-300: #67e8f9;
+  --accent-400: #22d3ee;
+  --accent-500: #06b6d4;
+  --accent-600: #027a9c;
+  --accent-700: #04647f;
+  --accent-800: #0b5269;
+  --accent-900: #0c4257;
+}
+
+/* "eagle": the blue of the EagleDocs days. */
 [data-skin='eagle'] {
   --accent-50: #eef4ff;
   --accent-100: #dbe7ff;

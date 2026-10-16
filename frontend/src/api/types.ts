@@ -68,7 +68,7 @@ export interface PublicInstitution {
 
 // ---------------------------------------------------------------- models
 
-export type ProviderKind = 'eagledocs' | 'codex' | 'openai_compat' | 'anthropic';
+export type ProviderKind = 'studyhawk' | 'codex' | 'openai_compat' | 'anthropic';
 export type ModelTier = 'fast' | 'smart' | 'code' | 'vision';
 
 export interface ModelOption {
@@ -448,7 +448,7 @@ export interface McpApp {
 
 export interface McpInfo {
   enabled: boolean;
-  /** Full URL to paste into ChatGPT / Claude, e.g. https://eagledocs.org/mcp */
+  /** Full URL to paste into ChatGPT / Claude, e.g. https://studyhawk.app/mcp */
   server_url: string;
   apps: McpApp[];
 }

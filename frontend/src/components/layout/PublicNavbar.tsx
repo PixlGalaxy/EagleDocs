@@ -5,7 +5,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
-import { DISCORD_URL, LOGO_SRC, STATUS_URL } from '../brand';
+import { DISCORD_URL, STATUS_URL } from '../brand';
+import { BrandLogo } from '../BrandLogo';
 
 const LINKS: { to: string; key: TranslationKey }[] = [
   { to: '/', key: 'landingNav.home' },
@@ -36,8 +37,7 @@ const PublicNavbar = () => {
     <header className="sticky top-0 z-40 border-b border-slate-200/70 bg-white/85 backdrop-blur-md dark:border-slate-800/70 dark:bg-slate-950/85">
       <nav className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6" aria-label={t('landingNav.label')}>
         <Link to="/" className="flex shrink-0 items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]">
-          <img src={LOGO_SRC} alt="" width={32} height={32} className="h-8 w-8" />
-          <span className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white" translate="no">EagleDocs</span>
+          <BrandLogo className="h-7 w-auto" />
         </Link>
 
         <div className="hidden items-center gap-1 lg:flex">

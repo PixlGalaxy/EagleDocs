@@ -50,11 +50,11 @@ interface LiveAnswer {
 const withMessage = (list: Message[], message: Message) => (list.some((m) => m.id === message.id) ? list : [...list, message]);
 
 /** The workspace panel's open state on wide screens, kept per browser. */
-const FILES_PANEL_KEY = 'eagledocs.chat.filesPanel';
+const FILES_PANEL_KEY = 'studyhawk.chat.filesPanel';
 const WIDE = '(min-width: 1024px)';
 
 /** The thinking effort, kept per browser. */
-const REASONING_KEY = 'eagledocs.chat.reasoning';
+const REASONING_KEY = 'studyhawk.chat.reasoning';
 
 function storedReasoning(): ReasoningLevel {
   try {
@@ -66,7 +66,7 @@ function storedReasoning(): ReasoningLevel {
 }
 
 /** The chat list on wide screens: shown unless the student hid it (remembered in this browser). */
-const CHAT_LIST_KEY = 'eagledocs.chatList';
+const CHAT_LIST_KEY = 'studyhawk.chatList';
 function storedListHidden(): boolean {
   try {
     return localStorage.getItem(CHAT_LIST_KEY) === 'hidden';
@@ -680,13 +680,13 @@ const ChatPage = () => {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <title>{activeChat ? `${activeChat.title} - EagleDocs` : `${t('nav.chat')} - EagleDocs`}</title>
+      <title>{activeChat ? `${activeChat.title} - StudyHawk` : `${t('nav.chat')} - StudyHawk`}</title>
 
       {/* Desktop sidebar, unless hidden for a wider chat */}
       {!listHidden && (
         <ResizableDock
           side="left"
-          storageKey="eagledocs.chatListWidth"
+          storageKey="studyhawk.chatListWidth"
           defaultWidth={288}
           minWidth={220}
           maxWidth={440}
@@ -992,7 +992,7 @@ const ChatPage = () => {
       {filesDocked && (
         <ResizableDock
           side="right"
-          storageKey="eagledocs.filesPanelWidth"
+          storageKey="studyhawk.filesPanelWidth"
           defaultWidth={320}
           minWidth={240}
           maxWidth={900}

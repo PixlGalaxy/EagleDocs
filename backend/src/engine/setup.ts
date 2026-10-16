@@ -8,14 +8,14 @@ import { AdminEmbeddings, documentExtractor } from './documents.js';
 import type { DiskWorkspace } from './workspace.js';
 import type { SandboxTools } from './sandbox.js';
 import { SCHOOL_TOOLS } from './tools/school.js';
-import { eagledocsBrowserPolicy } from './browser-policy.js';
+import { studyhawkBrowserPolicy } from './browser-policy.js';
 import type { BuiltinSkills } from '../modules/skills/builtin.js';
-import { eagledocsSearch, SafeFetch } from './web.js';
+import { studyhawkSearch, SafeFetch } from './web.js';
 import type { SettingsService } from '../db/settings.js';
 import { SETTINGS_KEYS as K } from '../modules/admin/settings-keys.js';
 
 /** Who the agent is. The engine adds the user, memory, skills and its rules after this. */
-export const EAGLEDOCS_PROMPT = `You are EagleDocs, an AI assistant for university students, built on PixlAI-Engine.
+export const STUDYHAWK_PROMPT = `You are StudyHawk, an AI assistant for university students, built on PixlAI-Engine.
 You help with classes, deadlines, study plans, degree progress and the student's own files.
 Be accurate and concrete. When you are not sure, say so instead of guessing; never invent grades, due dates or course details.
 Prefer short answers with clear next steps. Use Markdown lists and tables when they make things easier to scan.
@@ -31,7 +31,7 @@ const engineLogger: Logger = {
   error: (m, d) => logger.error(`[engine] ${m}`, d),
 };
 
-/** PixlAI-Engine wired to Postgres, with EagleDocs' own tools: Canvas, files and RAG, web, and the sandbox (code and browser). */
+/** PixlAI-Engine wired to Postgres, with StudyHawk' own tools: Canvas, files and RAG, web, and the sandbox (code and browser). */
 export async function setupEngine(
   db: Db,
   bus: Bus,
@@ -43,21 +43,21 @@ export async function setupEngine(
   await runs.start();
   return createEngine({
     stores: { runs, memory: new PgMemoryStore(db), skills: new PgSkillStore(db, host.builtinSkills), schedules: new PgScheduleStore(db) },
-    basePrompt: EAGLEDOCS_PROMPT,
+    basePrompt: STUDYHAWK_PROMPT,
     tools: [...CANVAS_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
     workspace: host.workspace,
     extractor: documentExtractor,
     embeddings: host.embeddings,
     // sharedRags: instructor/course RAGs plug in here later (SharedRagSource).
     sandbox,
-    search: eagledocsSearch({
+    search: studyhawkSearch({
       searxngUrl: host.searxngUrl,
       paid: () => ({ provider: host.settings.getString(K.webSearchPaidProvider, 'none'), apiKey: host.settings.getSecret(K.webSearchApiKey) }),
       runner: sandbox ? (userId, path, body, signal) => sandbox.runner(userId, path, body, signal) : undefined,
     }),
     fetcher: new SafeFetch(),
     browser: sandbox,
-    browserPolicy: eagledocsBrowserPolicy(db),
+    browserPolicy: studyhawkBrowserPolicy(db),
     // show_html: the chat shows each page in a sandboxed frame served with its own CSP (no network, no app access).
     displays: ['html'],
     logger: engineLogger,

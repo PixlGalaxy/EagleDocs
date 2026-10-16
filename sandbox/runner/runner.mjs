@@ -1,4 +1,4 @@
-// EagleDocs sandbox runner: runs inside each user's container and is the only
+// StudyHawk sandbox runner: runs inside each user's container and is the only
 // way in. The backend calls it over HTTP with the container's own token.
 //   POST /exec              run python/node/shell with /workspace as the files
 //   POST /browser/<action>  drive a persistent Chromium (one cookie profile per name)
@@ -179,7 +179,7 @@ let chromium = null;
  * (Microsoft without "stay signed in") rely on them. They are kept here so a
  * login survives the browser closing when idle, until the site expires it.
  */
-const SESSION_COOKIES = 'eagledocs-session-cookies.json';
+const SESSION_COOKIES = 'studyhawk-session-cookies.json';
 
 async function saveSessionCookies(profile, force = false) {
   const s = sessions.get(profile);
@@ -293,7 +293,7 @@ async function view(page) {
 function target(page, ref) {
   const id = String(ref ?? '').replace(/^@/, '');
   if (!/^e\d{1,6}$/.test(id)) throw new HttpError(400, 'ref must look like "@e12" (from the latest snapshot)');
-  return page.locator(`[data-eagle-ref="${id}"]`).first();
+  return page.locator(`[data-hawk-ref="${id}"]`).first();
 }
 
 async function act(page, action) {

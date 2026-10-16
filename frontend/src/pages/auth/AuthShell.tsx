@@ -2,7 +2,7 @@ import { useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
-import { LOGO_SRC } from '../../components/brand';
+import { BrandLogo } from '../../components/BrandLogo';
 import { input } from '../../components/ui/styles';
 
 /** Two-column auth layout: brand panel on large screens, form card everywhere. */
@@ -10,11 +10,11 @@ export const AuthShell = ({ title, subtitle, children, footer }: { title: string
   const { t } = useI18n();
   return (
     <div className="grid min-h-[100dvh] bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <title>{`${title} - EagleDocs`}</title>
+      <title>{`${title} - StudyHawk`}</title>
       <aside className="relative hidden overflow-hidden bg-[var(--accent-700)] p-12 text-white lg:flex lg:flex-col lg:justify-between dark:bg-[var(--accent-900)]">
         <Link to="/" className="flex items-center gap-3">
-          <img src={LOGO_SRC} alt="" width={40} height={40} className="h-10 w-10 rounded-lg bg-white p-1" />
-          <span className="text-xl font-semibold tracking-tight" translate="no">EagleDocs</span>
+          {/* On the colored panel the whole logo is white. */}
+          <BrandLogo mono className="h-9 w-auto text-white" />
         </Link>
         <div className="max-w-md">
           <p className="text-3xl font-semibold leading-tight tracking-tight">{t('auth.panelTitle')}</p>
@@ -25,8 +25,7 @@ export const AuthShell = ({ title, subtitle, children, footer }: { title: string
 
       <main className="flex flex-col items-center justify-center px-4 py-10 sm:px-8">
         <Link to="/" className="mb-8 flex items-center gap-2.5 lg:hidden">
-          <img src={LOGO_SRC} alt="" width={36} height={36} className="h-9 w-9" />
-          <span className="text-lg font-semibold tracking-tight" translate="no">EagleDocs</span>
+          <BrandLogo className="h-8 w-auto" />
         </Link>
         <div className="w-full max-w-md">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h1>

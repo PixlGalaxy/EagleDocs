@@ -216,7 +216,7 @@ const ModelsSection = () => {
 
   const codex = connections?.find((c) => c.kind === 'codex');
   const keys = connections?.filter((c) => c.kind === 'api_key') ?? [];
-  const eagleModels = options.filter((o) => o.provider === 'eagledocs');
+  const hawkModels = options.filter((o) => o.provider === 'studyhawk');
 
   const savePrefs = async () => {
     if (!prefs) return;
@@ -272,12 +272,12 @@ const ModelsSection = () => {
       </Panel>
       )}
 
-      <Panel title={t('models.eagleTitle')} description={t('models.eagleBody')}>
-        {eagleModels.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('models.eagleNone')}</p>
+      <Panel title={t('models.hawkTitle')} description={t('models.hawkBody')}>
+        {hawkModels.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('models.hawkNone')}</p>
         ) : (
           <ul className="flex flex-wrap gap-2">
-            {eagleModels.map((m) => (
+            {hawkModels.map((m) => (
               <li key={m.ref} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
                 <Server size={15} className="text-slate-400" aria-hidden="true" />
                 <span className="font-medium text-slate-800 dark:text-slate-200">{m.label}</span>

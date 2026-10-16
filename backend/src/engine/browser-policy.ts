@@ -2,7 +2,7 @@ import type { BrowserPolicy } from 'pixlai-engine';
 import type { Db } from '../db/pool.js';
 import { many } from '../db/pool.js';
 
-/** Canvas is read-only in EagleDocs everywhere, including through the browser. */
+/** Canvas is read-only in StudyHawk everywhere, including through the browser. */
 const CANVAS_HOSTS = /(^|\.)instructure\.com$/i;
 
 function hostOf(url: string | null | undefined): string | null {
@@ -28,12 +28,12 @@ export function normalizeDomain(input: string): string | null {
 }
 
 /**
- * EagleDocs' rule for the agent acting in the user's browser:
+ * StudyHawk' rule for the agent acting in the user's browser:
  * - never on Canvas (the school's Canvas URL and any *.instructure.com): reading is fine, acting is blocked;
  * - freely on sites the user trusts (Settings → Browser);
  * - with the user's approval everywhere else.
  */
-export function eagledocsBrowserPolicy(db: Db): BrowserPolicy {
+export function studyhawkBrowserPolicy(db: Db): BrowserPolicy {
   return async (userId, url) => {
     const host = hostOf(url);
     if (!host) return 'approve';
@@ -49,7 +49,7 @@ export function eagledocsBrowserPolicy(db: Db): BrowserPolicy {
     );
     const canvas = hostOf(rows[0]?.canvas_host);
     if (CANVAS_HOSTS.test(host) || (canvas && matches(host, canvas))) {
-      return { block: 'EagleDocs never acts on Canvas (read-only): use the canvas_ tools to read it, and tell the student what to do there themselves.' };
+      return { block: 'StudyHawk never acts on Canvas (read-only): use the canvas_ tools to read it, and tell the student what to do there themselves.' };
     }
     if ((rows[0]?.trusted ?? []).some((domain) => matches(host, domain))) return 'allow';
     return 'approve';

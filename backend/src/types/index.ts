@@ -5,6 +5,7 @@ export type ThemeMode = (typeof THEME_MODES)[number];
 
 /** Accent families from frontend/src/index.css (`data-skin`). */
 export const THEME_SKINS = [
+  'hawk',
   'eagle',
   'default',
   'ocean',

@@ -136,7 +136,7 @@ export class SandboxManager {
 
   /** After a restart this replica owns no live sandbox: remove its leftovers and their rows. */
   private async reconcile(): Promise<void> {
-    const leftovers = await this.docker.list(['eagledocs.sandbox=1', `eagledocs.node=${this.config.NODE_ID}`]);
+    const leftovers = await this.docker.list(['studyhawk.sandbox=1', `studyhawk.node=${this.config.NODE_ID}`]);
     for (const c of leftovers) await this.docker.remove(c.Id).catch(() => undefined);
     const { rowCount } = await this.db.query('DELETE FROM sandboxes WHERE node_id = $1', [this.config.NODE_ID]);
     if (leftovers.length || rowCount) logger.info(`Removed ${leftovers.length} leftover sandbox container(s) from a previous run`);
@@ -276,7 +276,7 @@ export class SandboxManager {
   private async create(userId: string): Promise<SandboxHandle> {
     const limits = await this.limitsFor(userId);
     const token = randomBytes(32).toString('hex');
-    const name = `eagledocs-sbx-${userId.slice(0, 8)}-${randomBytes(3).toString('hex')}`;
+    const name = `studyhawk-sbx-${userId.slice(0, 8)}-${randomBytes(3).toString('hex')}`;
     const published = !this.insideDocker;
     const started = Date.now();
 
@@ -284,7 +284,7 @@ export class SandboxManager {
       Image: limits.image,
       User: this.containerUser(),
       Env: [`RUNNER_TOKEN=${token}`, `RUNNER_PORT=${RUNNER_PORT}`],
-      Labels: { 'eagledocs.sandbox': '1', 'eagledocs.user': userId, 'eagledocs.node': this.config.NODE_ID },
+      Labels: { 'studyhawk.sandbox': '1', 'studyhawk.user': userId, 'studyhawk.node': this.config.NODE_ID },
       ExposedPorts: { [`${RUNNER_PORT}/tcp`]: {} },
       HostConfig: {
         NanoCpus: Math.round(limits.cpu * 1e9),

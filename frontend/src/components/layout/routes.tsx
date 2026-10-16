@@ -14,7 +14,7 @@ function FullPageSpinner() {
   );
 }
 
-const DISMISSED_KEY = 'eagledocs.dismissedBroadcast';
+const DISMISSED_KEY = 'studyhawk.dismissedBroadcast';
 
 function BroadcastBanner() {
   const { broadcast } = useAppConfig();
@@ -105,7 +105,7 @@ export function GuestRoute({ children }: { children: ReactNode }) {
 export function Page({ title, children, wide = false }: { title: string; children: ReactNode; wide?: boolean }) {
   return (
     <div className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-      <title>{`${title} - EagleDocs`}</title>
+      <title>{`${title} - StudyHawk`}</title>
       <div className={`mx-auto w-full px-4 py-6 sm:px-6 ${wide ? 'max-w-[1400px]' : 'max-w-6xl'}`}>{children}</div>
     </div>
   );

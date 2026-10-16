@@ -11,7 +11,7 @@ The engine knows nothing about databases, HTTP or model vendors. You plug those 
 | `ModelProvider` / `ResolvedModel` | The LLM backend, chosen per run | none (see the [getting started](getting-started.md#a-minimal-model-provider) provider) |
 | `EventSink` | Where run events go | a function you write |
 | `WorkspacePort` | Optional: the user's files (enables the files pack) | `InMemoryWorkspace` |
-| `TextExtractor` | Optional: documents to text, page by page | none (EagleDocs' is a reference) |
+| `TextExtractor` | Optional: documents to text, page by page | none (StudyHawk' is a reference) |
 | `EmbeddingPort` | Optional: embeddings (with a workspace, enables the rag pack) | none |
 | `SharedRagSource` | Optional: read-only RAGs from others | none |
 | `SandboxPort` | Optional: code execution (enables `code_run`) | none |

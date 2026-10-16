@@ -7,7 +7,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import type { MessageAttachment, ModelOption, ToolCall } from '../../api/types';
 import ToolCallList from './ToolCallList';
 import { MessageAttachments } from './AttachmentViews';
-import { LOGO_SRC } from '../brand';
+import { BrandIcon } from '../BrandLogo';
 import { useSmoothText } from './useSmoothText';
 import QuestionCard from './QuestionCard';
 import HtmlDisplay from './HtmlDisplay';
@@ -170,7 +170,7 @@ const MessageView = ({
 
   return (
     <div className="flex gap-3">
-      <img src={LOGO_SRC} alt="" width={28} height={28} className="mt-0.5 h-7 w-7 shrink-0" />
+      <BrandIcon className="mt-0.5 h-7 w-7 shrink-0" />
       <div className="min-w-0 flex-1">
         {modelLabel && (
           <p className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">

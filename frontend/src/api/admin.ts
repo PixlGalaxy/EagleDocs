@@ -113,11 +113,11 @@ export interface GeneralSettings {
   default_language: string;
   default_theme_mode: string;
   default_theme_skin: string;
-  eagledocs_daily_messages: number;
+  studyhawk_daily_messages: number;
   session_ttl_hours: number;
-  /** EagleDocs as an MCP app for ChatGPT/Claude. */
+  /** StudyHawk as an MCP app for ChatGPT/Claude. */
   mcp_enabled: boolean;
-  /** Sign in with ChatGPT (Codex OAuth) inside the EagleDocs web app. */
+  /** Sign in with ChatGPT (Codex OAuth) inside the StudyHawk web app. */
   codex_enabled: boolean;
   /** Set by the circuit breaker when OpenAI starts rejecting calls; null when healthy. */
   codex_disabled_until: string | null;

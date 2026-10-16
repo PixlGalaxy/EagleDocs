@@ -22,7 +22,7 @@ interfaces ("ports").
 | **Code, web, browser** | `code_run` in your sandbox, web search and safe fetching, a real browser with an approval policy. |
 | **Robust loop** | Step and token budgets, per-tool timeouts, retries of dropped model connections, context compaction at 75%. |
 
-It powers [EagleDocs](../README.md), but the folder is self-contained: copy
+It powers [StudyHawk](../README.md), but the folder is self-contained: copy
 `pixlai-engine/` into another project, implement the ports, and it works.
 
 ## Documentation

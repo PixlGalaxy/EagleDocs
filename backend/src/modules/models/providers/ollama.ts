@@ -32,7 +32,7 @@ function toOllama(messages: ChatMessage[]) {
   });
 }
 
-/** The EagleDocs model: an Ollama server set up by the admin (`/api/chat`, streaming NDJSON). */
+/** The StudyHawk model: an Ollama server set up by the admin (`/api/chat`, streaming NDJSON). */
 export class OllamaProvider implements ModelProvider {
   constructor(private baseUrl: string, private contextWindow: number) {}
 

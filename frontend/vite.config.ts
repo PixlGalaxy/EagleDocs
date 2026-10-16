@@ -12,7 +12,7 @@ export default defineConfig({
     alias: { '@locales': localesDir },
   },
   server: {
-    allowedHosts: ['eagledocs.org', 'eagledocs.ai'],
+    allowedHosts: ['studyhawk.app', 'eagledocs.org', 'eagledocs.ai'],
     // Locales are shared with the backend, so they live outside the Vite root.
     fs: { allow: ['..'] },
     proxy: {

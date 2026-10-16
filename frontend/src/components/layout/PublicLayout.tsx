@@ -8,7 +8,7 @@ const PublicLayout = ({ children, title }: { children: ReactNode; title: string 
   const { t } = useI18n();
   return (
   <div className="flex min-h-[100dvh] flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-    <title>{title === 'EagleDocs' ? title : `${title} - EagleDocs`}</title>
+    <title>{title === 'StudyHawk' ? title : `${title} - StudyHawk`}</title>
     <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg dark:focus:bg-slate-900">
       {t('common.skip')}
     </a>

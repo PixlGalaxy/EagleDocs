@@ -74,7 +74,7 @@ class Client {
 
 const admin = new Client();
 let r = await admin.req(A, 'GET', '/config');
-check('config loads', r.status === 200 && r.json.appName === 'EagleDocs', JSON.stringify(r.json).slice(0, 120));
+check('config loads', r.status === 200 && r.json.appName === 'StudyHawk', JSON.stringify(r.json).slice(0, 120));
 check('csrf cookie set', !!admin.jar.csrf);
 
 r = await admin.req(A, 'POST', '/auth/login', { usernameOrEmail: ADMIN, password: 'change-me-now' }, { csrf: false });
@@ -104,7 +104,7 @@ await student.req(A, 'GET', '/config');
 r = await student.req(A, 'POST', '/auth/register', { email: 'ana@eagle.fgcu.edu', username: 'ana', password: 'password123', displayName: 'Ana' });
 check('register refused while SMTP missing', r.status === 503, r.json?.error);
 
-r = await admin.req(A, 'PUT', '/admin/smtp', { host: SMTP_HOST, port: 2525, secure: false, user: '', password: 'secret-pass', from_name: 'EagleDocs', from_email: 'no-reply@eagledocs.org' });
+r = await admin.req(A, 'PUT', '/admin/smtp', { host: SMTP_HOST, port: 2525, secure: false, user: '', password: 'secret-pass', from_name: 'StudyHawk', from_email: 'no-reply@studyhawk.app' });
 check('save smtp', r.status === 200 && r.json.password_set === true && !('password' in r.json), JSON.stringify(r.json));
 await new Promise((res) => setTimeout(res, 300)); // NOTIFY reaches B
 r = await student.req(B, 'GET', '/config');
@@ -176,9 +176,9 @@ r = await admin.req(A, 'GET', '/auth/me');
 const pixlId = r.json.user.id;
 r = await admin.req(B, 'PATCH', `/admin/users/${pixlId}`, { role: 'user' });
 check('last admin cannot be demoted', r.status === 409, r.json?.error);
-r = await admin.req(B, 'POST', '/admin/users', { email: 'ops@eagledocs.org', username: 'ops', display_name: 'Ops', password: 'opspass123', role: 'admin', tier_id: null });
+r = await admin.req(B, 'POST', '/admin/users', { email: 'ops@studyhawk.app', username: 'ops', display_name: 'Ops', password: 'opspass123', role: 'admin', tier_id: null });
 check('create second admin', r.status === 201 && r.json.status === 'active');
-r = await admin.req(B, 'PATCH', `/admin/users/${pixlId}`, { username: 'pixlgalaxy', email: 'pixl@eagledocs.org' });
+r = await admin.req(B, 'PATCH', `/admin/users/${pixlId}`, { username: 'pixlgalaxy', email: 'pixl@studyhawk.app' });
 check('admin edits own username and email', r.status === 200 && r.json.username === 'pixlgalaxy');
 r = await admin.req(A, 'PATCH', `/admin/users/${anaId}`, { status: 'disabled' });
 check('disable user', r.status === 200 && r.json.status === 'disabled');
@@ -188,7 +188,7 @@ r = await admin.req(A, 'DELETE', `/admin/users/${pixlId}`);
 check('cannot delete self', r.status === 400);
 
 // --- settings
-r = await admin.req(A, 'PATCH', '/admin/settings', { registration_enabled: false, app_title: 'EagleDocs Test' });
+r = await admin.req(A, 'PATCH', '/admin/settings', { registration_enabled: false, app_title: 'StudyHawk Test' });
 check('patch settings', r.status === 200 && r.json.registration_enabled === false);
 await new Promise((res) => setTimeout(res, 300));
 r = await student.req(B, 'POST', '/auth/register', { email: 'bob@fgcu.edu', username: 'bob', password: 'password123' });

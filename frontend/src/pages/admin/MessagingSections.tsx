@@ -74,10 +74,10 @@ export const EmailSection = () => {
           {(id, d) => <PasswordInput id={id} aria-describedby={d} autoComplete="off" value={smtp.password ?? ''} onChange={(e) => setSmtp({ ...smtp, password: e.target.value })} />}
         </Field>
         <Field label={t('admin.smtpFromName')}>
-          {(id) => <input id={id} value={smtp.from_name} onChange={(e) => setSmtp({ ...smtp, from_name: e.target.value })} className={input} placeholder="EagleDocs" />}
+          {(id) => <input id={id} value={smtp.from_name} onChange={(e) => setSmtp({ ...smtp, from_name: e.target.value })} className={input} placeholder="StudyHawk" />}
         </Field>
         <Field label={t('admin.smtpFromEmail')}>
-          {(id) => <input id={id} type="email" value={smtp.from_email} onChange={(e) => setSmtp({ ...smtp, from_email: e.target.value })} className={input} placeholder="no-reply@eagledocs.org" />}
+          {(id) => <input id={id} type="email" value={smtp.from_email} onChange={(e) => setSmtp({ ...smtp, from_email: e.target.value })} className={input} placeholder="no-reply@studyhawk.app" />}
         </Field>
         {result && (
           <div className="sm:col-span-2">

@@ -29,7 +29,7 @@ export interface EnvConfig {
   ADMIN_EMAIL: string | undefined;
   ADMIN_PASSWORD: string | undefined;
 
-  /** Base for links in emails, e.g. https://eagledocs.org (no trailing slash). */
+  /** Base for links in emails, e.g. https://studyhawk.app (no trailing slash). */
   PUBLIC_URL: string;
 
   /** Shared storage (NFS/SMB) mounted on every replica. */
@@ -151,8 +151,8 @@ export function loadEnv(): EnvConfig {
     JOB_WORKERS: Math.max(1, parseInt(env.JOB_WORKERS || '4', 10) || 4),
 
     SANDBOX_ENABLED: env.SANDBOX_ENABLED !== 'false',
-    SANDBOX_IMAGE: env.SANDBOX_IMAGE || (isProd ? 'ghcr.io/pixlgalaxy/eagledocs-sandbox:latest' : 'eagledocs-sandbox:dev'),
-    SANDBOX_NETWORK: env.SANDBOX_NETWORK || 'eagledocs-sandbox',
+    SANDBOX_IMAGE: env.SANDBOX_IMAGE || (isProd ? 'ghcr.io/pixlgalaxy/studyhawk-sandbox:latest' : 'studyhawk-sandbox:dev'),
+    SANDBOX_NETWORK: env.SANDBOX_NETWORK || 'studyhawk-sandbox',
     SANDBOX_DATA_HOST_PATH: env.SANDBOX_DATA_HOST_PATH || undefined,
     SANDBOX_DATA_VOLUME: env.SANDBOX_DATA_VOLUME || undefined,
     SEARXNG_URL: env.SEARXNG_URL || undefined,

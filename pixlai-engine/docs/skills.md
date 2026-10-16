@@ -65,10 +65,10 @@ Rules for `list` and `load`:
 
 - `list` returns only the skills this user may use right now. The order is the order of the index in the prompt.
 - `load` returns `null` for a slug the user does not have, even if it exists for others. The agent then gets "No skill ... is available".
-- `notes` are this user's lessons for that slug, newest first, a handful at most (EagleDocs sends the last 20).
+- `notes` are this user's lessons for that slug, newest first, a handful at most (StudyHawk sends the last 20).
 - `addNote` may be called with any slug the agent typed; store it scoped to the user and slug.
 
-EagleDocs' `PgSkillStore` and `BuiltinSkills` (backend) are a complete example: built-in skills from files with frontmatter, per-institution switches that also hide the related tools, per-user switches, personal skills and notes.
+StudyHawk' `PgSkillStore` and `BuiltinSkills` (backend) are a complete example: built-in skills from files with frontmatter, per-institution switches that also hide the related tools, per-user switches, personal skills and notes.
 
 ## Testing
 

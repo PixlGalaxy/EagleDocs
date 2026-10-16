@@ -5,7 +5,7 @@ import type { TranslationKey } from '../../i18n/translations';
 import PublicLayout from '../../components/layout/PublicLayout';
 import LogoMarquee from '../../components/landing/LogoMarquee';
 import PoweredBy from '../../components/landing/PoweredBy';
-import { LOGO_SRC } from '../../components/brand';
+import { BrandIcon } from '../../components/BrandLogo';
 
 // Free-plan workspace defaults (plans/00-decisiones.md). Paid plans raise them.
 const SPECS: { icon: typeof Cpu; label: TranslationKey; value: TranslationKey; note: TranslationKey }[] = [
@@ -34,7 +34,7 @@ const AboutPage = () => {
           <h1 className="text-5xl font-semibold tracking-[-0.045em] text-slate-950 md:text-7xl dark:text-white">{t('about.title')}</h1>
           <p className="mt-6 max-w-[56ch] text-xl leading-relaxed text-slate-600 dark:text-slate-300">{t('about.intro')}</p>
         </motion.div>
-        <img src={LOGO_SRC} alt="" width={220} height={220} className="hidden h-56 w-56 lg:block" />
+        <BrandIcon className="hidden h-56 w-56 lg:block" />
       </section>
 
       {/* Models */}

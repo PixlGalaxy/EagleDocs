@@ -169,7 +169,7 @@ export class DockerClient {
       await this.request('GET', `/networks/${encodeURIComponent(name)}`);
     } catch (err) {
       if (!(err instanceof DockerError && err.status === 404)) throw err;
-      await this.request('POST', '/networks/create', { Name: name, Driver: 'bridge', Labels: { 'eagledocs.sandbox': '1' } });
+      await this.request('POST', '/networks/create', { Name: name, Driver: 'bridge', Labels: { 'studyhawk.sandbox': '1' } });
     }
   }
 }

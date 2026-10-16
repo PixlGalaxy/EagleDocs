@@ -1,6 +1,6 @@
 // Phase 4 end-to-end: school accounts through the sandbox browser (Microsoft-style sign-in, Duo, "stay signed in"),
 // Outlook (inbox, search, read, draft, send with approval and Sent check) and Degree Works.
-// Needs Docker with eagledocs-sandbox:dev, a dev backend on E2E_A, fake-llm.mjs on 4999 and fake-school.mjs on 4997.
+// Needs Docker with studyhawk-sandbox:dev, a dev backend on E2E_A, fake-llm.mjs on 4999 and fake-school.mjs on 4997.
 const A = process.env.E2E_A ?? 'http://localhost:4000/api';
 const LLM = process.env.E2E_LLM ?? 'http://localhost:4999/v1';
 const SCHOOL_HOST = process.env.E2E_SCHOOL ?? 'http://localhost:4997';
@@ -72,7 +72,7 @@ const user = await login('user', 'user');
 let r = await admin.req('POST', '/admin/models/endpoints', { kind: 'openai_compat', name: 'Fake GPU', base_url: LLM });
 r = await admin.req('POST', `/admin/models/endpoints/${r.json.id}/discover`);
 for (const m of r.json.models) await admin.req('PATCH', `/admin/models/${m.id}`, { enabled: true, tags: ['smart', 'fast'], supports_tools: true });
-await admin.req('PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await admin.req('PATCH', '/admin/settings', { studyhawk_daily_messages: 0 });
 const inst = (await admin.req('GET', '/admin/institutions')).json.find((i) => i.slug === 'dev-university');
 r = await admin.req('PUT', `/admin/institutions/${inst.id}`, { ...inst, outlook_url: `${SCHOOL}/mail/`, degreeworks_url: `${SCHOOL}/dw/` });
 check('institution has Outlook and Degree Works URLs', r.status === 200, r.json?.error);

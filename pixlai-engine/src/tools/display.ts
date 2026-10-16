@@ -4,7 +4,7 @@ const MAX_HTML_CHARS = 200_000;
 
 /**
  * An interactive page shown inside the conversation. The host renders it
- * isolated from the app (EagleDocs: a sandboxed frame with no network), so the
+ * isolated from the app (StudyHawk: a sandboxed frame with no network), so the
  * page can run its own scripts but never reach the user's data.
  */
 export const showHtml = defineTool<{ title: string; html: string }>({

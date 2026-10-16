@@ -27,9 +27,9 @@ works through four ports, described below.
 
 ## The typical flow
 
-What the packs are designed for (and what EagleDocs does with course material):
+What the packs are designed for (and what StudyHawk does with course material):
 
-1. Bring documents into a temporary area. In EagleDocs a Canvas tool downloads
+1. Bring documents into a temporary area. In StudyHawk a Canvas tool downloads
    them into `TEMP/`.
 2. `rag_create` a collection, then `rag_add` the files or whole folders. Text is
    extracted, split into chunks of 1,200 characters with 200 of overlap, and
@@ -77,7 +77,7 @@ interface WorkspacePort {
 | `delete` | Folders go with their contents |
 | `usage` | One `StorageArea` per area: `{ name, usedBytes, limitBytes, note? }`. `note` is a rule for the model, e.g. "files here are deleted 24 h after their last change". |
 
-Areas are your choice. EagleDocs maps `TEMP/...` to a second directory with its
+Areas are your choice. StudyHawk maps `TEMP/...` to a second directory with its
 own 10 GB quota and a sweeper that deletes each file 24 hours after its last
 change. Everything else lives in the 5 GB workspace. The engine only sees paths
 and the text from `describe` and `usage`.
@@ -103,7 +103,7 @@ reading the bytes as UTF-8 when the file looks like text (`.md`, `.txt`, `.csv`,
 `.json`, code...). Pages matter: `files_read` takes a `page` argument and RAG
 citations include the page number.
 
-EagleDocs' extractor, as a reference: PDF with `unpdf` (`mergePages: false`),
+StudyHawk' extractor, as a reference: PDF with `unpdf` (`mergePages: false`),
 DOCX with `mammoth`, PPTX with `jszip` (slide text plus speaker notes, one page
 per slide), and HTML by stripping tags.
 
@@ -160,7 +160,7 @@ cap of 50,000 chunks per RAG (several thousand pages). The format is plain on
 purpose: any process can read it, and backups are just files.
 
 `UserRags(workspace, userId)` gives you `list`, `exists`, `load`, `save` and
-`remove` for your own screens (EagleDocs' Settings → RAGs uses it). `chunkPages`
+`remove` for your own screens (StudyHawk' Settings → RAGs uses it). `chunkPages`
 and `ragId` are exported too.
 
 ## Tool reference

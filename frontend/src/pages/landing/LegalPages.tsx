@@ -41,12 +41,12 @@ export const PrivacyPolicy = () => (
     title="Privacy Policy"
     updated="Last updated: February 2025"
     sections={[
-      { title: '1. Introduction', body: <p>EagleDocs values your privacy. This Privacy Policy explains what information we collect, how we use it, and the steps we take to protect it.</p> },
+      { title: '1. Introduction', body: <p>StudyHawk values your privacy. This Privacy Policy explains what information we collect, how we use it, and the steps we take to protect it.</p> },
       {
         title: '2. What Data We Collect',
         body: (
           <>
-            <p>When you use EagleDocs, we may collect the following types of information:</p>
+            <p>When you use StudyHawk, we may collect the following types of information:</p>
             <ul>
               <li>
                 <strong>Personal Information:</strong> Name, email address.
@@ -65,7 +65,7 @@ export const PrivacyPolicy = () => (
         title: '3. How We Use Your Data',
         body: (
           <>
-            <p>EagleDocs uses collected data to:</p>
+            <p>StudyHawk uses collected data to:</p>
             <ul>
               <li>Improve AI-generated responses.</li>
               <li>Analyze website usage for enhancements.</li>
@@ -76,7 +76,7 @@ export const PrivacyPolicy = () => (
         ),
       },
       { title: '4. Data Protection', body: <p>We implement security measures to protect your data, including encryption and secure servers. However, no method of data transmission is 100% secure.</p> },
-      { title: '5. Third-Party Services', body: <p>EagleDocs may use third-party services (e.g., analytics, hosting). These services have their own privacy policies, which we encourage you to review.</p> },
+      { title: '5. Third-Party Services', body: <p>StudyHawk may use third-party services (e.g., analytics, hosting). These services have their own privacy policies, which we encourage you to review.</p> },
       {
         title: '6. Your Rights',
         body: (
@@ -94,7 +94,7 @@ export const PrivacyPolicy = () => (
         ),
       },
       { title: '7. Cookie Policy', body: <p>We use cookies to enhance your experience. You can disable cookies in your browser settings, but some features may not function properly.</p> },
-      { title: '8. Changes to This Policy', body: <p>We may update this Privacy Policy periodically. Continued use of EagleDocs after updates constitutes acceptance of the revised policy.</p> },
+      { title: '8. Changes to This Policy', body: <p>We may update this Privacy Policy periodically. Continued use of StudyHawk after updates constitutes acceptance of the revised policy.</p> },
       {
         title: '9. Contact Information',
         body: (
@@ -112,16 +112,16 @@ export const TermsOfService = () => (
     title="Terms of Service"
     updated="Last updated: February 2025"
     sections={[
-      { title: '1. Acceptance of Terms', body: <p>By accessing or using EagleDocs, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, you may not use the platform.</p> },
+      { title: '1. Acceptance of Terms', body: <p>By accessing or using StudyHawk, you agree to be bound by these Terms of Service. If you do not agree with any part of these terms, you may not use the platform.</p> },
       {
         title: '2. AI Limitations & Accuracy',
         body: (
           <>
             <p>
-              EagleDocs utilizes artificial intelligence to generate responses and educational content. While we strive to provide accurate and helpful information, the AI may generate incorrect, misleading, or outdated answers. Users should independently verify any critical information before relying on it.
+              StudyHawk utilizes artificial intelligence to generate responses and educational content. While we strive to provide accurate and helpful information, the AI may generate incorrect, misleading, or outdated answers. Users should independently verify any critical information before relying on it.
             </p>
             <p>
-              EagleDocs and its developers are not responsible for any consequences resulting from the use of AI-generated content. This includes, but is not limited to, misinformation, misinterpretations, or actions taken based on AI-provided guidance.
+              StudyHawk and its developers are not responsible for any consequences resulting from the use of AI-generated content. This includes, but is not limited to, misinformation, misinterpretations, or actions taken based on AI-provided guidance.
             </p>
           </>
         ),
@@ -131,7 +131,7 @@ export const TermsOfService = () => (
         body: (
           <>
             <p>
-              EagleDocs, its creators, and affiliates are not liable for any direct, indirect, incidental, or consequential damages arising from the use or inability to use the platform. Users assume full responsibility for their use of EagleDocs and any decisions made based on its content.
+              StudyHawk, its creators, and affiliates are not liable for any direct, indirect, incidental, or consequential damages arising from the use or inability to use the platform. Users assume full responsibility for their use of StudyHawk and any decisions made based on its content.
             </p>
             <p>The platform is provided "as is" without any warranties, express or implied, including but not limited to warranties of merchantability or fitness for a particular purpose.</p>
           </>
@@ -141,8 +141,8 @@ export const TermsOfService = () => (
         title: '4. User Responsibilities',
         body: (
           <>
-            <p>Users agree not to misuse EagleDocs for illegal, unethical, or harmful activities. This includes attempting to exploit, manipulate, or bypass the AI for unintended purposes.</p>
-            <p>EagleDocs reserves the right to suspend or terminate access to users who violate these terms.</p>
+            <p>Users agree not to misuse StudyHawk for illegal, unethical, or harmful activities. This includes attempting to exploit, manipulate, or bypass the AI for unintended purposes.</p>
+            <p>StudyHawk reserves the right to suspend or terminate access to users who violate these terms.</p>
           </>
         ),
       },
@@ -150,7 +150,7 @@ export const TermsOfService = () => (
         title: '5. Privacy Policy',
         body: (
           <p>
-            EagleDocs collects and processes user data in accordance with its{' '}
+            StudyHawk collects and processes user data in accordance with its{' '}
             <Link to="/privacy" className="font-medium text-[var(--accent-700)] hover:underline dark:text-[var(--accent-300)]">
               Privacy Policy
             </Link>
@@ -158,7 +158,7 @@ export const TermsOfService = () => (
           </p>
         ),
       },
-      { title: '6. Changes to These Terms', body: <p>EagleDocs reserves the right to update these Terms of Service at any time. Continued use of the platform after changes are made constitutes acceptance of the revised terms.</p> },
+      { title: '6. Changes to These Terms', body: <p>StudyHawk reserves the right to update these Terms of Service at any time. Continued use of the platform after changes are made constitutes acceptance of the revised terms.</p> },
       {
         title: '7. Contact Information',
         body: (

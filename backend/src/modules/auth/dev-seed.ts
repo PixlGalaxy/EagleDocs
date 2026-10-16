@@ -6,15 +6,15 @@ import { hashPassword } from './password.js';
 
 /** A university for the seeded accounts, so Settings show institution-specific screens. */
 const DEV_INSTITUTION = {
-  name: 'EagleDocs Dev University',
+  name: 'StudyHawk Dev University',
   slug: 'dev-university',
-  domain: 'eagledocs.test',
+  domain: 'studyhawk.test',
   canvas: 'https://canvas.instructure.com',
 };
 
 const DEV_USERS = [
-  { username: 'admin', password: 'admin', email: 'admin@eagledocs.test', role: 'admin', name: 'Dev Admin' },
-  { username: 'user', password: 'user', email: 'user@eagledocs.test', role: 'user', name: 'Dev Student' },
+  { username: 'admin', password: 'admin', email: 'admin@studyhawk.test', role: 'admin', name: 'Dev Admin' },
+  { username: 'user', password: 'user', email: 'user@studyhawk.test', role: 'user', name: 'Dev Student' },
 ] as const;
 
 /**

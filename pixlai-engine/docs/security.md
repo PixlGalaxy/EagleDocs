@@ -20,7 +20,7 @@ An agent reads things other people wrote (web pages, emails, documents) and can 
 The engine has no network, file system or database access of its own. The ports you implement are where these protections live:
 
 - **Approvals reach the right person.** `createApproval` and `waitForApproval` are yours: only the run's user may decide, and an expired approval must not be decided later.
-- **`FetchPort` blocks internal addresses.** `web_fetch` and `web_download` go wherever the model says. Your fetcher must resolve the host name, refuse private, loopback and link-local ranges (including `169.254.169.254`), connect to the address it checked, and check again after every redirect. EagleDocs' `SafeFetch` is a complete example.
+- **`FetchPort` blocks internal addresses.** `web_fetch` and `web_download` go wherever the model says. Your fetcher must resolve the host name, refuse private, loopback and link-local ranges (including `169.254.169.254`), connect to the address it checked, and check again after every redirect. StudyHawk' `SafeFetch` is a complete example.
 - **`SandboxPort` isolates code.** `code_run` executes whatever the model writes. Run it in a container or VM with no host mounts except the user's workspace, no privileges, CPU, memory and process limits, and the network policy you want.
 - **`BrowserPolicy` decides where the agent may act.** The browser pack reads anything, asks before acting on sites the user has not trusted, and refuses domains you block. Put every site where an action would be harmful (submitting coursework, payments) in `blocked`.
 - **`WorkspacePort` enforces quotas** and keeps each user in their own root.

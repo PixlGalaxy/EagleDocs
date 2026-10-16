@@ -180,7 +180,7 @@ class FakeBrowser implements BrowserPort {
   }
 }
 
-/** Like EagleDocs: Canvas is read-only, a trusted site runs freely, the rest asks. */
+/** Like StudyHawk: Canvas is read-only, a trusted site runs freely, the rest asks. */
 const policy: BrowserPolicy = async (_userId, url) => {
   const host = new URL(url).hostname;
   if (host === 'canvas.uni.edu') return { block: 'Canvas is read-only in this app' };

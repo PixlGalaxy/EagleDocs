@@ -140,7 +140,7 @@ type BrowserPolicy = (userId: string, url: string, action: 'click' | 'type' | 'p
 | `{ block }` | refused with your message | refused |
 | no policy given | every action asks | refused |
 
-EagleDocs, for example, allows actions on domains the user marked as trusted, asks everywhere else, and blocks every
+StudyHawk, for example, allows actions on domains the user marked as trusted, asks everywhere else, and blocks every
 action on the school's Canvas (the app is read-only there; it reads Canvas through its API tools).
 
 All browser tools are main-agent-only: subagents cannot drive the user's logged-in browser.

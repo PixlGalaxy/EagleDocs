@@ -7,7 +7,7 @@ const NotFound = () => {
   const { t } = useI18n();
   return (
     <div className="flex min-h-[100dvh] flex-col bg-amber-50 text-slate-950 dark:bg-slate-950 dark:text-white">
-      <title>404 - EagleDocs</title>
+      <title>404 - StudyHawk</title>
       <PublicNavbar />
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center gap-8 px-4 py-12 md:flex-row">
         <img src="/Galaxy.webp" alt={t('notFound.art')} width={512} height={512} className="w-64 md:w-[28rem]" />

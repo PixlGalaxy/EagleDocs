@@ -94,7 +94,7 @@ check('planner notes are not work', !titles.includes('My personal note'));
 check('calendar event without assignment included once', titles.filter((t) => /exam review/.test(t)).length === 1 && titles.filter((t) => t === 'Chapter 4 Homework').length === 1);
 const hw = r.json.find((i) => i.title === 'Chapter 4 Homework');
 check('item has estimate and priority', hw.estimate_hours === 1.5 && hw.priority > 50 && hw.kind === 'assignment', JSON.stringify(hw));
-check('links point at Canvas, not at EagleDocs', hw.html_url.startsWith(`${CANVAS}/courses/101/assignments/1`), hw.html_url);
+check('links point at Canvas, not at StudyHawk', hw.html_url.startsWith(`${CANVAS}/courses/101/assignments/1`), hw.html_url);
 check('quiz recognized', r.json.find((i) => i.title === 'Quiz 3')?.kind === 'quiz');
 check('sorted by due date', r.json.every((item, i, all) => i === 0 || (all[i - 1].due_at ?? '') <= (item.due_at ?? '')));
 
@@ -132,7 +132,7 @@ r = await admin.req('POST', '/admin/models/endpoints', { kind: 'openai_compat', 
 const ep = r.json;
 r = await admin.req('POST', `/admin/models/endpoints/${ep.id}/discover`);
 for (const m of r.json.models) await admin.req('PATCH', `/admin/models/${m.id}`, { enabled: true, tags: ['smart', 'fast'], supports_tools: true });
-await admin.req('PATCH', '/admin/settings', { eagledocs_daily_messages: 0 });
+await admin.req('PATCH', '/admin/settings', { studyhawk_daily_messages: 0 });
 
 r = await user.req('POST', '/chats', {});
 const chatId = r.json.id;
@@ -174,7 +174,7 @@ const failed = events.find((e) => e.type === 'tool_result' && e.call.name === 'c
 check('agent gets an actionable error, chat survives', failed?.call.status === 'error' && /Settings > Connections/.test(failed.call.result_preview) && events.at(-1).type === 'done', failed?.call.result_preview);
 
 // ---------------------------------------------------------------- SSO and Degree Works cards
-r = await user.req('PUT', '/connections/sso', { email: 'user@eagledocs.test', password: 'school-password-123' });
+r = await user.req('PUT', '/connections/sso', { email: 'user@studyhawk.test', password: 'school-password-123' });
 check('school account saved', r.status === 200 && r.json.kind === 'sso' && r.json.status === 'untested' && !r.raw.includes('school-password-123'));
 r = await user.req('PUT', '/connections/degreeworks', { enabled: true });
 check('degree works toggle', r.status === 200 && r.json.meta.enabled === 'true');

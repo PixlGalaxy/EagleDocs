@@ -11,7 +11,7 @@ const HOUR = 3_600_000;
 
 /** Workspace of 1 MB and TEMP of 2 MB, in a fresh folder. */
 async function setup() {
-  const root = await fs.mkdtemp(join(tmpdir(), 'eagledocs-ws-'));
+  const root = await fs.mkdtemp(join(tmpdir(), 'studyhawk-ws-'));
   const settings = { getNumber: (key: string, fallback: number) => (key === 'sandbox.default_disk_mb' ? 1 : key === 'storage.temp_mb' ? 2 : fallback) };
   return { root, ws: new DiskWorkspace(root, settings as unknown as SettingsService) };
 }

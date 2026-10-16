@@ -1,4 +1,4 @@
-// EagleDocs service worker: web push and notification clicks.
+// StudyHawk service worker: web push and notification clicks.
 // No offline caching of API data on purpose: answers must come from the server.
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -9,9 +9,9 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: 'EagleDocs', body: event.data ? event.data.text() : '' };
+    data = { title: 'StudyHawk', body: event.data ? event.data.text() : '' };
   }
-  const title = data.title || 'EagleDocs';
+  const title = data.title || 'StudyHawk';
   event.waitUntil(
     self.registration.showNotification(title, {
       body: data.body || '',

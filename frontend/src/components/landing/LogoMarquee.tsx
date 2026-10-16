@@ -28,7 +28,7 @@ function Mark({ mark }: { mark: BrandMark }) {
 }
 
 /**
- * The page's single marquee: model providers EagleDocs can use.
+ * The page's single marquee: model providers StudyHawk can use.
  * Pauses on hover; under reduced motion it becomes a static, wrapping row.
  */
 const LogoMarquee = ({ label }: { label: string }) => {

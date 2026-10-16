@@ -69,7 +69,7 @@ export interface McpPrincipal {
 }
 
 /**
- * EagleDocs as an OAuth 2.1 authorization server for MCP clients: dynamic
+ * StudyHawk as an OAuth 2.1 authorization server for MCP clients: dynamic
  * client registration, authorization code with PKCE (S256), refresh tokens
  * with rotation, revocation. Tokens are opaque and stored hashed; every check
  * reads the database, so a revocation applies on every replica at once.
@@ -109,7 +109,7 @@ export class OAuthService {
       authorization_servers: [this.publicUrl],
       scopes_supported: [...MCP_SCOPES],
       bearer_methods_supported: ['header'],
-      resource_name: 'EagleDocs',
+      resource_name: 'StudyHawk',
     };
   }
 

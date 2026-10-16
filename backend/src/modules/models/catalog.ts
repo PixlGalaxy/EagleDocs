@@ -14,7 +14,7 @@ import { OpenAICompatProvider } from './providers/openai-compat.js';
 import { assertPublicUrl } from '../../engine/web.js';
 import { routeTier, TIER_FALLBACK, TIERS, type ModelTier, type RouteInput } from './router.js';
 
-export type ProviderKind = 'eagledocs' | 'codex' | 'openai_compat' | 'anthropic';
+export type ProviderKind = 'studyhawk' | 'codex' | 'openai_compat' | 'anthropic';
 
 /** What the model picker shows (frontend/src/api/types.ts `ModelOption`). */
 export interface ModelOption {
@@ -35,7 +35,7 @@ export interface ModelPrefs {
   auto_map: Partial<Record<ModelTier, string>>;
 }
 
-interface EagleModelRow {
+interface HawkModelRow {
   id: string;
   model_name: string;
   display_name: string;
@@ -75,7 +75,7 @@ export function parseRef(ref: string): { provider: string; source: string; model
   const first = ref.indexOf(':');
   if (first < 0) return null;
   const provider = ref.slice(0, first);
-  if (provider === 'eagledocs') return { provider, source: ref.slice(first + 1), model: '' };
+  if (provider === 'studyhawk') return { provider, source: ref.slice(first + 1), model: '' };
   const second = ref.indexOf(':', first + 1);
   if (second < 0) return null;
   return { provider, source: ref.slice(first + 1, second), model: ref.slice(second + 1) };
@@ -83,9 +83,9 @@ export function parseRef(ref: string): { provider: string; source: string; model
 
 export interface Resolution {
   model: ResolvedModel;
-  /** Counts against the daily EagleDocs quota. */
-  isEagleDocs: boolean;
-  /** Shown before the answer, e.g. when Codex fell back to the EagleDocs model. */
+  /** Counts against the daily StudyHawk quota. */
+  isStudyHawk: boolean;
+  /** Shown before the answer, e.g. when Codex fell back to the StudyHawk model. */
   notice?: string;
 }
 
@@ -105,8 +105,8 @@ export class ModelCatalog {
     return !until || new Date(until).getTime() <= Date.now();
   }
 
-  private eagleModels(): Promise<EagleModelRow[]> {
-    return many<EagleModelRow>(
+  private hawkModels(): Promise<HawkModelRow[]> {
+    return many<HawkModelRow>(
       this.db,
       `SELECT m.*, e.name AS endpoint_name, e.kind, e.base_url, e.api_key_enc
        FROM models m JOIN model_endpoints e ON e.id = m.endpoint_id
@@ -116,12 +116,12 @@ export class ModelCatalog {
 
   async options(userId: string): Promise<ModelOption[]> {
     const options: ModelOption[] = [];
-    for (const m of await this.eagleModels()) {
+    for (const m of await this.hawkModels()) {
       options.push({
-        ref: `eagledocs:${m.id}`,
-        provider: 'eagledocs',
+        ref: `studyhawk:${m.id}`,
+        provider: 'studyhawk',
         label: m.display_name,
-        source_label: 'EagleDocs',
+        source_label: 'StudyHawk',
         tags: m.tags,
         supports_tools: m.supports_tools,
         supports_vision: m.supports_vision,
@@ -187,11 +187,11 @@ export class ModelCatalog {
   }
 
   /** The admin's model for a tier: one tagged with it, else any enabled one. */
-  private async eagleDefault(tier: ModelTier): Promise<string | null> {
-    const models = await this.eagleModels();
+  private async hawkDefault(tier: ModelTier): Promise<string | null> {
+    const models = await this.hawkModels();
     const tagged = models.find((m) => m.tags.includes(tier)) ?? models.find((m) => TIER_FALLBACK[tier].some((t) => m.tags.includes(t)));
     const chosen = tagged ?? models[0];
-    return chosen ? `eagledocs:${chosen.id}` : null;
+    return chosen ? `studyhawk:${chosen.id}` : null;
   }
 
   /**
@@ -234,11 +234,11 @@ export class ModelCatalog {
     const sameSourceFast = source
       ? options.find((o) => {
           const r = parseRef(o.ref);
-          // EagleDocs models share one source (the admin's); a connection is its own source.
-          return o.tags.includes('fast') && r?.provider === source.provider && (r.provider === 'eagledocs' || r.source === source.source);
+          // StudyHawk models share one source (the admin's); a connection is its own source.
+          return o.tags.includes('fast') && r?.provider === source.provider && (r.provider === 'studyhawk' || r.source === source.source);
         })?.ref
       : undefined;
-    const refs = [sameSourceFast, chat, prefs.auto_map.fast, await this.eagleDefault('fast')].filter(
+    const refs = [sameSourceFast, chat, prefs.auto_map.fast, await this.hawkDefault('fast')].filter(
       (ref, i, all): ref is string => Boolean(ref) && available.has(ref!) && all.indexOf(ref) === i,
     );
     const out: Resolution[] = [];
@@ -260,7 +260,7 @@ export class ModelCatalog {
       const decision = routeTier(route);
       const available = new Set((await this.options(userId)).map((o) => o.ref));
       const candidates = [decision.tier, ...TIER_FALLBACK[decision.tier]].map((tier) => prefs.auto_map[tier]).filter(Boolean) as string[];
-      const picked = candidates.find((r) => available.has(r)) ?? (await this.eagleDefault(decision.tier));
+      const picked = candidates.find((r) => available.has(r)) ?? (await this.hawkDefault(decision.tier));
       if (!picked) throw badRequest('models.noModel');
       ref = picked;
       label = 'Auto';
@@ -270,9 +270,9 @@ export class ModelCatalog {
     if (!parsed) throw badRequest('models.unknown');
 
     if (parsed.provider === 'codex' && !this.codexAvailable()) {
-      const fallback = await this.eagleDefault('smart');
+      const fallback = await this.hawkDefault('smart');
       if (!fallback) throw badRequest('models.noModel');
-      notice = 'ChatGPT is paused on this server right now, so the EagleDocs model answers instead.';
+      notice = 'ChatGPT is paused on this server right now, so the StudyHawk model answers instead.';
       return { ...(await this.build(userId, fallback, label)), notice };
     }
     return { ...(await this.build(userId, ref, label)), ...(notice && { notice }) };
@@ -282,15 +282,15 @@ export class ModelCatalog {
     const parsed = parseRef(ref)!;
     const withAuto = (name: string) => (autoLabel ? `${autoLabel} -> ${name}` : name);
 
-    if (parsed.provider === 'eagledocs') {
-      const m = (await this.eagleModels()).find((row) => row.id === parsed.source);
+    if (parsed.provider === 'studyhawk') {
+      const m = (await this.hawkModels()).find((row) => row.id === parsed.source);
       if (!m) throw badRequest('models.unknown');
       const provider =
         m.kind === 'ollama'
           ? new OllamaProvider(m.base_url, m.context_window)
-          : new OpenAICompatProvider(m.base_url, m.api_key_enc ? this.secrets.decrypt(m.api_key_enc) : undefined, 'EagleDocs model');
+          : new OpenAICompatProvider(m.base_url, m.api_key_enc ? this.secrets.decrypt(m.api_key_enc) : undefined, 'StudyHawk model');
       return {
-        isEagleDocs: true,
+        isStudyHawk: true,
         model: {
           provider,
           model: m.model_name,
@@ -314,7 +314,7 @@ export class ModelCatalog {
         conn.id,
       );
       return {
-        isEagleDocs: false,
+        isStudyHawk: false,
         model: { provider, model: parsed.model, label: withAuto(`ChatGPT ${parsed.model}`), ref, supportsTools: true, supportsVision: true, contextWindow: CODEX_CONTEXT_WINDOW },
       };
     }
@@ -323,7 +323,7 @@ export class ModelCatalog {
     const anthropic = parsed.provider === 'anthropic';
     const provider = anthropic ? new AnthropicProvider(key) : new OpenAICompatProvider(String(conn.meta.base_url), key, conn.label, assertPublicUrl);
     return {
-      isEagleDocs: false,
+      isStudyHawk: false,
       model: {
         provider,
         model: parsed.model,
@@ -336,33 +336,33 @@ export class ModelCatalog {
     };
   }
 
-  /** The student's daily EagleDocs-model turns (their plan); the admin default when unset. */
+  /** The student's daily StudyHawk-model turns (their plan); the admin default when unset. */
   private dailyLimit?: (userId: string) => Promise<number>;
 
   setDailyLimitSource(source: (userId: string) => Promise<number>): void {
     this.dailyLimit = source;
   }
 
-  /** Daily EagleDocs-model allowance; 0 means unlimited. Throws when used up. */
+  /** Daily StudyHawk-model allowance; 0 means unlimited. Throws when used up. */
   async assertQuota(userId: string): Promise<void> {
-    const limit = this.dailyLimit ? await this.dailyLimit(userId) : this.settings.getNumber(K.eagledocsDailyMessages, 50);
+    const limit = this.dailyLimit ? await this.dailyLimit(userId) : this.settings.getNumber(K.studyhawkDailyMessages, 50);
     if (limit <= 0) return;
     const row = await maybe<{ used: number }>(
       this.db,
-      'SELECT eagledocs_messages AS used FROM usage_daily WHERE user_id = $1 AND day = current_date',
+      'SELECT studyhawk_messages AS used FROM usage_daily WHERE user_id = $1 AND day = current_date',
       [userId],
     );
     if ((row?.used ?? 0) >= limit) throw new AppError(429, 'models.quotaReached');
   }
 
-  async recordUsage(userId: string, isEagleDocs: boolean, tokensIn: number, tokensOut: number): Promise<void> {
+  async recordUsage(userId: string, isStudyHawk: boolean, tokensIn: number, tokensOut: number): Promise<void> {
     await this.db.query(
-      `INSERT INTO usage_daily (user_id, day, messages, eagledocs_messages, tokens_in, tokens_out)
+      `INSERT INTO usage_daily (user_id, day, messages, studyhawk_messages, tokens_in, tokens_out)
        VALUES ($1, current_date, 1, $2, $3, $4)
        ON CONFLICT (user_id, day) DO UPDATE SET messages = usage_daily.messages + 1,
-         eagledocs_messages = usage_daily.eagledocs_messages + excluded.eagledocs_messages,
+         studyhawk_messages = usage_daily.studyhawk_messages + excluded.studyhawk_messages,
          tokens_in = usage_daily.tokens_in + excluded.tokens_in, tokens_out = usage_daily.tokens_out + excluded.tokens_out`,
-      [userId, isEagleDocs ? 1 : 0, tokensIn, tokensOut],
+      [userId, isStudyHawk ? 1 : 0, tokensIn, tokensOut],
     );
   }
 }

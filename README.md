@@ -12,7 +12,7 @@ To run the Docker container for this project, follow these steps:
 
 1. Use the following command to run the container:
    ```bash
-   docker run -p 80:3000 ghcr.io/pixlgalaxy/eagledocs:latest
+   docker run -p 80:3000 ghcr.io/pixlgalaxy/studyhawk:latest
 
 This will map port 3000 from the container to your host machine.
 
@@ -32,8 +32,8 @@ For more details on setting up and using Vite with React, refer to the official 
 
 ### Links
 
-- Website: [eagledocs.org](https://eagledocs.org)
-- Discord: [EagleDocs Discord](https://discord.gg/CFS9DSe9RX)
+- Website: [studyhawk.app](https://studyhawk.app)
+- Discord: [StudyHawk Discord](https://discord.gg/CFS9DSe9RX)
 
 ### Developers 
 - [PixlGalaxy](https://github.com/PixlGalaxy)

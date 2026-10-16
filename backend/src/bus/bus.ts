@@ -44,7 +44,7 @@ export class Bus {
     const client = new pg.Client({
       connectionString: this.config.DATABASE_URL,
       ssl: this.config.DB_SSL ? { rejectUnauthorized: false } : undefined,
-      application_name: `eagledocs-bus:${this.config.NODE_ID}`,
+      application_name: `studyhawk-bus:${this.config.NODE_ID}`,
     });
     client.on('notification', (message) => this.dispatch(message.channel as BusChannel, message.payload));
     client.on('error', (err) => {

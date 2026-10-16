@@ -19,7 +19,7 @@ import type { ModelCatalog } from '../models/catalog.js';
 import { hitRateLimit } from '../../middleware/rate-limit.js';
 import type { Queryable } from '../../db/pool.js';
 
-/** "connection:<id>:<model>" or "eagledocs:<tier>": short; anything longer is not a model. */
+/** "connection:<id>:<model>" or "studyhawk:<tier>": short; anything longer is not a model. */
 const MAX_MODEL_REF = 200;
 const modelRefOf = (value: unknown): string | null => {
   if (value === undefined || value === null || value === '') return null;
@@ -309,10 +309,10 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
       return message;
     });
     const resolution = await catalog.resolve(userId, chat.model_ref, { text: '', historyChars: 0 });
-    if (resolution.isEagleDocs) await catalog.assertQuota(userId);
+    if (resolution.isStudyHawk) await catalog.assertQuota(userId);
     const result = await compactHistory(history, resolution.model, AbortSignal.timeout(120_000));
     // Counts toward the daily limit like any message (estimated: the summary call reports no usage here).
-    if (result) await catalog.recordUsage(userId, resolution.isEagleDocs, estimateTokens(history.slice(0, result.keepFrom)), estimateTokens([{ role: 'user', content: result.summary }]));
+    if (result) await catalog.recordUsage(userId, resolution.isStudyHawk, estimateTokens(history.slice(0, result.keepFrom)), estimateTokens([{ role: 'user', content: result.summary }]));
     const before = await chats.lastContext(chat.id);
     if (!result) {
       res.json({ summarized: 0, context: before });

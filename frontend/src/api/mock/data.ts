@@ -49,13 +49,13 @@ const baseUser = {
   language: 'en',
   timezone: 'America/New_York',
   theme_mode: 'system',
-  theme_skin: 'eagle',
+  theme_skin: 'hawk',
   created_at: iso(-24 * 40),
   updated_at: iso(-2),
 };
 
 export const users: AdminUserRow[] = [
-  { ...baseUser, id: 'u-admin', email: 'admin@eagledocs.org', username: 'pixl', display_name: 'Pixl Galaxy', role: 'admin', major: 'Software Engineering', last_seen_at: iso(-0.2), verification_expires_at: null, sandbox_status: 'idle' },
+  { ...baseUser, id: 'u-admin', email: 'admin@studyhawk.app', username: 'pixl', display_name: 'Pixl Galaxy', role: 'admin', major: 'Software Engineering', last_seen_at: iso(-0.2), verification_expires_at: null, sandbox_status: 'idle' },
   { ...baseUser, id: 'u-1', email: 'mrodriguez4521@eagle.fgcu.edu', username: 'mrodriguez', display_name: 'Mariana Rodríguez', role: 'user', major: 'Accounting', last_seen_at: iso(-5), verification_expires_at: null, sandbox_status: 'working' },
   { ...baseUser, id: 'u-2', email: 'tbeckett@eagle.fgcu.edu', username: 'tbeckett', display_name: 'Theo Beckett', role: 'user', major: 'Biology', last_seen_at: iso(-30), verification_expires_at: null, sandbox_status: 'idle' },
   {
@@ -107,8 +107,8 @@ export const messages: Record<string, Message[]> = {
 };
 
 export const modelOptions: ModelOption[] = [
-  { ref: 'eagledocs:ep1:azulai', provider: 'eagledocs', label: 'AzulAI (GPT-OSS 20B)', source_label: 'EagleDocs', tags: ['smart'], supports_tools: true, supports_vision: false },
-  { ref: 'eagledocs:ep1:gemma4', provider: 'eagledocs', label: 'Gemma 4 E4B', source_label: 'EagleDocs', tags: ['fast', 'vision'], supports_tools: true, supports_vision: true },
+  { ref: 'studyhawk:ep1:azulai', provider: 'studyhawk', label: 'AzulAI (GPT-OSS 20B)', source_label: 'StudyHawk', tags: ['smart'], supports_tools: true, supports_vision: false },
+  { ref: 'studyhawk:ep1:gemma4', provider: 'studyhawk', label: 'Gemma 4 E4B', source_label: 'StudyHawk', tags: ['fast', 'vision'], supports_tools: true, supports_vision: true },
   { ref: 'codex:conn-codex:gpt-5', provider: 'codex', label: 'GPT-5', source_label: 'ChatGPT (mariana@...)', tags: ['smart', 'code'], supports_tools: true, supports_vision: true, reasoning: true },
   { ref: 'codex:conn-codex:gpt-5-codex', provider: 'codex', label: 'GPT-5 Codex', source_label: 'ChatGPT (mariana@...)', tags: ['code'], supports_tools: true, supports_vision: false, reasoning: true },
 ];

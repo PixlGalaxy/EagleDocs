@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BrowserSearch, eagledocsSearch, isPrivateAddress, paidSearch, parseDuckDuckGo, SafeFetch, unwrapBingUrl } from './web.js';
+import { BrowserSearch, studyhawkSearch, isPrivateAddress, paidSearch, parseDuckDuckGo, SafeFetch, unwrapBingUrl } from './web.js';
 
 test('internal addresses are refused, public ones allowed', () => {
   for (const ip of ['127.0.0.1', '10.1.2.3', '172.20.0.5', '192.168.0.150', '169.254.169.254', '100.64.1.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:192.168.1.1', 'not-an-ip']) {
@@ -67,9 +67,9 @@ test('browser search reads Bing in a tab of its own in the user\'s sandbox', asy
 });
 
 test('the chain has the browser last and the paid API only with a key', async () => {
-  const withBrowser = eagledocsSearch({ searxngUrl: 'http://searx.invalid', paid: () => ({ provider: 'none', apiKey: undefined }), runner: async <T>() => ({}) as T });
+  const withBrowser = studyhawkSearch({ searxngUrl: 'http://searx.invalid', paid: () => ({ provider: 'none', apiKey: undefined }), runner: async <T>() => ({}) as T });
   const names = (withBrowser as unknown as { providers: { name: string }[] }).providers.map((p) => p.name);
   assert.deepEqual(names, ['searxng', 'duckduckgo', 'paid', 'browser']);
-  const bare = eagledocsSearch({ searxngUrl: undefined, paid: () => ({ provider: 'none', apiKey: undefined }), runner: undefined });
+  const bare = studyhawkSearch({ searxngUrl: undefined, paid: () => ({ provider: 'none', apiKey: undefined }), runner: undefined });
   assert.deepEqual((bare as unknown as { providers: { name: string }[] }).providers.map((p) => p.name), ['duckduckgo', 'paid']);
 });

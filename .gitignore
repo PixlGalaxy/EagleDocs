@@ -35,3 +35,4 @@ dist-ssr
 **/dev-postgres/
 **/dev-master.key
 /backend/fgcu-live/
+/studyhawk-cyan/

@@ -4,7 +4,7 @@ import { getRuntimeConfig, type RuntimeConfig } from '../api/config';
 const FALLBACK: RuntimeConfig = {
   language: 'en',
   defaultThemeMode: 'system',
-  defaultThemeSkin: 'eagle',
+  defaultThemeSkin: 'hawk',
   registrationEnabled: true,
   emailConfigured: true,
   institutions: [],

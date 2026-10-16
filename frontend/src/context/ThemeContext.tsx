@@ -34,7 +34,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const { user, updateUser } = useAuth();
   // Signed-out screens follow the admin default (Admin Panel -> Settings).
   const [defaultMode, setDefaultMode] = useState<ThemeMode>('system');
-  const [defaultSkin, setDefaultSkin] = useState<SkinId>('eagle');
+  const [defaultSkin, setDefaultSkin] = useState<SkinId>('hawk');
   const systemPrefersDark = useSystemPrefersDark();
 
   useEffect(() => {
