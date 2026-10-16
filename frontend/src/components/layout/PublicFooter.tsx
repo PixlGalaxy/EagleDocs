@@ -36,7 +36,13 @@ const PublicFooter = () => {
               ))}
             </select>
           </label>
-          <p>{new Date().getFullYear()} StudyHawk</p>
+          <p>
+            © {new Date().getFullYear()} StudyHawk · {/* Required by the PixlAI-Engine license (pixlai-engine/LICENSE). */}
+            {t('footer.builtWith')} -{' '}
+            <a href="https://fabriziogamboa.com" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-slate-900 hover:underline dark:hover:text-white">
+              fabriziogamboa.com
+            </a>
+          </p>
         </div>
       </div>
     </footer>

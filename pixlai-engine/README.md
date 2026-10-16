@@ -184,3 +184,14 @@ npm install
 npm test        # node:test via tsx, no network
 npm run build   # dist/ with type declarations
 ```
+
+## License
+
+[PixlAI-Engine License](LICENSE): MIT with an attribution requirement. Copyright (c) 2025-2026 Fabrizio Gamboa
+(PixlGalaxy).
+
+Use it for anything, including commercial products, as long as the product keeps the copyright notice and shows
+this credit, with a link to the website, in its documentation and in its user interface (an About, Credits or
+Legal page):
+
+> Built with PixlAI-Engine by Fabrizio Gamboa (PixlGalaxy) - [fabriziogamboa.com](https://fabriziogamboa.com)

@@ -1,0 +1,146 @@
+StudyHawk Source-Available License
+Version 1.0
+
+Copyright (c) 2025-2026 Fabrizio Gamboa (PixlGalaxy). All rights reserved.
+
+This license is not an open source license. The source code is published so
+people can read it, learn from it and help develop it. Every right not
+expressly granted below is reserved by the Licensor.
+
+1. Definitions
+
+   "Licensor" means Fabrizio Gamboa, also known as PixlGalaxy.
+
+   "Software" means every version of StudyHawk, previously named EagleDocs,
+   from version 0.0.0 and the first commit of its repository (January 29,
+   2025) onward: its source code, object code, documentation, designs, images,
+   texts and any other material in this repository, except the parts listed
+   in section 8.
+
+   "Brand" means the names StudyHawk and EagleDocs, their logos and icons
+   (including the "SH" and "ED" marks), the domain names studyhawk.app,
+   eagledocs.org and eagledocs.ai, and any name or design that can be confused
+   with them.
+
+   "Development Use" means running, studying, testing and modifying the
+   Software on your own devices, privately, for one of these purposes only:
+   learning how it works, evaluating it, or preparing a contribution to this
+   repository.
+
+   "Commercial Use" means any use intended for or directed toward commercial
+   advantage or monetary compensation, direct or indirect. It includes selling,
+   licensing, renting or charging for the Software or for access to it; offering
+   it as a hosted service; using it to provide paid services; showing ads in or
+   around it; using it inside a for-profit organization's operations; and
+   accepting donations or sponsorships for a version of it.
+
+2. What you may do
+
+   Subject to the conditions of this license, the Licensor grants you a
+   personal, worldwide, non-exclusive, non-transferable, non-sublicensable,
+   revocable, royalty-free license to:
+
+   a. view and read the source code;
+
+   b. download, build and run the Software for Development Use;
+
+   c. modify the Software for Development Use and to submit those changes to
+      this repository as contributions (section 6);
+
+   d. fork this repository on GitHub, to the extent GitHub's Terms of Service
+      require, provided the fork keeps this license and is used only as
+      allowed here.
+
+3. What you may not do
+
+   Without the Licensor's prior written permission, you may not:
+
+   a. make any Commercial Use of the Software or of any part or modified
+      version of it. Only the Licensor may profit from the Software;
+
+   b. deploy, host or run the Software, or a modified version of it, so that
+      anyone other than you can use it, whether publicly, for a school, a
+      company or any group, free or paid;
+
+   c. publish, distribute, sell or share copies or modified versions of the
+      Software outside this repository and its GitHub forks;
+
+   d. advertise, promote or market the Software, a modified version of it, or
+      any product or service based on it, or use the Brand to do so;
+
+   e. remove, hide, change or replace the Brand, the copyright notices, the
+      credits, or this license, anywhere they appear in the Software, including
+      the user interface, the pages, the logos and the metadata. If you run the
+      Software as allowed here, its branding must stay exactly as the Licensor
+      made it;
+
+   f. present the Software, or anything made from it, as your own work or as
+      made, approved or sponsored by anyone other than the Licensor;
+
+   g. use the Software or its code to train, fine-tune or evaluate machine
+      learning models, or to build a product that competes with StudyHawk.
+
+4. The Brand
+
+   The Brand belongs to the Licensor. This license does not grant any right to
+   use the Brand, except that it must appear, unchanged, in the Software when
+   you use it for Development Use.
+
+5. Ownership
+
+   The Licensor keeps all right, title and interest in the Software and the
+   Brand. Modifications you make remain subject to this license.
+
+6. Contributions
+
+   Contributions (pull requests, patches, issues with code, designs or text)
+   are welcome. By submitting a contribution you confirm that you wrote it or
+   have the right to submit it, and you grant the Licensor a perpetual,
+   worldwide, irrevocable, royalty-free license to use, modify, publish,
+   sublicense, relicense and commercialize it as part of the Software or
+   separately, with or without credit.
+
+   Contributors whose contributions are accepted will be listed as
+   contributors on the StudyHawk website. That listing is the only
+   recognition: contributing does not entitle you to payment, royalties,
+   ownership, equity or any other compensation. See CONTRIBUTING.md.
+
+7. Termination
+
+   This license ends automatically, without notice, if you break any of its
+   terms. When it ends you must stop using the Software and delete every copy
+   you have. The Licensor may also seek every remedy available under the law,
+   including injunctions, damages and the recovery of attorney's fees and
+   costs. Sections 3, 4, 5, 6, 7, 9, 10 and 11 survive termination.
+
+8. Parts under other licenses
+
+   a. The folder pixlai-engine/ is licensed separately under its own LICENSE
+      file (PixlAI-Engine License).
+
+   b. Third-party libraries, fonts and other components keep their own
+      licenses. This license does not change them.
+
+9. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+
+10. Limitation of liability
+
+   IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE.
+
+11. Governing law
+
+   This license is governed by the laws of the State of Florida, United States,
+   without regard to its conflict of law rules. Any dispute arising from it
+   shall be brought in the state or federal courts located in Florida, and you
+   consent to their jurisdiction.
+
+12. Permission
+
+   For any use not allowed here, including commercial licenses, write to
+   support@studyhawk.app.

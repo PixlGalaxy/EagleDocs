@@ -118,6 +118,26 @@ End-to-end suites drive a running server with fake Canvas, model and school serv
   an automated browser. Schools may not allow this; check the institution's IT policy before enabling it.
 - The sandbox can reach the internet without a filter. See "Open items" in [SECURITY.md](SECURITY.md).
 
+## License
+
+StudyHawk is **source-available, not open source**. Copyright (c) 2025-2026 Fabrizio Gamboa (PixlGalaxy).
+
+- **StudyHawk** (everything except `pixlai-engine/`): [StudyHawk Source-Available License](LICENSE). You may read the
+  code and run and modify it on your own devices to learn, evaluate or contribute. You may not use it commercially,
+  host it for others, redistribute it, promote it, or remove or change its branding. Only the author may profit from
+  it. It covers every version since the first commit, including the EagleDocs name.
+- **PixlAI-Engine** (`pixlai-engine/`): [PixlAI-Engine License](pixlai-engine/LICENSE), MIT with attribution. Free for
+  any use, including commercial, as long as the product credits "Built with PixlAI-Engine by Fabrizio Gamboa
+  (PixlGalaxy) - [fabriziogamboa.com](https://fabriziogamboa.com)" in its documentation and in its user interface.
+- **StudyHawk, EagleDocs and their logos** belong to the author and are not licensed for any other use.
+
+For a commercial license or any other permission, write to support@studyhawk.app.
+
+## Contributing
+
+Pull requests are welcome. Accepted contributors are listed on the StudyHawk website; contributing does not come
+with payment or ownership. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Developers
 
-- [PixlGalaxy](https://github.com/PixlGalaxy)
+- [Fabrizio Gamboa (PixlGalaxy)](https://fabriziogamboa.com), creator and owner · [GitHub](https://github.com/PixlGalaxy)
