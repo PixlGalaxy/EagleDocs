@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
+import { BrandWordmark } from '../BrandLogo';
 import BrandLoader from './BrandLoader';
 
 /** The splash stays at least this long, so the animation reads instead of flashing. */
@@ -35,9 +36,7 @@ export default function BootSplash() {
       className={`fixed inset-0 z-[100] flex flex-col items-center justify-center gap-5 bg-slate-50 transition-opacity duration-300 dark:bg-slate-950 ${fading ? 'pointer-events-none opacity-0' : 'opacity-100'}`}
     >
       <BrandLoader size={88} label={t('common.loading')} />
-      <p className="text-sm font-bold tracking-[0.18em] text-slate-950 dark:text-white" aria-hidden="true">
-        STUDY<span className="text-[#22d3ee]">HAWK</span>
-      </p>
+      <BrandWordmark className="h-5 w-auto" label="" />
     </div>
   );
 }
