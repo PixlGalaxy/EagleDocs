@@ -183,6 +183,22 @@ check('revoking cuts access at once', r.status === 204 && res.status === 401 && 
 r = await user.req('GET', '/mcp-apps');
 check('and the app is gone from the list', !r.json?.apps?.some((x) => x.id === app?.id));
 
+// ---------------------------------------------------------------- a new password ends every app's access
+p = pkce();
+a = await authorize('memory', p);
+r = await user.req('POST', `/oauth/requests/${new URL(a.location).searchParams.get('request')}`, { approve: true, scopes: ['memory'] });
+res = await tokenCall({ grant_type: 'authorization_code', code: new URL(r.json.redirect_to).searchParams.get('code'), redirect_uri: REDIRECT, client_id: clientId, code_verifier: a.verifier });
+const beforePassword = res.body;
+res = await rpc(beforePassword.access_token, 'ping');
+check('a fresh grant works', res.status === 200, String(res.status));
+// The dev seed puts the "user" password back on the next boot.
+r = await user.req('POST', '/auth/change-password', { currentPassword: 'user', newPassword: 'user-changed-e2e-1' });
+check('the student changes the password', r.status === 204, r.json?.error);
+res = await rpc(beforePassword.access_token, 'ping');
+check('apps connected before the change lose access', res.status === 401, String(res.status));
+res = await tokenCall({ grant_type: 'refresh_token', refresh_token: beforePassword.refresh_token, client_id: clientId });
+check('and cannot refresh their way back in', res.body?.error === 'invalid_grant', JSON.stringify(res.body));
+
 await admin.req('PATCH', '/admin/settings', { mcp_enabled: false });
 res = await rpc(rotated.access_token, 'ping');
 check('turning MCP off closes the endpoint', res.status === 404, String(res.status));

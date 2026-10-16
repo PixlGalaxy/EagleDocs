@@ -3,7 +3,7 @@ import type { Db } from '../../db/pool.js';
 import type { SettingsService } from '../../db/settings.js';
 import { badRequest, unavailable } from '../../errors.js';
 import { logger } from '../../logger.js';
-import { createRateLimiter } from '../../middleware/rate-limit.js';
+import { createRateLimiter, ipBucket } from '../../middleware/rate-limit.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAdmin } from '../auth/session.middleware.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
@@ -21,7 +21,7 @@ export function createContactRoutes(deps: { db: Db; contact: ContactService; set
   const ipLimiter = createRateLimiter(db, {
     windowMs: 60 * 60_000,
     max: 5,
-    keyFn: (req) => `contact:ip:${req.ip}`,
+    keyFn: (req) => `contact:ip:${ipBucket(req.ip)}`,
     describe: (req) => `contact form messages from ${req.ip}`,
   });
   // Many IPs writing as one address (or one address flooded with replies) are capped too.

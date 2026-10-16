@@ -1,3 +1,4 @@
+import { readFileSync } from 'fs';
 import pg from 'pg';
 import type { EnvConfig } from '../config/env.js';
 import { logger } from '../logger.js';
@@ -12,11 +13,22 @@ export type Queryable = Pick<pg.Pool, 'query'> | pg.PoolClient;
 
 export type Db = pg.Pool;
 
+/**
+ * TLS for the database connection. `verify` checks the server certificate (a
+ * man in the middle could otherwise read every chat and swap data); a private CA
+ * goes in DB_SSL_CA. `no-verify` only encrypts, for setups that cannot do better.
+ */
+export function dbSsl(config: Pick<EnvConfig, 'DB_SSL' | 'DB_SSL_CA'>): pg.ConnectionConfig['ssl'] {
+  if (config.DB_SSL === 'off') return undefined;
+  if (config.DB_SSL === 'no-verify') return { rejectUnauthorized: false };
+  return { rejectUnauthorized: true, ...(config.DB_SSL_CA && { ca: readFileSync(config.DB_SSL_CA, 'utf8') }) };
+}
+
 export function createPool(config: EnvConfig): Db {
   const pool = new pg.Pool({
     connectionString: config.DATABASE_URL,
     max: config.DB_POOL_MAX,
-    ssl: config.DB_SSL ? { rejectUnauthorized: false } : undefined,
+    ssl: dbSsl(config),
     application_name: `studyhawk:${config.NODE_ID}`,
   });
   // An idle client losing its connection (DB restart, failover) must not crash

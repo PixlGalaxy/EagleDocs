@@ -25,6 +25,12 @@ export class SchoolError extends Error {
   }
 }
 
+/** Microsoft's own sign-in pages (school accounts on Microsoft 365). */
+const MICROSOFT_LOGIN_HOSTS = ['login.microsoftonline.com', 'login.microsoft.com', 'login.live.com', 'login.windows.net', 'account.live.com'];
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', 'host.docker.internal']);
+/** Second-level labels that are public suffixes in many countries (ac.uk, edu.pe, com.mx). */
+const SECOND_LEVEL = new Set(['ac', 'co', 'com', 'edu', 'gov', 'net', 'org', 'sch']);
+
 interface Account {
   email: string;
   username: string | null;
@@ -42,6 +48,8 @@ interface PageState {
   detail?: string;
   title?: string;
   host?: string;
+  /** The page was loaded over https (the saved password is never typed into anything else). */
+  https?: boolean;
 }
 
 /**
@@ -55,7 +63,7 @@ const visible = (el) => !!el && el.getClientRects().length > 0 && getComputedSty
 const find = (sel) => [...document.querySelectorAll(sel)].find(visible);
 const text = (document.body ? document.body.innerText : '').slice(0, 6000);
 const host = location.hostname.toLowerCase();
-const out = (kind, detail) => ({ kind, detail, title: document.title, host });
+const out = (kind, detail) => ({ kind, detail, title: document.title, host, https: location.protocol === 'https:' });
 
 if (/(^|\\.)duosecurity\\.com$/.test(host) || /duo/i.test(document.title)) {
   if (/is this your device|trust this browser|remember this device/i.test(text)) return out('duo_trust');
@@ -148,6 +156,32 @@ export class SchoolService {
     return this.browser;
   }
 
+  /**
+   * Where the saved school password may be typed: Microsoft's sign-in, the
+   * school's own domains (their SSO page), the service being opened and the
+   * institution's SSO login URL. Any other page with a password box (a look-alike
+   * reached through a redirect, or a wrong URL in the admin panel) gets nothing.
+   */
+  private async passwordHosts(userId: string, targetHosts: string[]): Promise<string[]> {
+    const row = await maybe<{ sso_login_url: string | null; domains: string[] | null }>(
+      this.db,
+      `SELECT i.sso_login_url, array_agg(d.domain::text) FILTER (WHERE d.domain IS NOT NULL) AS domains
+         FROM users u LEFT JOIN institutions i ON i.id = u.institution_id LEFT JOIN institution_domains d ON d.institution_id = i.id
+        WHERE u.id = $1 GROUP BY i.sso_login_url`,
+      [userId],
+    );
+    const hosts = new Set([...MICROSOFT_LOGIN_HOSTS, ...targetHosts]);
+    for (const domain of row?.domains ?? []) {
+      const d = domain.toLowerCase();
+      hosts.add(d);
+      // eagle.fgcu.edu signs in at login.fgcu.edu: the parent domain too, unless that is a public suffix (ac.uk).
+      const labels = d.split('.');
+      if (labels.length > 2 && !SECOND_LEVEL.has(labels.at(-2)!)) hosts.add(labels.slice(1).join('.'));
+    }
+    if (row?.sso_login_url && URL.canParse(row.sso_login_url)) hosts.add(new URL(row.sso_login_url).hostname.toLowerCase());
+    return [...hosts];
+  }
+
   private async account(userId: string): Promise<{ account: Account; connectionId: string }> {
     const row = await maybe<Parameters<ConnectionsService['secretOf']>[0]>(this.db, `SELECT * FROM connections WHERE user_id = $1 AND kind = 'sso'`, [userId]);
     if (!row?.secret_enc) {
@@ -200,6 +234,16 @@ export class SchoolService {
       if (!account) ({ account, connectionId } = await this.account(userId));
       return account!;
     };
+    let passwordHosts: string[] | null = null;
+    const assertPasswordHost = async (state: PageState) => {
+      passwordHosts ??= await this.passwordHosts(userId, targetHosts);
+      const at = (state.host ?? '').toLowerCase();
+      // Plain http only for the local fake school of the e2e, never in production.
+      const secure = state.https || (process.env.NODE_ENV !== 'production' && LOCAL_HOSTS.has(at));
+      if (secure && passwordHosts.some((h) => at === h || at.endsWith(`.${h}`))) return;
+      logger.warn(`School sign-in for ${userId}: refused to type the password at ${at || '?'} (not a known sign-in page)`);
+      throw new SchoolError('stuck', `The sign-in went to ${at || 'an unknown page'}, which is not your school's or Microsoft's sign-in, so StudyHawk did not type your password there.`);
+    };
     let mfaSince = 0;
     let unknownStreak = 0;
     let typedPassword = 0;
@@ -241,6 +285,7 @@ export class SchoolService {
         case 'username_password': {
           // The same password refused twice means it is wrong; never loop on it.
           if (++typedPassword > 2) throw await this.fail(connectionId, new SchoolError('bad_credentials', 'The school rejected the saved password.'));
+          await assertPasswordHost(state);
           const acct = await credentials();
           if (state.kind === 'username_password') {
             await this.run(

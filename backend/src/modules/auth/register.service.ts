@@ -6,7 +6,7 @@ import { withTx } from '../../db/tx.js';
 import type { SettingsService } from '../../db/settings.js';
 import { badRequest, conflict, forbidden, tooManyRequests, unavailable } from '../../errors.js';
 import { logger } from '../../logger.js';
-import { hitRateLimit } from '../../middleware/rate-limit.js';
+import { hitRateLimit, ipBucket } from '../../middleware/rate-limit.js';
 import { SETTINGS_KEYS } from '../admin/settings-keys.js';
 import type { InstitutionsService } from '../institutions/institutions.service.js';
 import type { MailService } from '../mail/mail.service.js';
@@ -21,7 +21,7 @@ import {
   type UserWithInstitution,
 } from '../users/users.service.js';
 import type { AuthService } from './auth.service.js';
-import { hashPassword } from './password.js';
+import { hashPassword, verifyPassword } from './password.js';
 import { hashToken, newCode, newToken } from './tokens.js';
 
 /** Wrong codes allowed before the user has to ask for a new one. */
@@ -52,8 +52,9 @@ export class RegisterService {
 
   /**
    * Creates a `pending` account and emails the link and code. Signing up again
-   * with an email that is still pending only resends: it never replaces the
-   * password, or anyone could plant credentials on someone else's address.
+   * with an email that is still pending replaces its pending credentials and
+   * resends (same limits as "resend"). Verifying asks for the password, so
+   * credentials someone else planted on that address can never be activated.
    */
   async register(body: Record<string, unknown>, lang: string): Promise<{ email: string; expires_at: Date }> {
     // In a beta test the admin makes the accounts: nobody signs up on their own.
@@ -71,6 +72,16 @@ export class RegisterService {
 
     const existing = await maybe<{ id: string; status: string }>(this.db, 'SELECT id, status FROM users WHERE email = $1', [email]);
     if (existing?.status === 'pending') {
+      await this.limitResend(email);
+      try {
+        await this.db.query(
+          "UPDATE users SET username = $2, password_hash = $3, display_name = $4, language = $5, updated_at = now() WHERE id = $1 AND status = 'pending'",
+          [existing.id, username, await hashPassword(password), displayName, lang],
+        );
+      } catch (err) {
+        if (uniqueViolationField(err)) throw conflict('users.usernameTaken');
+        throw err;
+      }
       const expiresAt = await this.sendNewVerification(existing.id, email, lang);
       return { email, expires_at: expiresAt };
     }
@@ -134,13 +145,19 @@ export class RegisterService {
     return issued.expiresAt;
   }
 
+  /** One new code a minute and five a day per address: each one resets the code's attempts. */
+  private async limitResend(email: string): Promise<void> {
+    const perMinute = await hitRateLimit(this.db, `resend:min:${email}`, MINUTE, 1);
+    const perDay = await hitRateLimit(this.db, `resend:day:${email}`, DAY, 5);
+    for (const hit of [perMinute, perDay]) if (!hit.allowed) throw tooManyRequests(hit.retryAfterSeconds);
+  }
+
   /** Always succeeds from the caller's point of view, so it does not reveal which emails signed up. */
   async resend(rawEmail: unknown, ip: string | undefined): Promise<void> {
     const email = normalizeEmail(rawEmail);
-    const perMinute = await hitRateLimit(this.db, `resend:min:${email}`, MINUTE, 1);
-    const perDay = await hitRateLimit(this.db, `resend:day:${email}`, DAY, 5);
-    const perIp = await hitRateLimit(this.db, `resend:ip:${ip}`, DAY, 30);
-    for (const hit of [perMinute, perDay, perIp]) if (!hit.allowed) throw tooManyRequests(hit.retryAfterSeconds);
+    const perIp = await hitRateLimit(this.db, `resend:ip:${ipBucket(ip)}`, DAY, 30);
+    if (!perIp.allowed) throw tooManyRequests(perIp.retryAfterSeconds);
+    await this.limitResend(email);
 
     const user = await maybe<{ id: string; language: string }>(
       this.db,
@@ -156,43 +173,55 @@ export class RegisterService {
   }
 
   /**
-   * By link (`token`) or by `email` + `code`. Activates the account and opens a
-   * session, so the person lands signed in.
+   * By link (`token`) or by `email` + `code`, plus the account's `password`:
+   * the link alone (or a mail scanner opening it) never activates credentials
+   * someone else chose. Each try takes one attempt before anything is checked,
+   * so parallel guesses cannot go past the limit. Activates the account and
+   * opens a session, so the person lands signed in.
    */
   async verify(body: Record<string, unknown>, meta: { userAgent?: string; ip?: string }): Promise<{ user: UserWithInstitution; sessionToken: string }> {
-    let userId: string;
+    if (typeof body.password !== 'string' || !body.password) throw badRequest('auth.fieldsRequired');
+    let row: VerificationRow | undefined;
+    let codeOk = true;
     if (typeof body.token === 'string' && body.token) {
-      const row = await maybe<VerificationRow>(
+      row = await maybe<VerificationRow>(
         this.db,
-        'SELECT user_id, code_hash, attempts, expires_at FROM email_verifications WHERE token_hash = $1 AND expires_at > now()',
-        [hashToken(body.token)],
+        `UPDATE email_verifications SET attempts = attempts + 1
+          WHERE token_hash = $1 AND expires_at > now() AND attempts < $2
+          RETURNING user_id, code_hash, attempts, expires_at`,
+        [hashToken(body.token), MAX_CODE_ATTEMPTS],
       );
       if (!row) throw badRequest('auth.invalidVerification');
-      userId = row.user_id;
     } else if (typeof body.email === 'string' && typeof body.code === 'string') {
       const email = normalizeEmail(body.email);
       const code = body.code.replace(/\D/g, '');
-      const row = await maybe<VerificationRow>(
+      row = await maybe<VerificationRow>(
         this.db,
-        `SELECT v.user_id, v.code_hash, v.attempts, v.expires_at FROM email_verifications v
-         JOIN users u ON u.id = v.user_id WHERE u.email = $1 AND u.status = 'pending' AND v.expires_at > now()`,
-        [email],
+        `UPDATE email_verifications v SET attempts = v.attempts + 1
+           FROM users u
+          WHERE u.id = v.user_id AND u.email = $1 AND u.status = 'pending' AND v.expires_at > now() AND v.attempts < $2
+          RETURNING v.user_id, v.code_hash, v.attempts, v.expires_at`,
+        [email, MAX_CODE_ATTEMPTS],
       );
       if (!row) throw badRequest('auth.invalidVerification');
-      if (row.attempts >= MAX_CODE_ATTEMPTS) throw badRequest('auth.tooManyAttempts');
-      if (code.length !== 6 || codeHash(row.user_id, code) !== row.code_hash) {
-        await this.db.query('UPDATE email_verifications SET attempts = attempts + 1 WHERE user_id = $1', [row.user_id]);
-        throw badRequest(row.attempts + 1 >= MAX_CODE_ATTEMPTS ? 'auth.tooManyAttempts' : 'auth.invalidVerification');
-      }
-      userId = row.user_id;
+      codeOk = code.length === 6 && codeHash(row.user_id, code) === row.code_hash;
     } else {
       throw badRequest('auth.fieldsRequired');
+    }
+    const userId = row.user_id;
+    const account = await maybe<{ password_hash: string }>(this.db, "SELECT password_hash FROM users WHERE id = $1 AND status = 'pending'", [userId]);
+    // The password is checked even when the code is wrong, so the timing does not tell which one failed.
+    const passwordOk = account ? await verifyPassword(body.password, account.password_hash) : false;
+    if (!codeOk || !passwordOk) {
+      if (row.attempts >= MAX_CODE_ATTEMPTS) throw badRequest('auth.tooManyAttempts');
+      throw badRequest(codeOk ? 'auth.verifyWrongPassword' : 'auth.invalidVerification');
     }
 
     const sessionToken = await withTx(this.db, async (client: pg.PoolClient) => {
       const activated = await client.query(
-        "UPDATE users SET status = 'active', email_verified_at = now(), updated_at = now() WHERE id = $1 AND status = 'pending'",
-        [userId],
+        // Only with the password just checked: a sign-up again in between does not get activated.
+        "UPDATE users SET status = 'active', email_verified_at = now(), updated_at = now() WHERE id = $1 AND status = 'pending' AND password_hash = $2",
+        [userId, account!.password_hash],
       );
       if (activated.rowCount === 0) throw badRequest('auth.invalidVerification');
       await client.query('DELETE FROM email_verifications WHERE user_id = $1', [userId]);
@@ -208,7 +237,7 @@ export class RegisterService {
     const email = normalizeEmail(rawEmail);
     if (!this.mail.isConfigured()) throw unavailable('mail.notConfigured');
     const perEmail = await hitRateLimit(this.db, `forgot:${email}`, 60 * MINUTE, 3);
-    const perIp = await hitRateLimit(this.db, `forgot:ip:${ip}`, 60 * MINUTE, 20);
+    const perIp = await hitRateLimit(this.db, `forgot:ip:${ipBucket(ip)}`, 60 * MINUTE, 20);
     for (const hit of [perEmail, perIp]) if (!hit.allowed) throw tooManyRequests(hit.retryAfterSeconds);
 
     const user = await maybe<{ id: string; language: string }>(
@@ -223,12 +252,11 @@ export class RegisterService {
       'INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES ($1, $2, now() + make_interval(mins => $3))',
       [user.id, hashToken(token), RESET_TTL_MINUTES],
     );
-    try {
-      await this.mail.sendPasswordReset(email, user.language, `${this.config.PUBLIC_URL}/reset-password?token=${encodeURIComponent(token)}`);
-      logger.auth.info(`Password reset requested for <${email}>`);
-    } catch (err) {
-      logger.warn(`Could not send password reset to <${email}>: ${(err as Error).message}`);
-    }
+    // Not awaited: the answer takes as long whether or not the account exists.
+    void this.mail
+      .sendPasswordReset(email, user.language, `${this.config.PUBLIC_URL}/reset-password?token=${encodeURIComponent(token)}`)
+      .then(() => logger.auth.info(`Password reset requested for <${email}>`))
+      .catch((err: Error) => logger.warn(`Could not send password reset to <${email}>: ${err.message}`));
   }
 
   async resetPassword(body: Record<string, unknown>): Promise<void> {

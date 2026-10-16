@@ -3,7 +3,6 @@ import type { NextFunction, Request, Response } from 'express';
 import { forbidden } from '../errors.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
-const COOKIE = 'csrf';
 const HEADER = 'x-csrf-token';
 
 function sameToken(a: string, b: string): boolean {
@@ -21,6 +20,8 @@ function sameToken(a: string, b: string): boolean {
  * `exempt` covers endpoints called by other servers (OAuth token, MCP, webhooks).
  */
 export function createCsrfProtection(options: { secure: boolean; exempt?: (req: Request) => boolean }) {
+  // `__Host-` (needs Secure): a sibling subdomain cannot plant its own value.
+  const COOKIE = options.secure ? '__Host-csrf' : 'csrf';
   return (req: Request, res: Response, next: NextFunction) => {
     let token = req.cookies?.[COOKIE] as string | undefined;
     if (!token) {

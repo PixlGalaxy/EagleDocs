@@ -18,12 +18,14 @@ const DEV_USERS = [
 ] as const;
 
 /**
- * Test accounts for local development only (NODE_ENV is not production).
- * Their passwords and roles are reset on every boot so the credentials always
- * work. They skip the password-length rule on purpose; never in production.
+ * Test accounts for local development only: outside production, and only on the
+ * embedded dev database (or with DEV_SEED=true, e.g. a second replica on it).
+ * A typo in NODE_ENV against a real database never creates admin/admin. Their
+ * passwords and roles are reset on every boot so the credentials always work.
  */
 export async function seedDevUsers(db: Db, config: EnvConfig): Promise<void> {
   if (config.NODE_ENV === 'production') return;
+  if (process.env.STUDYHAWK_EMBEDDED_DB !== '1' && process.env.DEV_SEED !== 'true') return;
 
   await withAdvisoryLock(db, LOCKS.bootstrap, async (client) => {
     const { rows } = await client.query<{ id: string }>(

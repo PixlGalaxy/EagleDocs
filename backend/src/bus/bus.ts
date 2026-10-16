@@ -2,6 +2,7 @@ import pg from 'pg';
 import type { EnvConfig } from '../config/env.js';
 import type { Db } from '../db/pool.js';
 import { logger } from '../logger.js';
+import { dbSsl } from '../db/pool.js';
 
 /**
  * Channels between replicas. NOTIFY payloads cap at 8 KB, so they only carry
@@ -43,7 +44,7 @@ export class Bus {
   private async connect(): Promise<void> {
     const client = new pg.Client({
       connectionString: this.config.DATABASE_URL,
-      ssl: this.config.DB_SSL ? { rejectUnauthorized: false } : undefined,
+      ssl: dbSsl(this.config),
       application_name: `studyhawk-bus:${this.config.NODE_ID}`,
     });
     client.on('notification', (message) => this.dispatch(message.channel as BusChannel, message.payload));

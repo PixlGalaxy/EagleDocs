@@ -18,6 +18,7 @@ import {
   validateUsername,
 } from '../users/users.service.js';
 import type { AccountDeletion } from '../users/account-deletion.js';
+import { signOutEverywhere } from '../auth/auth.service.js';
 
 const ROLES: Role[] = ['admin', 'user'];
 const STATUSES: UserStatus[] = ['pending', 'active', 'disabled'];
@@ -185,8 +186,8 @@ export class UsersAdminService {
           throw err;
         }
       }
-      // A disabled account loses its sessions right away.
-      if (status === 'disabled') await client.query('DELETE FROM sessions WHERE user_id = $1', [id]);
+      // A disabled account loses its sessions and connected apps right away.
+      if (status === 'disabled') await signOutEverywhere(client, id);
     });
     return this.get(id);
   }
@@ -196,7 +197,7 @@ export class UsersAdminService {
     const next = validatePassword(password);
     const result = await this.db.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [await hashPassword(next), id]);
     if (result.rowCount === 0) throw notFound();
-    await this.db.query('DELETE FROM sessions WHERE user_id = $1', [id]);
+    await signOutEverywhere(this.db, id);
   }
 
   async delete(id: string, actorId: string): Promise<void> {

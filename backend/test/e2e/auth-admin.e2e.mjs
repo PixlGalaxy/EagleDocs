@@ -118,34 +118,44 @@ check('smtp test email', r.status === 204 && mails.length === 1, r.json?.error);
 // --- registration
 r = await student.req(A, 'POST', '/auth/register', { email: 'ana@gmail.com', username: 'ana', password: 'password123', displayName: 'Ana' });
 check('foreign domain refused', r.status === 403, r.json?.error);
-r = await student.req(A, 'POST', '/auth/register', { email: 'ana@eagle.fgcu.edu', username: 'ana', password: 'password123', displayName: 'Ana' });
+// Someone else signs up first with Ana's address and plants their own password.
+const planter = new Client();
+await planter.req(A, 'GET', '/config');
+r = await planter.req(A, 'POST', '/auth/register', { email: 'ana@eagle.fgcu.edu', username: 'mallory', password: 'planted999', displayName: 'Ana' });
 check('register with subdomain', r.status === 201 && r.json.email === 'ana@eagle.fgcu.edu', JSON.stringify(r.json));
 const mail = mails.at(-1);
 const code = mail.match(/\b(\d{6})\b/)?.[1];
 const token = mail.match(/verify\?token=([A-Za-z0-9_-]+)/)?.[1];
 check('email has code and link', !!code && !!token);
 
-r = await student.req(B, 'POST', '/auth/login', { usernameOrEmail: 'ana', password: 'password123' });
+r = await planter.req(B, 'POST', '/auth/login', { usernameOrEmail: 'mallory', password: 'planted999' });
 check('pending cannot log in (403)', r.status === 403, r.json?.error);
-r = await student.req(B, 'POST', '/auth/register', { email: 'ana@eagle.fgcu.edu', username: 'ana2', password: 'hijacked99' });
-check('re-register pending only resends', r.status === 201 && mails.length === 3);
+// Ana signs up herself: her credentials replace the pending ones.
+r = await student.req(B, 'POST', '/auth/register', { email: 'ana@eagle.fgcu.edu', username: 'ana', password: 'password123', displayName: 'Ana' });
+check('re-register pending replaces the credentials and resends', r.status === 201 && mails.length === 3, r.json?.error);
 const code2 = mails.at(-1).match(/\b(\d{6})\b/)?.[1];
-r = await student.req(B, 'POST', '/auth/verify', { email: 'ana@eagle.fgcu.edu', code: code === code2 ? '000000' : code });
+r = await student.req(B, 'POST', '/auth/verify', { email: 'ana@eagle.fgcu.edu', code: code === code2 ? '000000' : code, password: 'password123' });
 check('old code no longer works', r.status === 400, r.json?.error);
-r = await student.req(A, 'POST', '/auth/verify', { email: 'ana@eagle.fgcu.edu', code: code2 });
-check('verify with code signs in', r.status === 200 && r.json.user.status === 'active' && r.json.user.institution_name === 'Florida Gulf Coast University');
+r = await student.req(B, 'POST', '/auth/verify', { email: 'ana@eagle.fgcu.edu', code: code2 });
+check('the code alone does not verify', r.status === 400, r.json?.error);
+r = await planter.req(B, 'POST', '/auth/verify', { email: 'ana@eagle.fgcu.edu', code: code2, password: 'planted999' });
+check('planted credentials are never activated', r.status === 400, r.json?.error);
+r = await student.req(A, 'POST', '/auth/verify', { email: 'ana@eagle.fgcu.edu', code: code2, password: 'password123' });
+check('verify with code signs in', r.status === 200 && r.json.user.status === 'active' && r.json.user.institution_name === 'Florida Gulf Coast University', r.json?.error);
 r = await student.req(B, 'GET', '/auth/me');
 check('student session on B', r.status === 200 && r.json.user.username === 'ana');
-r = await student.req(A, 'POST', '/auth/login', { usernameOrEmail: 'ana', password: 'hijacked99' });
-check('hijack password never set', r.status === 401);
+r = await planter.req(A, 'POST', '/auth/login', { usernameOrEmail: 'mallory', password: 'planted999' });
+check('planted password never works', r.status === 401);
 
 const linkUser = new Client();
 await linkUser.req(A, 'GET', '/config');
 await linkUser.req(A, 'POST', '/auth/register', { email: 'leo@fgcu.edu', username: 'leo', password: 'password123' });
 const leoToken = mails.at(-1).match(/verify\?token=([A-Za-z0-9_-]+)/)?.[1];
 r = await linkUser.req(B, 'POST', '/auth/verify', { token: leoToken });
+check('opening the link alone does not verify', r.status === 400, r.json?.error);
+r = await linkUser.req(B, 'POST', '/auth/verify', { token: leoToken, password: 'password123' });
 check('verify by link', r.status === 200 && r.json.user.username === 'leo', r.json?.error);
-r = await linkUser.req(B, 'POST', '/auth/verify', { token: leoToken });
+r = await linkUser.req(B, 'POST', '/auth/verify', { token: leoToken, password: 'password123' });
 check('link single use', r.status === 400);
 
 // --- profile & appearance
@@ -159,6 +169,8 @@ check('student cannot reach admin, error in Spanish', r.status === 403 && /permi
 // --- forgot / reset
 const before = mails.length;
 r = await student.req(B, 'POST', '/auth/forgot-password', { email: 'ana@eagle.fgcu.edu' });
+// The reset email goes out after the answer (same timing whether or not the account exists).
+for (let i = 0; i < 40 && mails.length === before; i++) await new Promise((res) => setTimeout(res, 50));
 check('forgot password', r.status === 204 && mails.length === before + 1);
 const resetToken = mails.at(-1).match(/reset-password\?token=([A-Za-z0-9_-]+)/)?.[1];
 r = await student.req(A, 'POST', '/auth/reset-password', { token: resetToken, newPassword: 'newpass456' });

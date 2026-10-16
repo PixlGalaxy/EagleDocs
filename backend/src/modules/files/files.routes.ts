@@ -102,7 +102,8 @@ export function createFilesRoutes(workspace: DiskWorkspace, chats: ChatService) 
     const inlineType = req.query.inline === '1' ? IMAGE_TYPES[stat.name.split('.').pop()?.toLowerCase() ?? ''] : undefined;
     if (inlineType) {
       res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
-      res.setHeader('Cache-Control', 'private, max-age=300');
+      // Checked again on every view, so nothing private is served from the cache after signing out.
+      res.setHeader('Cache-Control', 'private, no-cache');
       res.type(inlineType);
       await pipeline(stream, res).catch(() => undefined);
       return;

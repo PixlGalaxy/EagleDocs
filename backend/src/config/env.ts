@@ -18,7 +18,9 @@ export interface EnvConfig {
   NODE_ID: string;
 
   DATABASE_URL: string;
-  DB_SSL: boolean;
+  /** off, verify (true: the server certificate is checked, against DB_SSL_CA if set) or no-verify (encrypted, unchecked). */
+  DB_SSL: 'off' | 'verify' | 'no-verify';
+  DB_SSL_CA?: string;
   DB_POOL_MAX: number;
 
   /** 32 bytes, base64. Encrypts every secret stored in the DB; must be identical on every replica. */
@@ -41,6 +43,8 @@ export interface EnvConfig {
 
   SESSION_TTL_HOURS: number;
   COOKIE_SECURE: boolean;
+  /** A header that carries the real visitor IP set by the edge (cf-connecting-ip behind Cloudflare). Optional. */
+  CLIENT_IP_HEADER?: string;
   LOGIN_RATE_LIMIT_MAX: number;
   LOGIN_RATE_LIMIT_WINDOW_MINUTES: number;
   /** How long a sign-up may stay unverified before it is deleted. Lowered in tests. */
@@ -125,7 +129,8 @@ export function loadEnv(): EnvConfig {
     NODE_ID: env.NODE_ID || (isProd ? hostname() : `${hostname()}:${port}`),
 
     DATABASE_URL: required('DATABASE_URL'),
-    DB_SSL: env.DB_SSL === 'true',
+    DB_SSL: env.DB_SSL === 'true' || env.DB_SSL === 'verify' ? 'verify' : env.DB_SSL === 'no-verify' ? 'no-verify' : 'off',
+    DB_SSL_CA: env.DB_SSL_CA || undefined,
     DB_POOL_MAX: Math.max(2, parseInt(env.DB_POOL_MAX || '10', 10) || 10),
 
     MASTER_KEY: parseMasterKey(required('MASTER_KEY')),
@@ -144,7 +149,9 @@ export function loadEnv(): EnvConfig {
 
     SESSION_TTL_HOURS: parseInt(env.SESSION_TTL_HOURS || '168', 10),
     // Off by default: behind plain-HTTP nginx a Secure cookie would never be sent back.
-    COOKIE_SECURE: env.COOKIE_SECURE === 'true',
+    // Unset: Secure whenever the public URL is https, so copying .env.example never ships a cleartext session cookie.
+    CLIENT_IP_HEADER: env.CLIENT_IP_HEADER?.trim().toLowerCase() || undefined,
+    COOKIE_SECURE: env.COOKIE_SECURE ? env.COOKIE_SECURE === 'true' : (env.PUBLIC_URL ?? '').startsWith('https://'),
     LOGIN_RATE_LIMIT_MAX: parseInt(env.LOGIN_RATE_LIMIT_MAX || '10', 10),
     LOGIN_RATE_LIMIT_WINDOW_MINUTES: parseInt(env.LOGIN_RATE_LIMIT_WINDOW_MINUTES || '15', 10),
     VERIFICATION_TTL_HOURS: Number(env.VERIFICATION_TTL_HOURS || '72') || 72,

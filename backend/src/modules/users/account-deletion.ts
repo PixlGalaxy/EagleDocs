@@ -8,6 +8,7 @@ import { withTx } from '../../db/tx.js';
 import { logger } from '../../logger.js';
 import type { BillingService } from '../billing/billing.service.js';
 import type { SandboxManager } from '../sandbox/manager.js';
+import { signOutEverywhere } from '../auth/auth.service.js';
 
 /** Days between asking to delete an account and erasing it; signing in again before that keeps it. */
 export const DELETE_AFTER_DAYS = 30;
@@ -43,8 +44,7 @@ export class AccountDeletion {
           WHERE id = $1 RETURNING delete_after`,
         [userId, DELETE_AFTER_DAYS],
       );
-      await client.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
-      await client.query('UPDATE oauth_grants SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
+      await signOutEverywhere(client, userId);
       await client.query('DELETE FROM push_subscriptions WHERE user_id = $1', [userId]);
       await client.query("UPDATE jobs SET status = 'cancelled', finished_at = now() WHERE user_id = $1 AND status = 'queued'", [userId]);
       return rows[0]!.delete_after;

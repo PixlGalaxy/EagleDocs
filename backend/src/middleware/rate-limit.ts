@@ -1,3 +1,4 @@
+import { isIP } from 'net';
 import type { NextFunction, Request, Response } from 'express';
 import type { Db } from '../db/pool.js';
 import { tooManyRequests } from '../errors.js';
@@ -38,6 +39,21 @@ export async function clearRateLimit(db: Db, key: string): Promise<void> {
 /** Leader task: windows older than a day are never read again. */
 export async function pruneRateLimits(db: Db): Promise<void> {
   await db.query("DELETE FROM rate_limits WHERE window_start < now() - interval '1 day'");
+}
+
+/**
+ * The bucket an address counts in. One IPv6 client usually holds a whole /64,
+ * so it counts as one; IPv4 (also IPv4-mapped IPv6) counts per address.
+ */
+export function ipBucket(ip: string | undefined): string {
+  if (!ip) return 'unknown';
+  if (ip.toLowerCase().startsWith('::ffff:') && isIP(ip.slice(7)) === 4) return ip.slice(7);
+  if (isIP(ip) !== 6) return ip;
+  const [head = '', tail = ''] = ip.toLowerCase().split('%')[0]!.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...h, ...Array<string>(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t] : h;
+  return `${groups.slice(0, 4).map((g) => g.padStart(4, '0')).join(':')}::/64`;
 }
 
 interface RateLimiterOptions {

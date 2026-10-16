@@ -5,12 +5,17 @@ import { forbidden, unauthorized } from '../../errors.js';
 import { logger } from '../../logger.js';
 import type { AuthService } from './auth.service.js';
 
-export const SESSION_COOKIE = 'session';
+/**
+ * Over https the cookie is `__Host-session`: Secure, path /, no Domain, so no
+ * sibling subdomain can set or shadow it (cookie tossing). Plain http dev keeps `session`.
+ */
+export const sessionCookieName = (secure: boolean) => (secure ? '__Host-session' : 'session');
 
 /** Resolves `req.user`/`req.session` from the cookie and picks the language for error messages. */
-export function createSessionMiddleware(auth: AuthService) {
+export function createSessionMiddleware(auth: AuthService, secure: boolean) {
+  const name = sessionCookieName(secure);
   return async (req: AppRequest, _res: Response, next: NextFunction) => {
-    const token = req.cookies?.[SESSION_COOKIE] as string | undefined;
+    const token = req.cookies?.[name] as string | undefined;
     if (token) {
       try {
         const result = await auth.getSessionByToken(token);

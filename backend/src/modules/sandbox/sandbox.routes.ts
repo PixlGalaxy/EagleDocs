@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
 import type { Bus } from '../../bus/bus.js';
 import type { EnvConfig } from '../../config/env.js';
 import type { Db } from '../../db/pool.js';
 import { many } from '../../db/pool.js';
 import type { SettingsService } from '../../db/settings.js';
-import { badRequest, notFound } from '../../errors.js';
+import { badRequest, conflict, notFound } from '../../errors.js';
 import { logger } from '../../logger.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
@@ -112,9 +112,73 @@ export function createSandboxAdminRoutes(deps: { db: Db; bus: Bus; config: EnvCo
   return router;
 }
 
+/**
+ * The user's `.browser` folder, only if it is a real folder. It sits in the
+ * workspace the sandbox can write, so code there can swap it (or a profile) for
+ * a link to anywhere on the backend; nothing here may follow such a link.
+ */
+async function browserDir(dataRoot: string, userId: string): Promise<{ root: string; dir: string; isLink: boolean } | null> {
+  const root = join(dataRoot, 'workspaces', userId);
+  const dir = join(root, BROWSER_DIR);
+  const st = await fs.lstat(dir).catch(() => null);
+  if (!st) return null;
+  return { root, dir, isLink: !st.isDirectory() };
+}
+
+export type BrowserProfiles = ReturnType<typeof createBrowserProfiles>;
+
+/** Listing and clearing the agent's browser profiles (signed-in sites) without ever following a link. */
+export function createBrowserProfiles(deps: { db: Db; bus: Bus; config: EnvConfig; sandboxes: SandboxManager; tools: SandboxTools | undefined }) {
+  const { db, bus, config, sandboxes, tools } = deps;
+
+  /**
+   * Stops the user's sandbox on whichever replica runs it and waits until it is
+   * gone, so no code of theirs can swap links while a profile is deleted.
+   */
+  const stopSandbox = async (userId: string) => {
+    await sandboxes.stop(userId, 'clearing a browser profile');
+    await bus.publish('sandbox_control', { userId, action: 'stop' });
+    for (let i = 0; i < 40; i++) {
+      const rows = await many<{ n: number }>(db, 'SELECT COUNT(*)::int AS n FROM sandboxes WHERE user_id = $1', [userId]);
+      if (!rows[0]?.n) return;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    throw conflict('browser.sandboxBusy');
+  };
+
+  const list = async (userId: string): Promise<string[]> => {
+    const found = await browserDir(config.DATA_ROOT, userId);
+    // A link in place of the folder lists nothing (it could point at other users' folders).
+    const entries = found && !found.isLink ? await fs.readdir(found.dir, { withFileTypes: true }).catch(() => []) : [];
+    // Dirent types come from the entry itself, so linked "profiles" are left out too.
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  };
+
+  /** Signs the agent out of every site in that profile. */
+  const clear = async (userId: string, profile: string): Promise<void> => {
+    if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) throw notFound();
+    await tools?.close(userId, profile);
+    await stopSandbox(userId);
+    const found = await browserDir(config.DATA_ROOT, userId);
+    if (!found) return;
+    // Only the link itself goes, never what it points at.
+    if (found.isLink) return fs.unlink(found.dir);
+    const target = join(found.dir, profile);
+    const st = await fs.lstat(target).catch(() => null);
+    if (!st) return;
+    if (!st.isDirectory()) return fs.unlink(target);
+    // Belt and braces: the real path must still be inside this user's own folder.
+    const [realRoot, realTarget] = await Promise.all([fs.realpath(found.root), fs.realpath(target)]);
+    if (!realTarget.startsWith(realRoot + sep)) throw notFound();
+    await fs.rm(realTarget, { recursive: true, force: true });
+  };
+
+  return { list, clear };
+}
+
 /** Settings → Browser: sites the agent may act on without asking, and clearing a profile's cookies. */
-export function createBrowserRoutes(deps: { db: Db; config: EnvConfig; sandboxes: SandboxManager; tools: SandboxTools | undefined }) {
-  const { db, config, sandboxes, tools } = deps;
+export function createBrowserRoutes(deps: { db: Db; sandboxes: SandboxManager; profiles: BrowserProfiles }) {
+  const { db, sandboxes, profiles } = deps;
   const router = Router();
   router.use(requireAuth);
 
@@ -125,10 +189,7 @@ export function createBrowserRoutes(deps: { db: Db; config: EnvConfig; sandboxes
       'SELECT domain, created_at FROM browser_trusted_domains WHERE user_id = $1 ORDER BY domain',
       [userId],
     );
-    const dir = join(config.DATA_ROOT, 'workspaces', userId, BROWSER_DIR);
-    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
-    const profiles = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
-    res.json({ available: sandboxes.enabled, trusted, profiles });
+    res.json({ available: sandboxes.enabled, trusted, profiles: await profiles.list(userId) });
   });
 
   router.post('/trusted', async (req: AppRequest, res) => {
@@ -148,11 +209,7 @@ export function createBrowserRoutes(deps: { db: Db; config: EnvConfig; sandboxes
 
   /** Signs the agent out of every site in that profile. */
   router.delete('/profiles/:profile', async (req: AppRequest, res) => {
-    const profile = routeParam(req.params.profile);
-    if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(profile)) throw notFound();
-    const userId = req.user!.id;
-    await tools?.close(userId, profile);
-    await fs.rm(join(config.DATA_ROOT, 'workspaces', userId, BROWSER_DIR, profile), { recursive: true, force: true });
+    await profiles.clear(req.user!.id, routeParam(req.params.profile));
     res.status(204).end();
   });
 

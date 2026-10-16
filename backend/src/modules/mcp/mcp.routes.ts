@@ -1,7 +1,7 @@
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
 import type { Db } from '../../db/pool.js';
 import type { SettingsService } from '../../db/settings.js';
-import { createRateLimiter, hitRateLimit } from '../../middleware/rate-limit.js';
+import { createRateLimiter, hitRateLimit, ipBucket } from '../../middleware/rate-limit.js';
 import { logger } from '../../logger.js';
 import { routeParam } from '../../route-params.js';
 import type { AppRequest } from '../../types/index.js';
@@ -49,7 +49,7 @@ export function createMcpRoutes(deps: { db: Db; oauth: OAuthService; server: Mcp
   const { db, oauth, server, settings } = deps;
   // Public endpoints, so by address: registrations write rows, authorize writes a pending request.
   const perIp = (name: string, windowMs: number, max: number) =>
-    createRateLimiter(db, { windowMs, max, keyFn: (req) => `oauth:${name}:${req.ip}`, describe: (req) => `OAuth ${name} from ${req.ip}` });
+    createRateLimiter(db, { windowMs, max, keyFn: (req) => `oauth:${name}:${ipBucket(req.ip)}`, describe: (req) => `OAuth ${name} from ${req.ip}` });
   const enabled = () => settings.getBoolean(K.mcpEnabled, false);
   const open = Router();
   /** Mounted at /api/oauth and /api/mcp-apps only: requireAuth must not reach other /api routes. */

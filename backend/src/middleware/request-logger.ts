@@ -15,7 +15,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
 
   res.on('finish', () => {
     const ms = Number(process.hrtime.bigint() - startedAt) / 1e6;
-    const message = `${req.method} ${req.originalUrl} ${res.statusCode} ${ms.toFixed(1)}ms`;
+    // The path only: query strings carry file names (?path=), searches (?q=) and one-time tokens.
+    const message = `${req.method} ${req.originalUrl.split('?')[0]} ${res.statusCode} ${ms.toFixed(1)}ms`;
     if (res.statusCode >= 500) logger.error(message);
     else if (res.statusCode >= 400) logger.warn(message);
     else logger.info(message);

@@ -4,14 +4,14 @@ import type { Db } from '../../db/pool.js';
 import { isLanguage } from '../../i18n/index.js';
 import { badRequest, conflict, forbidden, unauthorized } from '../../errors.js';
 import { logger } from '../../logger.js';
-import { clearRateLimit, createRateLimiter } from '../../middleware/rate-limit.js';
+import { clearRateLimit, createRateLimiter, ipBucket } from '../../middleware/rate-limit.js';
 import { THEME_MODES, THEME_SKINS, type AppRequest } from '../../types/index.js';
-import { getUserById, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, optionalText, toPublicUser, validatePassword } from '../users/users.service.js';
+import { getUserById, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, optionalText, toPublicUser, validatePassword, EMAIL, USERNAME } from '../users/users.service.js';
 import type { AuthService } from './auth.service.js';
 import type { RegisterService } from './register.service.js';
 import { DELETE_AFTER_DAYS, type AccountDeletion } from '../users/account-deletion.js';
 import { isLastActiveAdmin } from '../admin/users-admin.service.js';
-import { requireAuth, SESSION_COOKIE } from './session.middleware.js';
+import { requireAuth, sessionCookieName } from './session.middleware.js';
 
 export function createAuthRoutes(
   db: Db,
@@ -22,6 +22,7 @@ export function createAuthRoutes(
   deletion: AccountDeletion,
 ): Router {
   const router = Router();
+  const SESSION_COOKIE = sessionCookieName(config.COOKIE_SECURE);
 
   const setSessionCookie = (res: Response, token: string) =>
     res.cookie(SESSION_COOKIE, token, {
@@ -42,19 +43,22 @@ export function createAuthRoutes(
   const loginIpLimiter = createRateLimiter(db, {
     windowMs: loginWindowMs,
     max: config.LOGIN_RATE_LIMIT_MAX,
-    keyFn: (req) => `login:ip:${req.ip}`,
+    keyFn: (req) => `login:ip:${ipBucket(req.ip)}`,
     describe: (req) => `login attempts from ${req.ip}`,
   });
   const loginAccountLimiter = createRateLimiter(db, {
     windowMs: loginWindowMs,
     max: config.LOGIN_RATE_LIMIT_MAX,
     keyFn: loginAccountKey,
-    describe: (req) => `login attempts against "${(req.body as { usernameOrEmail?: string }).usernameOrEmail}"`,
+    describe: (req) => {
+      const value = String((req.body as { usernameOrEmail?: unknown } | undefined)?.usernameOrEmail ?? '');
+      return `login attempts against "${USERNAME.test(value) || EMAIL.test(value) ? value : '<not a username or email>'}"`;
+    },
   });
   const registerLimiter = createRateLimiter(db, {
     windowMs: 60 * 60 * 1000,
     max: 10,
-    keyFn: (req) => `register:ip:${req.ip}`,
+    keyFn: (req) => `register:ip:${ipBucket(req.ip)}`,
     describe: (req) => `sign-ups from ${req.ip}`,
   });
   // A stolen session must not be able to guess the current password.
@@ -74,12 +78,12 @@ export function createAuthRoutes(
   const verifyLimiter = createRateLimiter(db, {
     windowMs: 15 * 60 * 1000,
     max: 30,
-    keyFn: (req) => `verify:ip:${req.ip}`,
+    keyFn: (req) => `verify:ip:${ipBucket(req.ip)}`,
     describe: (req) => `verification attempts from ${req.ip}`,
   });
 
   router.post('/login', loginIpLimiter, loginAccountLimiter, async (req: AppRequest, res) => {
-    const { usernameOrEmail, password } = req.body as { usernameOrEmail?: unknown; password?: unknown };
+    const { usernameOrEmail, password } = (req.body ?? {}) as { usernameOrEmail?: unknown; password?: unknown };
     if (typeof usernameOrEmail !== 'string' || typeof password !== 'string' || !usernameOrEmail || !password) {
       throw badRequest('auth.credentialsRequired');
     }
@@ -89,7 +93,9 @@ export function createAuthRoutes(
 
     const result = await auth.checkCredentials(usernameOrEmail, password);
     if (!result.ok) {
-      logger.auth.warn(`Login as "${usernameOrEmail}" from ${req.ip} failed: ${result.reason}`);
+      // What was typed is logged only if it looks like a username or email: people type their password there by mistake.
+      const shown = USERNAME.test(usernameOrEmail) || EMAIL.test(usernameOrEmail) ? usernameOrEmail : '<not a username or email>';
+      logger.auth.warn(`Login as "${shown}" from ${req.ip} failed: ${result.reason}`);
       // 403 tells the login page to offer "verify your email"; disabled reads like bad credentials plus a hint.
       if (result.reason === 'pending') throw forbidden('auth.notVerified');
       if (result.reason === 'disabled') throw unauthorized('auth.accountDisabled');
@@ -110,7 +116,9 @@ export function createAuthRoutes(
   router.post('/logout', requireAuth, async (req: AppRequest, res) => {
     await auth.logout(req.session!.id);
     logger.auth.info(`Logout as "${req.user!.username}" from ${req.ip}`);
-    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(SESSION_COOKIE, { path: '/', secure: config.COOKIE_SECURE });
+    // On a shared or lab computer, nothing private stays in the browser's cache.
+    res.setHeader('Clear-Site-Data', '"cache"');
     res.status(204).end();
   });
 
@@ -150,7 +158,7 @@ export function createAuthRoutes(
   });
 
   router.post('/change-password', requireAuth, changePasswordLimiter, async (req: AppRequest, res) => {
-    const { currentPassword, newPassword } = req.body as { currentPassword?: unknown; newPassword?: unknown };
+    const { currentPassword, newPassword } = (req.body ?? {}) as { currentPassword?: unknown; newPassword?: unknown };
     if (typeof currentPassword !== 'string' || !currentPassword) throw badRequest('auth.passwordsRequired');
     if (currentPassword.length > MAX_PASSWORD_LENGTH) throw unauthorized('auth.currentPasswordIncorrect');
     const next = validatePassword(newPassword);
@@ -161,14 +169,14 @@ export function createAuthRoutes(
       throw unauthorized('auth.currentPasswordIncorrect');
     }
     // Every session was closed, this one too: the frontend sends the user back to sign in.
-    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(SESSION_COOKIE, { path: '/', secure: config.COOKIE_SECURE });
     logger.auth.info(`Password changed for "${req.user!.username}" from ${req.ip}`);
     res.status(204).end();
   });
 
   /** Settings → Account: the owner deletes their account (erased after DELETE_AFTER_DAYS unless they sign in again). */
   router.post('/delete-account', requireAuth, deleteAccountLimiter, async (req: AppRequest, res) => {
-    const { password, username } = req.body as { password?: unknown; username?: unknown };
+    const { password, username } = (req.body ?? {}) as { password?: unknown; username?: unknown };
     const user = req.user!;
     if (typeof username !== 'string' || username.trim().toLowerCase() !== user.username.toLowerCase()) throw badRequest('auth.deleteUsernameMismatch');
     if (typeof password !== 'string' || !password) throw badRequest('auth.passwordsRequired');
@@ -181,7 +189,7 @@ export function createAuthRoutes(
     if (await isLastActiveAdmin(db, user.id)) throw conflict('users.lastAdmin');
     const deleteAfter = await deletion.request(user.id);
     // Its sessions are gone, this one too.
-    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    res.clearCookie(SESSION_COOKIE, { path: '/', secure: config.COOKIE_SECURE });
     logger.auth.info(`Account deletion requested by "${user.username}" from ${req.ip}`);
     res.json({ delete_after: deleteAfter.toISOString(), days: DELETE_AFTER_DAYS });
   });

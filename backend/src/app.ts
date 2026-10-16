@@ -1,3 +1,4 @@
+import { isIP } from 'net';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import type { EnvConfig } from './config/env.js';
@@ -38,7 +39,7 @@ import { createFilesRoutes } from './modules/files/files.routes.js';
 import type { DiskWorkspace } from './engine/workspace.js';
 import type { AdminEmbeddings } from './engine/documents.js';
 import type { SandboxManager } from './modules/sandbox/manager.js';
-import { createBrowserRoutes, createSandboxAdminRoutes } from './modules/sandbox/sandbox.routes.js';
+import { createBrowserProfiles, createBrowserRoutes, createSandboxAdminRoutes } from './modules/sandbox/sandbox.routes.js';
 import type { SandboxTools } from './engine/sandbox.js';
 import type { SchoolService } from './modules/school/school.service.js';
 import type { AppRequest } from './types/index.js';
@@ -94,6 +95,18 @@ export function createApp(deps: AppDeps): express.Application {
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
   // req.ip is the visitor's address rather than the proxy's.
   app.set('trust proxy', config.TRUST_PROXY);
+  // Behind Cloudflare the edge sets CF-Connecting-IP itself and overwrites what the visitor sent, so it is
+  // the visitor's address even when a proxy in between (Nginx Proxy Manager) trusts a spoofable X-Real-IP.
+  // Only for requests that came through a trusted proxy: a direct hit keeps its socket address.
+  if (config.CLIENT_IP_HEADER) {
+    const header = config.CLIENT_IP_HEADER;
+    const trusted = app.get('trust proxy fn') as (addr: string, i: number) => boolean;
+    app.use((req, _res, next) => {
+      const value = req.get(header)?.trim();
+      if (value && isIP(value) && trusted(req.socket.remoteAddress ?? '', 0)) Object.defineProperty(req, 'ip', { value, configurable: true });
+      next();
+    });
+  }
   app.disable('x-powered-by');
   app.use(requestLogger);
   // Stripe webhooks: raw body for the signature, and no CSRF token (Stripe cannot send one).
@@ -104,8 +117,13 @@ export function createApp(deps: AppDeps): express.Application {
   const mcpRoutes = createMcpRoutes({ db, oauth, server: mcp, settings });
   app.use(mcpRoutes.open);
   app.use(cookieParser());
-  app.use(createSessionMiddleware(auth));
+  app.use(createSessionMiddleware(auth, config.COOKIE_SECURE));
   app.use(createCsrfProtection({ secure: config.COOKIE_SECURE }));
+  // API answers hold private data: never cached unless a route says otherwise (avatars, files, displays).
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    next();
+  });
 
   // Checks the database too: a replica that cannot reach Postgres is not healthy.
   app.get('/api/health', async (_req, res) => {
@@ -154,7 +172,8 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/chats', chatsRouter);
   app.use('/api/jobs', jobsRouter);
   app.use('/api/approvals', approvalsRouter);
-  const { models, conns } = createModelRoutes(db, catalog, connections, school);
+  const browserProfiles = createBrowserProfiles({ db, bus, config, sandboxes, tools: sandbox });
+  const { models, conns } = createModelRoutes(db, catalog, connections, school, browserProfiles);
   const { canvasRouter, connectionRouter } = createCanvasRoutes(canvas, connections, courseSpaces);
   app.use('/api/models', models);
   app.use('/api/canvas', canvasRouter);
@@ -168,7 +187,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/memories', agentData.memories);
   app.use('/api/schedules', agentData.schedules);
   app.use('/api/skills', agentData.skills);
-  app.use('/api/browser', createBrowserRoutes({ db, config, sandboxes, tools: sandbox }));
+  app.use('/api/browser', createBrowserRoutes({ db, sandboxes, profiles: browserProfiles }));
 
   const pushRoutes = createPushRoutes({ db, push, settings, t, dailySummary: new DailySummaryService(db, canvas, push, t) });
   app.use('/api/push', pushRoutes.user);

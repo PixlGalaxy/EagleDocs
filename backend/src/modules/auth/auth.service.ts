@@ -82,10 +82,24 @@ export class AuthService {
     return true;
   }
 
-  /** Also signs the user out everywhere. */
+  /** Also signs the user out everywhere, apps connected over MCP included. */
   async setPassword(db: Queryable, userId: string, newPassword: string): Promise<void> {
     const hash = await hashPassword(newPassword);
     await db.query('UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2', [hash, userId]);
-    await db.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+    await signOutEverywhere(db, userId);
   }
+}
+
+/**
+ * Ends every way in to the account: browser sessions and the grants (with their
+ * tokens) of apps connected over MCP. A changed or reset password, or a disabled
+ * account, must not leave an app an attacker connected still working.
+ */
+export async function signOutEverywhere(db: Queryable, userId: string): Promise<void> {
+  await db.query('DELETE FROM sessions WHERE user_id = $1', [userId]);
+  await db.query(
+    'UPDATE oauth_tokens SET revoked_at = now() WHERE revoked_at IS NULL AND grant_id IN (SELECT id FROM oauth_grants WHERE user_id = $1)',
+    [userId],
+  );
+  await db.query('UPDATE oauth_grants SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [userId]);
 }

@@ -119,6 +119,10 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
    * network at all, so a page can only draw and compute, never send data away.
    */
   chatsRouter.get('/:id/messages/:messageId/displays/:n', async (req: AppRequest, res) => {
+    // Only inside the chat's sandboxed frame. Opened as a page of its own, a script could
+    // navigate away with what it shows in the URL (CSP has no rule against navigation).
+    const dest = req.get('sec-fetch-dest');
+    if (dest && dest !== 'iframe') throw notFound();
     const display = await chats.display(req.user!.id, routeParam(req.params.id), routeParam(req.params.messageId), Number(req.params.n));
     if (!display || display.kind !== 'html') throw notFound();
     res.setHeader(

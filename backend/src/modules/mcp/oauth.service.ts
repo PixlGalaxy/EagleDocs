@@ -207,19 +207,18 @@ export class OAuthService {
   async decide(userId: string, requestId: string, approve: boolean, scopes: unknown): Promise<{ redirect_to: string }> {
     const r = await this.pending(requestId);
     if (!approve) {
-      await this.db.query('UPDATE oauth_requests SET used_at = now() WHERE id = $1', [r.id]);
+      await this.db.query('UPDATE oauth_requests SET used_at = now() WHERE id = $1 AND code_hash IS NULL', [r.id]);
       return { redirect_to: this.withParams(r.redirect_uri, { error: 'access_denied', state: r.state, iss: this.issuer }) };
     }
     const granted = parseScopes(scopes).filter((s) => r.scopes.includes(s));
     if (granted.length === 0) throw new AppError(400, 'error.invalidInput');
     const code = token('mcc');
-    await this.db.query('UPDATE oauth_requests SET user_id = $2, code_hash = $3, granted_scopes = $4, expires_at = $5 WHERE id = $1', [
-      r.id,
-      userId,
-      sha256(code),
-      granted,
-      new Date(Date.now() + REQUEST_TTL_MS),
-    ]);
+    // Once: two approvals at the same time (or one after a refusal) must not both get a code.
+    const decided = await this.db.query(
+      'UPDATE oauth_requests SET user_id = $2, code_hash = $3, granted_scopes = $4, expires_at = $5 WHERE id = $1 AND code_hash IS NULL AND used_at IS NULL',
+      [r.id, userId, sha256(code), granted, new Date(Date.now() + REQUEST_TTL_MS)],
+    );
+    if (!decided.rowCount) throw new AppError(400, 'error.invalidInput');
     return { redirect_to: this.withParams(r.redirect_uri, { code, state: r.state, iss: this.issuer }) };
   }
 
@@ -264,8 +263,16 @@ export class OAuthService {
           [sha256(code)],
         );
         const req = r.rows[0];
+        if (req?.used_at && req.client_id === client.id) {
+          // A code used twice: someone else has a copy, so what it gave out is cut (RFC 6749 4.1.2).
+          await tx.query(
+            "UPDATE oauth_tokens SET revoked_at = now() WHERE revoked_at IS NULL AND grant_id IN (SELECT id FROM oauth_grants WHERE user_id = $1 AND client_id = $2)",
+            [req.user_id, client.id],
+          );
+        }
         if (!req || req.used_at || req.expires_at < new Date() || req.client_id !== client.id) throw new OAuthError('invalid_grant', 'The code is invalid, expired or already used');
-        if (body.redirect_uri !== undefined && body.redirect_uri !== req.redirect_uri) throw new OAuthError('invalid_grant', 'redirect_uri does not match');
+        // Required, and exactly the one the code was issued for (RFC 6749 4.1.3).
+        if (body.redirect_uri !== req.redirect_uri) throw new OAuthError('invalid_grant', 'redirect_uri does not match');
         const expected = createHash('sha256').update(verifier).digest('base64url');
         if (!/^[A-Za-z0-9._~-]{43,128}$/.test(verifier) || !sameHash(expected, req.code_challenge)) throw new OAuthError('invalid_grant', 'PKCE verification failed');
         await tx.query('UPDATE oauth_requests SET used_at = now() WHERE id = $1', [req.id]);
@@ -290,13 +297,17 @@ export class OAuthService {
     }
     if (body.grant_type === 'refresh_token') {
       const hash = sha256(String(body.refresh_token ?? ''));
-      const row = await maybe<{ grant_id: string; expires_at: Date; revoked_at: Date | null; client_id: string; scopes: string[]; grant_revoked: Date | null }>(
+      const row = await maybe<{ grant_id: string; expires_at: Date; revoked_at: Date | null; client_id: string; scopes: string[]; grant_revoked: Date | null; user_status: string }>(
         this.db,
-        `SELECT t.grant_id, t.expires_at, t.revoked_at, g.client_id, g.scopes, g.revoked_at AS grant_revoked
-           FROM oauth_tokens t JOIN oauth_grants g ON g.id = t.grant_id WHERE t.token_hash = $1 AND t.kind = 'refresh'`,
+        `SELECT t.grant_id, t.expires_at, t.revoked_at, g.client_id, g.scopes, g.revoked_at AS grant_revoked, u.status AS user_status
+           FROM oauth_tokens t JOIN oauth_grants g ON g.id = t.grant_id JOIN users u ON u.id = g.user_id
+          WHERE t.token_hash = $1 AND t.kind = 'refresh'`,
         [hash],
       );
-      if (!row || row.client_id !== client.id || row.grant_revoked || row.expires_at < new Date()) throw new OAuthError('invalid_grant', 'The refresh token is invalid');
+      // A disabled (or deleting) account gets no new tokens, even with a valid refresh token.
+      if (!row || row.client_id !== client.id || row.grant_revoked || row.expires_at < new Date() || row.user_status !== 'active') {
+        throw new OAuthError('invalid_grant', 'The refresh token is invalid');
+      }
       if (row.revoked_at) {
         // A rotated refresh token used again: someone has a copy. Cut the whole grant.
         await this.revokeGrantTokens(row.grant_id);

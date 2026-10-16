@@ -81,6 +81,8 @@ export async function prepareDevEnvironment(): Promise<(() => Promise<void>) | n
     // Already created on a previous run.
   }
   process.env.DATABASE_URL = `postgres://studyhawk:studyhawk@localhost:${port}/studyhawk`;
+  // Only this throwaway database gets the dev seed (admin/admin, user/user).
+  process.env.STUDYHAWK_EMBEDDED_DB = '1';
   logger.warn(`DATABASE_URL not set: using the embedded development PostgreSQL on port ${port}`);
   return () => pg.stop();
 }

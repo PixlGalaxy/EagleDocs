@@ -13,11 +13,15 @@ import type { ModelCatalog } from './catalog.js';
 import { discoverOllamaModels } from './providers/ollama.js';
 import { listOpenAIModels } from './providers/openai-compat.js';
 import { TIERS, type ModelTier } from './router.js';
+import type { BrowserProfiles } from '../sandbox/sandbox.routes.js';
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
 /** Settings -> Models and Connections, for every signed-in user. */
-export function createModelRoutes(db: Db, catalog: ModelCatalog, connections: ConnectionsService, school: SchoolService) {
+/** The agent's browser profiles that hold the school sign-in (school.service.ts). */
+const SCHOOL_PROFILES = ['school-outlook', 'school-degreeworks'];
+
+export function createModelRoutes(db: Db, catalog: ModelCatalog, connections: ConnectionsService, school: SchoolService, profiles?: BrowserProfiles) {
   const models = Router();
   const conns = Router();
   models.use(requireAuth);
@@ -84,7 +88,12 @@ export function createModelRoutes(db: Db, catalog: ModelCatalog, connections: Co
   conns.delete('/:id', async (req: AppRequest, res) => {
     const id = routeParam(req.params.id);
     if (!UUID.test(id)) throw notFound();
+    const row = await connections.get(req.user!.id, id);
     await connections.remove(req.user!.id, id);
+    // Removing the school account also signs the agent out of Outlook and Degree Works.
+    if (row.kind === 'sso' && profiles) {
+      for (const profile of SCHOOL_PROFILES) await profiles.clear(req.user!.id, profile).catch(() => undefined);
+    }
     res.status(204).end();
   });
 

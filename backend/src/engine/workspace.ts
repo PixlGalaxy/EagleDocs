@@ -1,7 +1,7 @@
 import { randomBytes } from 'crypto';
 import { constants as fsc, promises as fs } from 'fs';
 import type { FileHandle } from 'fs/promises';
-import { dirname, join, relative, resolve, sep } from 'path';
+import { dirname, join, relative, resolve, sep, basename } from 'path';
 import { pipeline } from 'stream/promises';
 import type { Readable } from 'stream';
 import type { FileEntry, StorageArea, WorkspacePort } from 'pixlai-engine';
@@ -95,6 +95,19 @@ export class DiskWorkspace implements WorkspacePort {
       if (!stat) return;
       if (stat.isSymbolicLink()) throw new Error('Links are not allowed in the workspace');
     }
+  }
+
+  /**
+   * The path with its folder resolved to the real one on disk, refused if that
+   * folder is outside the user's root. The sandbox can write the workspace, so a
+   * folder can turn into a link between the checks above and the operation:
+   * working on the resolved path leaves only a much narrower window, and the
+   * last name is never followed.
+   */
+  private async realInRoot(r: Resolved): Promise<string> {
+    const [realRoot, realParent] = await Promise.all([fs.realpath(r.root), fs.realpath(dirname(r.abs))]);
+    if (realParent !== realRoot && !realParent.startsWith(realRoot + sep)) throw new Error('Links are not allowed in the workspace');
+    return join(realParent, basename(r.abs));
   }
 
   /**
@@ -311,12 +324,13 @@ export class DiskWorkspace implements WorkspacePort {
     if (await fs.stat(b.abs).catch(() => null)) throw new Error(`${to} already exists`);
     if (a.area !== b.area) await this.assertFits(userId, b.area, stat.isDirectory() ? await dirBytes(a.abs) : stat.size);
     await fs.mkdir(dirname(b.abs), { recursive: true });
+    const [src, dest] = [await this.realInRoot(a), await this.realInRoot(b)];
     try {
-      await fs.rename(a.abs, b.abs);
+      await fs.rename(src, dest);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err;
-      await fs.cp(a.abs, b.abs, { recursive: true });
-      await fs.rm(a.abs, { recursive: true, force: true });
+      await fs.cp(src, dest, { recursive: true, filter: async (p) => !(await fs.lstat(p).catch(() => null))?.isSymbolicLink() });
+      await fs.rm(src, { recursive: true, force: true });
     }
     // Entering TEMP starts its 24 h clock now, not from the file's old date.
     if (b.area === 'temp' && a.area !== 'temp') await touchTree(b.abs);
@@ -338,7 +352,7 @@ export class DiskWorkspace implements WorkspacePort {
     if (await fs.stat(b.abs).catch(() => null)) throw new Error(`${to} already exists`);
     await this.assertFits(userId, b.area, stat.isDirectory() ? await dirBytes(a.abs) : stat.size);
     await fs.mkdir(dirname(b.abs), { recursive: true });
-    await fs.cp(a.abs, b.abs, {
+    await fs.cp(await this.realInRoot(a), await this.realInRoot(b), {
       recursive: true,
       errorOnExist: true,
       force: false,
@@ -351,8 +365,9 @@ export class DiskWorkspace implements WorkspacePort {
     const r = this.resolve(userId, path);
     if (!r.rel) throw new Error('Cannot delete a root folder');
     await this.assertNoLinks(r);
-    if (!(await fs.stat(r.abs).catch(() => null))) throw new Error(`Not found: ${path}`);
-    await fs.rm(r.abs, { recursive: true, force: true });
+    if (!(await fs.lstat(r.abs).catch(() => null))) throw new Error(`Not found: ${path}`);
+    // fs.rm removes a link itself, never what it points at; the folder above is the real one.
+    await fs.rm(await this.realInRoot(r), { recursive: true, force: true });
     this.forgetUsage(userId);
   }
 
