@@ -5,7 +5,7 @@ import { format } from '../../i18n/index.js';
 import { unavailable } from '../../errors.js';
 import { logger } from '../../logger.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
-import { renderEmail } from './templates.js';
+import { renderContactEmail, renderEmail } from './templates.js';
 
 /** The product name is fixed: StudyHawk is not white-labelled. */
 const APP_NAME = 'StudyHawk';
@@ -43,7 +43,7 @@ export class MailService {
     return Boolean(c.host && c.fromEmail);
   }
 
-  private async send(to: string, subject: string, html: string, text: string): Promise<void> {
+  private async send(to: string, subject: string, html: string, text: string, replyTo?: { name: string; address: string }): Promise<void> {
     const c = this.config();
     if (!c.host || !c.fromEmail) throw unavailable('mail.notConfigured');
     const transport = nodemailer.createTransport({
@@ -56,7 +56,7 @@ export class MailService {
       socketTimeout: 30_000,
     });
     try {
-      await transport.sendMail({ from: { name: c.fromName, address: c.fromEmail }, to, subject, html, text });
+      await transport.sendMail({ from: { name: c.fromName, address: c.fromEmail }, to, subject, html, text, ...(replyTo && { replyTo }) });
     } catch (err) {
       logger.error(`Email to ${to} failed`, err);
       throw unavailable('mail.sendFailed');
@@ -88,6 +88,19 @@ export class MailService {
       footer: [t('mail.resetExpires'), t('mail.ignore')],
     });
     await this.send(to, format(t('mail.resetSubject'), { app }), email.html, email.text);
+  }
+
+  /** A contact form message for the support inbox; replying answers the sender. */
+  async sendContact(to: string, from: { name: string; email: string; message: string }, options: { test?: boolean; lang?: string } = {}): Promise<void> {
+    const t = (key: Parameters<Translate>[0]) => this.t(key, options.lang);
+    const email = renderContactEmail({
+      appName: APP_NAME,
+      intro: format(t('mail.contactIntro'), { name: from.name, email: from.email }),
+      message: from.message,
+      footer: [...(options.test ? [t('contact.testMessage')] : []), t('mail.contactReply')],
+    });
+    const subject = format(t('mail.contactSubject'), { name: from.name });
+    await this.send(to, options.test ? `[test] ${subject}` : subject, email.html, email.text, { name: from.name, address: from.email });
   }
 
   async sendTest(to: string, lang: string): Promise<void> {

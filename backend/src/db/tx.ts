@@ -38,6 +38,8 @@ export const LOCKS = {
   chatFolders: 7_301_012,
   /** The morning "due today and tomorrow" push, one replica per tick. */
   dailySummary: 7_301_013,
+  /** Erasing accounts whose 30 days to change their mind are over. */
+  accountPurge: 7_301_014,
 } as const;
 
 /**

@@ -49,3 +49,32 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
 
   return { html, text };
 }
+
+export interface ContactEmailParts {
+  appName: string;
+  intro: string;
+  /** The visitor's own text: escaped, with its line breaks kept. */
+  message: string;
+  footer: string[];
+}
+
+/** The contact form's message, in the same layout as the other emails. */
+export function renderContactEmail(parts: ContactEmailParts): { html: string; text: string } {
+  const e = escapeHtml;
+  const footer = parts.footer.map((line) => `<p style="margin:6px 0;color:#71717a;font-size:13px">${e(line)}</p>`).join('');
+
+  const html = `<!doctype html>
+<html><body style="margin:0;background:#f4f4f5;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#18181b">
+  <div style="max-width:520px;margin:0 auto;padding:32px 16px">
+    <div style="background:#ffffff;border-radius:16px;padding:32px;border:1px solid #e4e4e7">
+      <p style="margin:0 0 20px;font-weight:700;font-size:18px">${e(parts.appName)}</p>
+      <p style="margin:0 0 16px;line-height:1.55">${e(parts.intro)}</p>
+      <div style="margin:0 0 24px;padding:16px;border-radius:10px;background:#f4f4f5;line-height:1.55;white-space:pre-wrap;word-break:break-word">${e(parts.message)}</div>
+      ${footer}
+    </div>
+  </div>
+</body></html>`;
+
+  const text = [parts.appName, '', parts.intro, '', parts.message, '', ...parts.footer].join('\n');
+  return { html, text };
+}

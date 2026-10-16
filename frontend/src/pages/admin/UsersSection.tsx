@@ -48,8 +48,8 @@ const UsersSection = () => {
     void adminApi.tiers().then(setTiers).catch(() => undefined);
   }, []);
 
-  const statusTone = { active: 'success', pending: 'warning', disabled: 'neutral' } as const;
-  const statusLabel = { active: t('admin.statusActive'), pending: t('admin.statusPending'), disabled: t('admin.statusDisabled') };
+  const statusTone = { active: 'success', pending: 'warning', disabled: 'neutral', deleting: 'danger' } as const;
+  const statusLabel = { active: t('admin.statusActive'), pending: t('admin.statusPending'), disabled: t('admin.statusDisabled'), deleting: t('admin.statusDeleting') };
 
   const save = async (e: FormEvent) => {
     e.preventDefault();

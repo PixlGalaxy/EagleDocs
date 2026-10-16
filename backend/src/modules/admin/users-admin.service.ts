@@ -17,6 +17,7 @@ import {
   validatePassword,
   validateUsername,
 } from '../users/users.service.js';
+import type { AccountDeletion } from '../users/account-deletion.js';
 
 const ROLES: Role[] = ['admin', 'user'];
 const STATUSES: UserStatus[] = ['pending', 'active', 'disabled'];
@@ -51,8 +52,17 @@ async function assertOtherActiveAdmin(client: pg.PoolClient, exceptId: string): 
   if (rows.length === 0) throw conflict('users.lastAdmin');
 }
 
+/** Deleting this account would leave nobody to run the app. */
+export async function isLastActiveAdmin(db: Db, id: string): Promise<boolean> {
+  const { rows } = await db.query<{ last: boolean }>(
+    "SELECT (role = 'admin' AND status = 'active') AND NOT EXISTS (SELECT 1 FROM users WHERE role = 'admin' AND status = 'active' AND id <> $1) AS last FROM users WHERE id = $1",
+    [id],
+  );
+  return rows[0]?.last === true;
+}
+
 export class UsersAdminService {
-  constructor(private db: Db, private institutions: InstitutionsService) {}
+  constructor(private db: Db, private institutions: InstitutionsService, private deletion: AccountDeletion) {}
 
   async list(query: string) {
     const q = query.trim();
@@ -196,7 +206,8 @@ export class UsersAdminService {
       const current = await getUserById(client, id);
       if (!current) throw notFound();
       if (current.role === 'admin' && current.status === 'active') await assertOtherActiveAdmin(client, id);
-      await client.query('DELETE FROM users WHERE id = $1', [id]);
     });
+    // At once and completely: Stripe, sandbox, files, then the rows (no 30 days, unlike the owner's own request).
+    await this.deletion.purge(id);
   }
 }

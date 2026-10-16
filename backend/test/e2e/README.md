@@ -110,3 +110,33 @@ node test/e2e/daily-summary.e2e.mjs
 Production-mode replicas (no dev seed) with `ADMIN_USERNAME=pixl` (or set `E2E_ADMIN`) and password `change-me-now`.
 It starts its own fake SMTP server on port 2525; set `E2E_SMTP_HOST=host.docker.internal` when the backend runs in Docker.
 Run it on a fresh database: it renames the admin and leaves the IP rate-limited at the end on purpose.
+
+## Contact form (`contact.e2e.mjs`)
+
+The public Contact page and Admin -> Email -> Contact form. Runs a fake SMTP server (port 2526) and a fake Discord webhook
+(port 4993); `DISCORD_WEBHOOK_TEST_BASE` lets the backend post to that fake, outside production only. Covers the error
+when nothing is set up, the webhook URL rule, the secret never being returned, the admin test, Reply-To and HTML escaping
+in the email, mentions disabled on Discord, the honeypot, validation, one channel down versus both, redirects not being
+followed, and the per-IP and per-email limits. Run it on a fresh database: it uses up those limits on purpose.
+
+```bash
+DISCORD_WEBHOOK_TEST_BASE=http://127.0.0.1:4993 PORT=4000 npx tsx src/index.ts &
+node test/e2e/contact.e2e.mjs
+```
+
+## Account deletion (`account-deletion.e2e.mjs`)
+
+The owner deletes their account (wrong username or password refused, Stripe cancelled at once, sessions closed,
+files kept for the 30 days), signing in again restores it, the last admin cannot delete themselves, an admin
+deletes an account at once (row and files), and the leader task erases an account whose 30 days are over. Runs a
+fake Stripe on 4994 and reads the database directly.
+
+```bash
+PORT=4013 SANDBOX_ENABLED=false STRIPE_API_BASE=http://localhost:4994 DATA_ROOT=/tmp/del-e2e npx tsx src/index.ts &
+E2E_A=http://localhost:4013/api E2E_DB=postgres://studyhawk:studyhawk@localhost:<port>/studyhawk E2E_DATA=/tmp/del-e2e \
+  node test/e2e/account-deletion.e2e.mjs
+# restart the backend (the purge runs ~10 s after boot), then:
+E2E_PHASE=2 E2E_USER_ID=<id it printed> E2E_A=... E2E_DB=... E2E_DATA=... node test/e2e/account-deletion.e2e.mjs
+```
+
+The dev seed sets `admin` and `user` back to active on every boot, so phase 2 checks an account the script creates.

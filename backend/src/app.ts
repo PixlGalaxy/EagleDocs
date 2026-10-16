@@ -10,12 +10,15 @@ import { requestLogger } from './middleware/request-logger.js';
 import { createAdminRoutes } from './modules/admin/admin.routes.js';
 import { SETTINGS_KEYS as K } from './modules/admin/settings-keys.js';
 import { UsersAdminService } from './modules/admin/users-admin.service.js';
+import type { AccountDeletion } from './modules/users/account-deletion.js';
 import { createAuthRoutes } from './modules/auth/auth.routes.js';
 import type { AuthService } from './modules/auth/auth.service.js';
 import type { RegisterService } from './modules/auth/register.service.js';
 import { createSessionMiddleware } from './modules/auth/session.middleware.js';
 import { createAvatarsRoutes } from './modules/avatars/avatars.routes.js';
 import { createLogsRoutes } from './modules/logs/logs.routes.js';
+import { createContactRoutes } from './modules/contact/contact.routes.js';
+import { ContactService } from './modules/contact/contact.service.js';
 import type { CourseSpaces } from './modules/canvas/course-spaces.js';
 import type { InstitutionsService } from './modules/institutions/institutions.service.js';
 import type { MailService } from './modules/mail/mail.service.js';
@@ -43,6 +46,7 @@ import { DailySummaryService } from './modules/push/daily-summary.js';
 import type { BuiltinSkills } from './modules/skills/builtin.js';
 import { createBillingRoutes } from './modules/billing/billing.routes.js';
 import { createUsageRoutes } from './modules/usage/usage.routes.js';
+import { createExportRoutes } from './modules/export/export.routes.js';
 import type { BillingService } from './modules/billing/billing.service.js';
 import type { TiersService } from './modules/billing/tiers.service.js';
 import { createMcpRoutes } from './modules/mcp/mcp.routes.js';
@@ -77,10 +81,11 @@ export interface AppDeps {
   billing: BillingService;
   oauth: OAuthService;
   mcp: McpServer;
+  deletion: AccountDeletion;
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseSpaces, tiers, billing, oauth, mcp } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseSpaces, tiers, billing, oauth, mcp, deletion } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -128,7 +133,7 @@ export function createApp(deps: AppDeps): express.Application {
     });
   });
 
-  app.use('/api/auth', createAuthRoutes(db, config, auth, register, sessionTtlHours));
+  app.use('/api/auth', createAuthRoutes(db, config, auth, register, sessionTtlHours, deletion));
   app.use('/api/avatars', createAvatarsRoutes(db, config.AVATARS_DIR));
   const { chatsRouter, jobsRouter, approvalsRouter } = createChatRoutes(db, bus, chats, workspace, catalog);
   app.use('/api/chats', chatsRouter);
@@ -156,14 +161,24 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/mcp-apps', mcpRoutes.apps);
   app.use('/api/billing', billingRoutes.user);
   app.use('/api/usage', createUsageRoutes({ db, tiers, sandboxes, workspace }));
+  app.use('/api/account/export', createExportRoutes({ db, workspace }));
   app.use('/api/admin', billingRoutes.admin);
+  // The public Contact page: email plus Discord. DISCORD_WEBHOOK_TEST_BASE (a local fake for the e2e) never applies in production.
+  const contactRoutes = createContactRoutes({
+    db,
+    settings,
+    mail,
+    contact: new ContactService(settings, mail, t, config.NODE_ENV === 'production' ? undefined : process.env.DISCORD_WEBHOOK_TEST_BASE || undefined),
+  });
+  app.use('/api/contact', contactRoutes.open);
+  app.use('/api/admin', contactRoutes.admin);
   app.use('/api/admin', pushRoutes.admin);
   app.use('/api/admin/logs', createLogsRoutes(db));
   app.use('/api/admin/models', createAdminModelRoutes(db, secrets));
   app.use('/api/admin', createSandboxAdminRoutes({ db, bus, config, settings, sandboxes, workspace }));
   app.use(
     '/api/admin',
-    createAdminRoutes({ db, config, settings, mail, institutions, users: new UsersAdminService(db, institutions), t, builtinSkills, onUserChanged: (id) => tiers.forget(id) }),
+    createAdminRoutes({ db, config, settings, mail, institutions, users: new UsersAdminService(db, institutions, deletion), t, builtinSkills, onUserChanged: (id) => tiers.forget(id) }),
   );
 
   app.use(createNotFoundHandler(t));

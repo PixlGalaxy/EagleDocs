@@ -51,6 +51,16 @@ export interface SmtpSettings {
   from_email: string;
 }
 
+export interface ContactSettings {
+  email_to: string;
+  /** Write-only: the backend answers with `discord_webhook_set` instead. */
+  discord_webhook_url?: string;
+  discord_webhook_set: boolean;
+  smtp_configured: boolean;
+}
+
+export type ContactChannelResult = { status: 'sent' | 'failed' | 'off'; error?: string };
+
 export interface ModelEndpoint {
   id: string;
   kind: 'ollama' | 'openai_compat';
@@ -208,6 +218,9 @@ export const adminApi = {
   smtp: () => api.get<SmtpSettings>('/admin/smtp'),
   saveSmtp: (body: SmtpSettings) => api.put<SmtpSettings>('/admin/smtp', body),
   testSmtp: (to: string) => api.post<void>('/admin/smtp/test', { to }),
+  contact: () => api.get<ContactSettings>('/admin/contact'),
+  saveContact: (body: { email_to: string; discord_webhook_url?: string }) => api.put<ContactSettings>('/admin/contact', body),
+  testContact: () => api.post<{ email: ContactChannelResult; discord: ContactChannelResult }>('/admin/contact/test'),
 
   endpoints: () => api.get<ModelEndpoint[]>('/admin/models/endpoints'),
   saveEndpoint: (body: Partial<ModelEndpoint> & { name: string; base_url: string; kind: ModelEndpoint['kind']; api_key?: string }) =>

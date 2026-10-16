@@ -6,7 +6,8 @@ import type { User } from '../api/types';
 interface AuthContextValue {
   user: User | null;
   isLoading: boolean;
-  login: (usernameOrEmail: string, password: string) => Promise<void>;
+  /** `restored`: the account was waiting to be deleted and is kept. */
+  login: (usernameOrEmail: string, password: string) => Promise<{ restored: boolean }>;
   logout: () => Promise<void>;
   /** For flows that sign the user in without a password (email verification). */
   setSession: (user: User) => void;
@@ -31,8 +32,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (usernameOrEmail: string, password: string) => {
-    const { user } = await authApi.login(usernameOrEmail, password);
+    const { user, restored } = await authApi.login(usernameOrEmail, password);
     setUser(user);
+    return { restored: restored === true };
   };
 
   const logout = async () => {

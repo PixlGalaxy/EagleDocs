@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { CircleAlert, Loader2, MailCheck } from 'lucide-react';
+import { CircleAlert, CircleCheck, Loader2, MailCheck } from 'lucide-react';
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
@@ -17,6 +17,8 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [unverified, setUnverified] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  /** Where to go once the student has read that their account was restored. */
+  const [restoredTo, setRestoredTo] = useState<string | null>(null);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -24,9 +26,11 @@ const LoginPage = () => {
     setUnverified(false);
     setSubmitting(true);
     try {
-      await login(identity.trim(), password);
+      const { restored } = await login(identity.trim(), password);
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from && from !== '/login' ? from : '/chat', { replace: true });
+      const to = from && from !== '/login' ? from : '/chat';
+      if (restored) setRestoredTo(to);
+      else navigate(to, { replace: true });
     } catch (err) {
       // 403 = the account exists but its email is not verified yet.
       if (err instanceof ApiError && err.status === 403) setUnverified(true);
@@ -49,6 +53,16 @@ const LoginPage = () => {
         </>
       }
     >
+      {restoredTo ? (
+        <div className="space-y-5">
+          <Notice tone="success" icon={CircleCheck}>
+            {t('auth.accountRestored')}
+          </Notice>
+          <button type="button" onClick={() => navigate(restoredTo, { replace: true })} className={authSubmit}>
+            {t('auth.continue')}
+          </button>
+        </div>
+      ) : (
       <form onSubmit={(e) => void submit(e)} className="space-y-5" noValidate>
         {error && (
           <Notice tone="danger" icon={CircleAlert}>
@@ -98,6 +112,7 @@ const LoginPage = () => {
           {submitting ? t('auth.signingIn') : t('landingNav.signIn')}
         </button>
       </form>
+      )}
     </AuthShell>
   );
 };

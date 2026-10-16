@@ -23,6 +23,7 @@ Email security@studyhawk.app with the steps to reproduce. Please do not open a p
   | `POST /api/auth/register` | 10 per hour per IP |
   | verify, reset password | 30 per 15 min per IP |
   | resend verification, forgot password | per email and per IP |
+| `POST /api/contact` (public Contact form) | 5 per hour per IP, 3 per hour per email |
 
 - **Sessions:** random token in an `httpOnly`, `SameSite=Lax` cookie (`Secure` with `COOKIE_SECURE`), stored hashed.
   Users must be `active` on every request; disabling a user or changing a password closes their sessions.
@@ -73,6 +74,9 @@ Email security@studyhawk.app with the steps to reproduce. Please do not open a p
   Canvas only for public `https` addresses.
 - `browser_open` refuses internal addresses.
 - **Web push** goes only to the browsers' push services (FCM, Mozilla, Apple, Windows) in production.
+- **The contact form's Discord webhook** is a secret that only accepts `https://discord.com/api/webhooks/...` (and
+  `discordapp.com`, `ptb.`, `canary.`), is checked again before each post, and does not follow redirects. Posts disable
+  every mention (`allowed_mentions: { parse: [] }`), and the email escapes the visitor's text.
 
 ## Apps (OAuth 2.1 and MCP)
 

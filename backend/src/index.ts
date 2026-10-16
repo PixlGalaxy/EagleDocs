@@ -32,6 +32,7 @@ import { DailySummaryService } from './modules/push/daily-summary.js';
 import { BuiltinSkills, loadBuiltinSkills } from './modules/skills/builtin.js';
 import { TiersService } from './modules/billing/tiers.service.js';
 import { BillingService } from './modules/billing/billing.service.js';
+import { AccountDeletion } from './modules/users/account-deletion.js';
 import { OAuthService } from './modules/mcp/oauth.service.js';
 import { McpServer } from './modules/mcp/mcp.server.js';
 import { DiskWorkspace, sweepTemp } from './engine/workspace.js';
@@ -167,6 +168,8 @@ async function main() {
   // TEMP files expire 24 h after their last change.
   // A failed payment keeps the plan for the grace period, then the student goes back to the default plan.
   scheduleExclusive(db, 'billing-grace', LOCKS.billingGrace, 60 * 60 * 1000, () => billing.expireGrace());
+  const deletion = new AccountDeletion({ db, bus, config, billing, sandboxes });
+  scheduleExclusive(db, 'account-purge', LOCKS.accountPurge, 60 * 60 * 1000, () => deletion.purgeDue());
   scheduleExclusive(db, 'temp-sweep', LOCKS.tempSweep, 15 * 60 * 1000, async () => {
     await sweepTemp(config.DATA_ROOT);
   });
@@ -200,6 +203,7 @@ async function main() {
     courseSpaces,
     tiers,
     billing,
+    deletion,
     oauth,
     mcp,
   });

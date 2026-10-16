@@ -22,6 +22,13 @@ interface SubscriptionRow {
   grace_until: Date | null;
 }
 
+/** A Stripe call that failed: answers 502 to the browser, and keeps Stripe's status for the caller. */
+class StripeError extends AppError {
+  constructor(readonly stripeStatus: number) {
+    super(502, 'billing.stripeFailed');
+  }
+}
+
 /** Stripe's form encoding: nested objects and arrays as `a[b][0][c]=v`. */
 export function formEncode(params: Record<string, unknown>, prefix = ''): string {
   const parts: string[] = [];
@@ -79,7 +86,7 @@ export class BillingService {
     return Math.min(30, Math.max(0, this.settings.getNumber(K.billingGraceDays, 3)));
   }
 
-  private async stripe<T>(method: 'GET' | 'POST', path: string, params: Record<string, unknown> = {}): Promise<T> {
+  private async stripe<T>(method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, unknown> = {}): Promise<T> {
     const key = this.settings.getSecret(K.stripeSecretKey);
     if (!key) throw new AppError(503, 'billing.off');
     const body = formEncode(params);
@@ -93,7 +100,7 @@ export class BillingService {
     if (!res.ok) {
       // Stripe's own message, never the key.
       logger.warn(`Stripe ${method} ${path} failed (${res.status}): ${json.error?.message ?? 'no message'}`);
-      throw new AppError(502, 'billing.stripeFailed');
+      throw new StripeError(res.status);
     }
     return json;
   }
@@ -277,6 +284,25 @@ export class BillingService {
   private async dropPaidPlan(userId: string, paidTier: string | null): Promise<void> {
     await this.db.query('UPDATE users SET tier_id = NULL, tier_expires_at = NULL WHERE id = $1 AND tier_id IS NOT DISTINCT FROM $2', [userId, paidTier]);
     this.tiers.forget(userId);
+  }
+
+  /**
+   * Account deletion: ends the subscription in Stripe now, without proration or a refund
+   * (the Terms), so the card is never charged again. A subscription already over is left alone.
+   * Throws when Stripe fails, so the account is not deleted while it could still be charged.
+   */
+  async cancelNow(userId: string): Promise<void> {
+    const sub = await this.subscription(userId);
+    if (!sub?.stripe_subscription_id || ['canceled', 'incomplete_expired'].includes(sub.status)) return;
+    try {
+      await this.stripe('DELETE', `subscriptions/${encodeURIComponent(sub.stripe_subscription_id)}`, { prorate: false, invoice_now: false });
+    } catch (err) {
+      // Already gone in Stripe (cancelled from the dashboard): nothing left to charge.
+      if (!(err instanceof StripeError && err.stripeStatus === 404)) throw err;
+    }
+    await this.db.query("UPDATE subscriptions SET status = 'canceled', cancel_at_period_end = false, grace_until = NULL, updated_at = now() WHERE user_id = $1", [userId]);
+    await this.dropPaidPlan(userId, sub.tier_id);
+    logger.info(`Subscription of ${userId} cancelled in Stripe (account deletion)`);
   }
 
   /** Leader task: when a failed payment's grace period ends, the student goes back to the default plan. */

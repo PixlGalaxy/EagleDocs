@@ -4,26 +4,30 @@ import { useI18n } from '../../i18n/I18nContext';
 import PublicLayout from '../../components/layout/PublicLayout';
 import { Field, Notice } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
-import { STATUS_URL, SUPPORT_EMAIL } from '../../components/brand';
+import { DISCORD_URL, GITHUB_URL, STATUS_URL, SUPPORT_EMAIL } from '../../components/brand';
+import { ApiError } from '../../api/client';
+import { contactApi } from '../../api/contact';
+
+const EMPTY = { name: '', email: '', message: '', website: '' };
 
 const ContactPage = () => {
   const { t } = useI18n();
-  const [form, setForm] = useState({ name: '', email: '', message: '' });
+  const [form, setForm] = useState(EMPTY);
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [error, setError] = useState('');
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (status === 'sending') return;
     setStatus('sending');
+    setError('');
     try {
-      const res = await fetch('https://contact.eagledocs.org/api', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      if (!res.ok) throw new Error();
+      await contactApi.send(form);
       setStatus('sent');
-      setForm({ name: '', email: '', message: '' });
-    } catch {
+      setForm(EMPTY);
+    } catch (err) {
+      // The server's own words (too short, too many messages, not set up), else the generic line.
+      setError(err instanceof ApiError && err.status !== 500 ? err.message : t('contact.failed'));
       setStatus('error');
     }
   };
@@ -46,10 +50,10 @@ const ContactPage = () => {
             <div>
               <dt className="text-slate-500 dark:text-slate-400">{t('contact.elsewhere')}</dt>
               <dd className="mt-1 flex flex-wrap gap-x-5 gap-y-2 font-medium">
-                <a href="https://github.com/PixlGalaxy/StudyHawk" target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
+                <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
                   GitHub
                 </a>
-                <a href="https://discord.gg/4RuUjT2jNv" target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
+                <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
                   Discord
                 </a>
                 <a href={STATUS_URL} target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
@@ -60,7 +64,7 @@ const ContactPage = () => {
           </dl>
         </div>
 
-        <form onSubmit={(e) => void submit(e)} className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 sm:p-8">
+        <form onSubmit={(e) => void submit(e)} className="relative space-y-5 rounded-2xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 sm:p-8">
           {status === 'sent' && (
             <Notice tone="success" icon={CheckCircle2}>
               {t('contact.sent')}
@@ -68,18 +72,22 @@ const ContactPage = () => {
           )}
           {status === 'error' && (
             <Notice tone="danger" icon={CircleAlert}>
-              {t('contact.failed')}
+              {error || t('contact.failed')}
             </Notice>
           )}
           <Field label={t('contact.name')}>
-            {(id) => <input id={id} autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input} required />}
+            {(id) => <input id={id} autoComplete="name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={input} required maxLength={100} />}
           </Field>
           <Field label="Email">
-            {(id) => <input id={id} type="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={input} required />}
+            {(id) => <input id={id} type="email" autoComplete="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={input} required maxLength={254} />}
           </Field>
           <Field label={t('contact.message')}>
-            {(id) => <textarea id={id} rows={6} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className={input} required />}
+            {(id) => <textarea id={id} rows={6} value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} className={input} required minLength={10} maxLength={5000} />}
           </Field>
+          {/* Honeypot: off-screen and hidden from screen readers and the keyboard; only bots fill it. */}
+          <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
+            <input type="text" name="website" tabIndex={-1} autoComplete="off" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
+          </div>
           <button type="submit" disabled={status === 'sending'} className={`${btn.primary} w-full py-2.5`}>
             {status === 'sending' && <Loader2 size={16} className="animate-spin" />}
             {t('contact.send')}

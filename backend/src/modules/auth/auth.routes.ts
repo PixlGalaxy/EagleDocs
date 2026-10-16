@@ -2,13 +2,15 @@ import { Router, type Response } from 'express';
 import type { EnvConfig } from '../../config/env.js';
 import type { Db } from '../../db/pool.js';
 import { isLanguage } from '../../i18n/index.js';
-import { badRequest, forbidden, unauthorized } from '../../errors.js';
+import { badRequest, conflict, forbidden, unauthorized } from '../../errors.js';
 import { logger } from '../../logger.js';
 import { clearRateLimit, createRateLimiter } from '../../middleware/rate-limit.js';
 import { THEME_MODES, THEME_SKINS, type AppRequest } from '../../types/index.js';
 import { getUserById, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, optionalText, toPublicUser, validatePassword } from '../users/users.service.js';
 import type { AuthService } from './auth.service.js';
 import type { RegisterService } from './register.service.js';
+import { DELETE_AFTER_DAYS, type AccountDeletion } from '../users/account-deletion.js';
+import { isLastActiveAdmin } from '../admin/users-admin.service.js';
 import { requireAuth, SESSION_COOKIE } from './session.middleware.js';
 
 export function createAuthRoutes(
@@ -17,6 +19,7 @@ export function createAuthRoutes(
   auth: AuthService,
   register: RegisterService,
   sessionTtlHours: () => number,
+  deletion: AccountDeletion,
 ): Router {
   const router = Router();
 
@@ -61,6 +64,13 @@ export function createAuthRoutes(
     keyFn: (req) => ((req as AppRequest).user ? `change-password:${(req as AppRequest).user!.id}` : null),
     describe: (req) => `password changes by "${(req as AppRequest).user?.username}"`,
   });
+  // Same reason: a stolen session must not be able to guess the password and delete the account.
+  const deleteAccountLimiter = createRateLimiter(db, {
+    windowMs: loginWindowMs,
+    max: config.LOGIN_RATE_LIMIT_MAX,
+    keyFn: (req) => ((req as AppRequest).user ? `delete-account:${(req as AppRequest).user!.id}` : null),
+    describe: (req) => `account deletion attempts by "${(req as AppRequest).user?.username}"`,
+  });
   const verifyLimiter = createRateLimiter(db, {
     windowMs: 15 * 60 * 1000,
     max: 30,
@@ -86,12 +96,15 @@ export function createAuthRoutes(
       throw unauthorized('auth.invalidCredentials');
     }
 
+    // Signing in within the 30 days after asking to delete the account keeps it.
+    const restored = result.user.status === 'deleting';
+    if (restored) await deletion.restore(result.user.id);
     const token = await auth.createSession(db, result.user.id, { userAgent: req.get('user-agent'), ip: req.ip });
     const accountKey = loginAccountKey(req);
     if (accountKey) await clearRateLimit(db, accountKey);
-    logger.auth.info(`Login as "${result.user.username}" from ${req.ip}`);
+    logger.auth.info(`Login as "${result.user.username}" from ${req.ip}${restored ? ' (account restored)' : ''}`);
     setSessionCookie(res, token);
-    res.json({ user: toPublicUser(result.user) });
+    res.json({ user: toPublicUser({ ...result.user, status: 'active' }), ...(restored && { restored: true }) });
   });
 
   router.post('/logout', requireAuth, async (req: AppRequest, res) => {
@@ -151,6 +164,26 @@ export function createAuthRoutes(
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     logger.auth.info(`Password changed for "${req.user!.username}" from ${req.ip}`);
     res.status(204).end();
+  });
+
+  /** Settings → Account: the owner deletes their account (erased after DELETE_AFTER_DAYS unless they sign in again). */
+  router.post('/delete-account', requireAuth, deleteAccountLimiter, async (req: AppRequest, res) => {
+    const { password, username } = req.body as { password?: unknown; username?: unknown };
+    const user = req.user!;
+    if (typeof username !== 'string' || username.trim().toLowerCase() !== user.username.toLowerCase()) throw badRequest('auth.deleteUsernameMismatch');
+    if (typeof password !== 'string' || !password) throw badRequest('auth.passwordsRequired');
+    if (password.length > MAX_PASSWORD_LENGTH) throw unauthorized('auth.currentPasswordIncorrect');
+    const check = await auth.checkCredentials(user.username, password);
+    if (!check.ok || check.user.id !== user.id) {
+      logger.auth.warn(`Account deletion for "${user.username}" from ${req.ip} failed: wrong password`);
+      throw unauthorized('auth.currentPasswordIncorrect');
+    }
+    if (await isLastActiveAdmin(db, user.id)) throw conflict('users.lastAdmin');
+    const deleteAfter = await deletion.request(user.id);
+    // Its sessions are gone, this one too.
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    logger.auth.info(`Account deletion requested by "${user.username}" from ${req.ip}`);
+    res.json({ delete_after: deleteAfter.toISOString(), days: DELETE_AFTER_DAYS });
   });
 
   router.patch('/profile', requireAuth, async (req: AppRequest, res) => {

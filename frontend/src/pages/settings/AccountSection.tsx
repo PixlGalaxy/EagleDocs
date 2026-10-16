@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { CircleAlert, Loader2, Trash2, Upload } from 'lucide-react';
+import { CircleAlert, Download, Loader2, Trash2, Upload } from 'lucide-react';
 import { authApi, avatarsApi } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -9,6 +9,9 @@ import Toast from '../../components/ui/Toast';
 import { Field, Notice, Panel } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
 import { PasswordInput } from '../auth/AuthShell';
+import DeleteAccountPanel from './DeleteAccountPanel';
+import ExportDataPanel from './ExportDataPanel';
+import { dataExportApi } from '../../api/account';
 
 const TIMEZONES = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : ['America/New_York'];
 
@@ -184,6 +187,20 @@ const AccountSection = () => {
           </div>
         </form>
       </Panel>
+
+      <ExportDataPanel />
+
+      <DeleteAccountPanel
+        exportSlot={
+          <div className="flex flex-wrap items-center gap-3">
+            <a href={dataExportApi.downloadUrl()} download className={btn.secondary}>
+              <Download size={16} aria-hidden="true" />
+              {t('dataExport.download')}
+            </a>
+            <span className="text-sm text-slate-500 dark:text-slate-400">{t('account.deleteExportFirst')}</span>
+          </div>
+        }
+      />
 
       {toast && <Toast message={toast} />}
     </>

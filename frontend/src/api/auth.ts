@@ -3,8 +3,9 @@ import type { RegisterResult, SessionInfo, User } from './types';
 
 export const authApi = {
   me: () => api.get<SessionInfo>('/auth/me'),
+  /** `restored`: the account was waiting to be deleted, and signing in kept it. */
   login: (usernameOrEmail: string, password: string) =>
-    api.post<SessionInfo>('/auth/login', { usernameOrEmail, password }),
+    api.post<SessionInfo & { restored?: boolean }>('/auth/login', { usernameOrEmail, password }),
   logout: () => api.post<void>('/auth/logout'),
   register: (body: { email: string; username: string; displayName: string; password: string }) =>
     api.post<RegisterResult>('/auth/register', body),
@@ -15,6 +16,8 @@ export const authApi = {
   resetPassword: (token: string, newPassword: string) => api.post<void>('/auth/reset-password', { token, newPassword }),
   changePassword: (currentPassword: string, newPassword: string) =>
     api.post<void>('/auth/change-password', { currentPassword, newPassword }),
+  /** The account is erased on `delete_after` unless its owner signs in before. */
+  deleteAccount: (password: string, username: string) => api.post<{ delete_after: string; days: number }>('/auth/delete-account', { password, username }),
   updateProfile: (body: Partial<Pick<User, 'display_name' | 'major' | 'timezone'>>) => api.patch<User>('/auth/profile', body),
   appearance: (body: { mode?: string; skin?: string; language?: string; tool_trace?: 'compact' | 'full'; busy_input?: 'steer' | 'queue' | 'interrupt' }) => api.post<User>('/auth/appearance', body),
 };

@@ -2,7 +2,8 @@
 // (plans/01-arquitectura.md) implements: keep both in sync.
 
 export type Role = 'admin' | 'user';
-export type UserStatus = 'pending' | 'active' | 'disabled';
+/** `deleting`: its owner asked to delete it; it is erased after 30 days unless they sign in again. */
+export type UserStatus = 'pending' | 'active' | 'disabled' | 'deleting';
 
 export interface Institution {
   id: string;

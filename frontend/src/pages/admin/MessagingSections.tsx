@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { CheckCircle2, CircleAlert, KeyRound, Loader2, Megaphone, Send } from 'lucide-react';
-import { adminApi, type PushSettings, type SmtpSettings } from '../../api/admin';
+import { CheckCircle2, CircleAlert, KeyRound, Loader2, Megaphone, Send, Trash2 } from 'lucide-react';
+import { adminApi, type ContactChannelResult, type ContactSettings, type PushSettings, type SmtpSettings } from '../../api/admin';
 import { ApiError } from '../../api/client';
 import type { Institution } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
@@ -53,31 +53,133 @@ export const EmailSection = () => {
   if (!smtp) return <Skeleton className="h-64 rounded-xl" />;
 
   return (
-    <Panel title={t('admin.smtpTitle')} description={t('admin.smtpBody')}>
-      <form onSubmit={(e) => void save(e)} className="grid gap-5 sm:grid-cols-2">
-        <Field label={t('admin.smtpHost')}>
-          {(id) => <input id={id} value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} className={`${input} font-mono`} placeholder="smtp.gmail.com" />}
-        </Field>
-        <div className="flex items-end gap-4">
-          <Field label={t('admin.smtpPort')}>
-            {(id) => <input id={id} type="number" value={smtp.port} onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })} className={`${input} w-28 font-mono`} />}
+    <>
+      <Panel title={t('admin.smtpTitle')} description={t('admin.smtpBody')}>
+        <form onSubmit={(e) => void save(e)} className="grid gap-5 sm:grid-cols-2">
+          <Field label={t('admin.smtpHost')}>
+            {(id) => <input id={id} value={smtp.host} onChange={(e) => setSmtp({ ...smtp, host: e.target.value })} className={`${input} font-mono`} placeholder="smtp.gmail.com" />}
           </Field>
-          <label className="mb-2 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-            <Switch label="TLS" checked={smtp.secure} onChange={(on) => setSmtp({ ...smtp, secure: on, port: on && smtp.port === 587 ? 465 : smtp.port })} />
-            TLS
-          </label>
-        </div>
-        <Field label={t('admin.smtpUser')}>
-          {(id) => <input id={id} autoComplete="off" value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} className={input} />}
+          <div className="flex items-end gap-4">
+            <Field label={t('admin.smtpPort')}>
+              {(id) => <input id={id} type="number" value={smtp.port} onChange={(e) => setSmtp({ ...smtp, port: Number(e.target.value) })} className={`${input} w-28 font-mono`} />}
+            </Field>
+            <label className="mb-2 flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <Switch label="TLS" checked={smtp.secure} onChange={(on) => setSmtp({ ...smtp, secure: on, port: on && smtp.port === 587 ? 465 : smtp.port })} />
+              TLS
+            </label>
+          </div>
+          <Field label={t('admin.smtpUser')}>
+            {(id) => <input id={id} autoComplete="off" value={smtp.user} onChange={(e) => setSmtp({ ...smtp, user: e.target.value })} className={input} />}
+          </Field>
+          <Field label={t('admin.smtpPassword')} hint={smtp.password_set ? t('admin.secretSet') : undefined}>
+            {(id, d) => <PasswordInput id={id} aria-describedby={d} autoComplete="off" value={smtp.password ?? ''} onChange={(e) => setSmtp({ ...smtp, password: e.target.value })} />}
+          </Field>
+          <Field label={t('admin.smtpFromName')}>
+            {(id) => <input id={id} value={smtp.from_name} onChange={(e) => setSmtp({ ...smtp, from_name: e.target.value })} className={input} placeholder="StudyHawk" />}
+          </Field>
+          <Field label={t('admin.smtpFromEmail')}>
+            {(id) => <input id={id} type="email" value={smtp.from_email} onChange={(e) => setSmtp({ ...smtp, from_email: e.target.value })} className={input} placeholder="no-reply@studyhawk.app" />}
+          </Field>
+          {result && (
+            <div className="sm:col-span-2">
+              <Notice tone={result.ok ? 'success' : 'danger'} icon={result.ok ? CheckCircle2 : CircleAlert}>
+                {result.message}
+              </Notice>
+            </div>
+          )}
+          <div className="flex flex-wrap items-end gap-3 sm:col-span-2">
+            <button type="submit" disabled={busy !== null} className={btn.primary}>
+              {busy === 'save' && <Loader2 size={16} className="animate-spin" />}
+              {t('common.save')}
+            </button>
+            <span className="mx-1 hidden h-8 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+            <label htmlFor="smtp-test" className="sr-only">
+              {t('admin.smtpTestTo')}
+            </label>
+            <input id="smtp-test" type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} className={`${input} max-w-xs`} />
+            <button type="button" onClick={() => void test()} disabled={busy !== null || !testTo} className={btn.secondary}>
+              {busy === 'test' ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} aria-hidden="true" />}
+              {t('admin.smtpTest')}
+            </button>
+          </div>
+        </form>
+      </Panel>
+      <ContactFormPanel />
+    </>
+  );
+};
+
+/** Where the public Contact page delivers: an inbox (through the SMTP above) and a Discord webhook. */
+const ContactFormPanel = () => {
+  const { t } = useI18n();
+  const [contact, setContact] = useState<ContactSettings | null>(null);
+  const [webhook, setWebhook] = useState('');
+  const [busy, setBusy] = useState<'save' | 'clear' | 'test' | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [test, setTest] = useState<{ email: ContactChannelResult; discord: ContactChannelResult } | null>(null);
+
+  useEffect(() => {
+    void adminApi.contact().then(setContact).catch(() => undefined);
+  }, []);
+
+  const save = async (body: { email_to: string; discord_webhook_url?: string }, kind: 'save' | 'clear') => {
+    setBusy(kind);
+    setResult(null);
+    setTest(null);
+    try {
+      setContact(await adminApi.saveContact(body));
+      setWebhook('');
+      setResult({ ok: true, message: t('common.saved') });
+    } catch (err) {
+      setResult({ ok: false, message: err instanceof ApiError ? err.message : t('common.networkError') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runTest = async () => {
+    setBusy('test');
+    setResult(null);
+    setTest(null);
+    try {
+      setTest(await adminApi.testContact());
+    } catch (err) {
+      setResult({ ok: false, message: err instanceof ApiError ? err.message : t('common.networkError') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!contact) return <Skeleton className="h-48 rounded-xl" />;
+
+  const describe = (r: ContactChannelResult) =>
+    r.status === 'sent' ? t('admin.contactSent') : r.status === 'off' ? t('admin.contactOff') : t('admin.contactFailed', { error: r.error ?? '?' });
+
+  return (
+    <Panel title={t('admin.contactTitle')} description={t('admin.contactBody')}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void save({ email_to: contact.email_to, ...(webhook.trim() && { discord_webhook_url: webhook.trim() }) }, 'save');
+        }}
+        className="grid gap-5 sm:grid-cols-2"
+      >
+        <Field label={t('admin.contactTo')} hint={contact.smtp_configured ? undefined : t('admin.contactNoSmtp')}>
+          {(id, d) => <input id={id} aria-describedby={d} type="email" value={contact.email_to} onChange={(e) => setContact({ ...contact, email_to: e.target.value })} className={input} placeholder="support@studyhawk.app" maxLength={254} />}
         </Field>
-        <Field label={t('admin.smtpPassword')} hint={smtp.password_set ? t('admin.secretSet') : undefined}>
-          {(id, d) => <PasswordInput id={id} aria-describedby={d} autoComplete="off" value={smtp.password ?? ''} onChange={(e) => setSmtp({ ...smtp, password: e.target.value })} />}
-        </Field>
-        <Field label={t('admin.smtpFromName')}>
-          {(id) => <input id={id} value={smtp.from_name} onChange={(e) => setSmtp({ ...smtp, from_name: e.target.value })} className={input} placeholder="StudyHawk" />}
-        </Field>
-        <Field label={t('admin.smtpFromEmail')}>
-          {(id) => <input id={id} type="email" value={smtp.from_email} onChange={(e) => setSmtp({ ...smtp, from_email: e.target.value })} className={input} placeholder="no-reply@studyhawk.app" />}
+        <Field label={t('admin.contactWebhook')} hint={contact.discord_webhook_set ? t('admin.contactWebhookSet') : t('admin.contactWebhookHint')}>
+          {(id, d) => (
+            <div className="flex gap-2">
+              <div className="min-w-0 flex-1">
+                <PasswordInput id={id} aria-describedby={d} autoComplete="off" value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://discord.com/api/webhooks/..." maxLength={500} />
+              </div>
+              {contact.discord_webhook_set && (
+                <button type="button" onClick={() => void save({ email_to: contact.email_to, discord_webhook_url: '' }, 'clear')} disabled={busy !== null} className={btn.secondary} aria-label={t('common.remove')} title={t('common.remove')}>
+                  {busy === 'clear' ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
+                </button>
+              )}
+            </div>
+          )}
         </Field>
         {result && (
           <div className="sm:col-span-2">
@@ -86,19 +188,21 @@ export const EmailSection = () => {
             </Notice>
           </div>
         )}
-        <div className="flex flex-wrap items-end gap-3 sm:col-span-2">
+        {test && (
+          <div className="sm:col-span-2">
+            <Notice tone={test.email.status === 'sent' || test.discord.status === 'sent' ? 'success' : 'danger'} icon={test.email.status === 'failed' || test.discord.status === 'failed' ? CircleAlert : CheckCircle2}>
+              {t('admin.contactEmail')}: {describe(test.email)} · {t('admin.contactDiscord')}: {describe(test.discord)}
+            </Notice>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-3 sm:col-span-2">
           <button type="submit" disabled={busy !== null} className={btn.primary}>
             {busy === 'save' && <Loader2 size={16} className="animate-spin" />}
             {t('common.save')}
           </button>
-          <span className="mx-1 hidden h-8 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-          <label htmlFor="smtp-test" className="sr-only">
-            {t('admin.smtpTestTo')}
-          </label>
-          <input id="smtp-test" type="email" value={testTo} onChange={(e) => setTestTo(e.target.value)} className={`${input} max-w-xs`} />
-          <button type="button" onClick={() => void test()} disabled={busy !== null || !testTo} className={btn.secondary}>
+          <button type="button" onClick={() => void runTest()} disabled={busy !== null} className={btn.secondary}>
             {busy === 'test' ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} aria-hidden="true" />}
-            {t('admin.smtpTest')}
+            {t('admin.contactTest')}
           </button>
         </div>
       </form>

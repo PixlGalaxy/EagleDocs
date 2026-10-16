@@ -63,7 +63,7 @@ export const PrivacyPolicy = () => (
               <strong>We never use your chats, files, courses or any other data to train AI models</strong>, and we never sell your data.
             </li>
             <li>Passwords, tokens and keys you give us are encrypted, and the AI never sees them.</li>
-            <li>You can ask us to delete your account and everything in it at any time.</li>
+            <li>You can download a copy of your data, or delete your account and everything in it, at any time from Settings.</li>
           </ul>
         ),
       },
@@ -154,7 +154,7 @@ export const PrivacyPolicy = () => (
         title: '7. How long we keep it',
         body: (
           <ul>
-            <li>Your account, chats, files and memory: until you delete them or ask us to delete your account.</li>
+            <li>Your account, chats, files and memory: until you delete them or your account. When you delete your account, it is switched off at once and everything in it is erased 30 days later; signing in again before then keeps it.</li>
             <li>Files in your TEMP folder: deleted automatically 24 hours after their last change.</li>
             <li>Live progress of the assistant's tasks: deleted 24 hours after each task ends.</li>
             <li>Technical logs: 7 days. Sign-in sessions: until you sign out or they expire (7 days by default).</li>
@@ -179,10 +179,11 @@ export const PrivacyPolicy = () => (
               <li>See and edit your profile, memory notes, skills and scheduled tasks in Settings.</li>
               <li>Disconnect Canvas, your university account, your AI accounts or any authorized app at any time.</li>
               <li>Download or delete your files from the Files page.</li>
-              <li>Ask for a copy of your data, a correction, or the deletion of your account and all its data.</li>
+              <li>Download a copy of your data (your files and a file with your profile, chats, memory and settings) from Settings → Account.</li>
+              <li>Delete your account and all its data from Settings → Account. It is erased 30 days later; signing in before then cancels the deletion. A paid plan is cancelled at once.</li>
             </ul>
             <p>
-              For any of these requests, write to <Mail /> from your account's email address. We answer within 30 days.
+              For anything else, such as a correction, write to <Mail /> from your account's email address. We answer within 30 days.
             </p>
           </>
         ),
@@ -346,7 +347,11 @@ export const TermsOfService = () => (
       },
       {
         title: '12. Ending your use',
-        body: <p>You can stop using StudyHawk and ask us to delete your account at any time. We may end these terms or your access if you break them. Sections 7, 9, 11 and 13 continue to apply afterwards.</p>,
+        body: (
+          <p>
+            You can stop using StudyHawk and delete your account at any time from Settings → Account. Your account is switched off at once and erased 30 days later, unless you sign in again before then; a paid plan is cancelled at once, without a refund. We may end these terms or your access if you break them. Sections 7, 9, 11 and 13 continue to apply afterwards.
+          </p>
+        ),
       },
       {
         title: '13. Governing law',

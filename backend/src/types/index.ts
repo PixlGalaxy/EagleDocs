@@ -35,7 +35,8 @@ export const THEME_SKINS = [
 export type ThemeSkin = (typeof THEME_SKINS)[number];
 
 export type Role = 'admin' | 'user';
-export type UserStatus = 'pending' | 'active' | 'disabled';
+/** `deleting`: the owner asked to delete it; it is erased after `delete_after` unless they sign in again. */
+export type UserStatus = 'pending' | 'active' | 'disabled' | 'deleting';
 
 export interface User {
   id: string;

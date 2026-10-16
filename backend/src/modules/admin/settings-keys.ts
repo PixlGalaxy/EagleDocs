@@ -42,6 +42,11 @@ export const SETTINGS_KEYS = {
   smtpFromName: 'smtp.from_name',
   smtpFromEmail: 'smtp.from_email',
 
+  /** Public contact form: where messages are emailed (empty means support@studyhawk.app). */
+  contactEmailTo: 'contact.email_to',
+  /** Secret (secret_enc): a Discord webhook URL. */
+  contactDiscordWebhook: 'contact.discord_webhook',
+
   /** Paid web search after the free ones: 'none', 'brave' or 'tavily'. */
   webSearchPaidProvider: 'web_search.paid_provider',
   /** Secret (secret_enc). */

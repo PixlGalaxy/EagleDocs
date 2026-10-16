@@ -38,6 +38,7 @@ let codexPolls = 0;
 const mockSettings = {
   general: { registration_enabled: true, beta_test: false, default_language: 'en', default_theme_mode: 'system', default_theme_skin: 'hawk', studyhawk_daily_messages: 100, session_ttl_hours: 168, mcp_enabled: true, codex_enabled: true, codex_disabled_until: null as string | null },
   smtp: { host: 'smtp.gmail.com', port: 587, secure: false, user: 'no-reply@studyhawk.app', password_set: true, from_name: 'StudyHawk', from_email: 'no-reply@studyhawk.app' },
+  contact: { email_to: 'support@studyhawk.app', discord_webhook_set: false, smtp_configured: true },
   sandbox: { image: 'ghcr.io/pixlgalaxy/studyhawk-sandbox:latest', default_cpu: 0.5, default_mem_mb: 512, default_disk_mb: 5120, max_active_per_node: 4, idle_timeout_minutes: 15, throttle_cpu: 0.25, network: 'open', network_list: [] as string[] },
   push: { vapid_public_key: 'BNbV3s3E4cPq0wP3u4oFv9M2u0n2T3x1Yb4ZQ7m8K1aJx0YfS2o9r6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3', subscriptions: 37, contact_email: 'admin@studyhawk.app' },
   billing: { enabled: false, stripe_secret_set: false, stripe_webhook_secret_set: false, grace_days: 3 },
@@ -84,6 +85,7 @@ const routes: [string, RegExp, Handler][] = [
     return { user: db.asUser(db.users[1]!) };
   }],
   ['POST', /^\/auth\/(resend-verification|forgot-password|reset-password|change-password)$/, () => undefined],
+  ['POST', /^\/auth\/delete-account$/, () => ({ delete_after: new Date(Date.now() + 30 * 86_400_000).toISOString(), days: 30 })],
   ['PATCH', /^\/auth\/profile$/, ({ body }) => Object.assign(sessionUser(), body, { updated_at: iso() }) && db.asUser(sessionUser())],
   ['POST', /^\/auth\/appearance$/, ({ body }) => {
     const user = sessionUser();
@@ -238,6 +240,10 @@ const routes: [string, RegExp, Handler][] = [
   ['PUT', /^\/memories\/paused$/, ({ body }) => {
     mockSettings.memoryPaused = Boolean(body.paused);
   }],
+  ['POST', /^\/contact$/, ({ body }) => {
+    if (String(body.message ?? '').trim().length < 10) throw new HttpError(400, 'Write a message between 10 and 5,000 characters.');
+    return undefined;
+  }],
   ['GET', /^\/skills$/, () => db.skills],
   ['PUT', /^\/skills\/([^/]+)\/enabled$/, ({ params, body }) => Object.assign(db.skills.find((s) => s.slug === params[0])!, { enabled: body.enabled })],
   ['DELETE', /^\/skills\/([^/]+)\/notes\/([^/]+)$/, () => undefined],
@@ -302,6 +308,13 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/admin\/smtp$/, () => mockSettings.smtp],
   ['PUT', /^\/admin\/smtp$/, ({ body }) => Object.assign(mockSettings.smtp, body, { password_set: true })],
   ['POST', /^\/admin\/smtp\/test$/, () => undefined],
+  ['GET', /^\/admin\/contact$/, () => mockSettings.contact],
+  ['PUT', /^\/admin\/contact$/, ({ body }) => {
+    const url = typeof body.discord_webhook_url === 'string' ? body.discord_webhook_url : undefined;
+    if (url && !/^https:\/\/((ptb|canary)\.)?discord(app)?\.com\/api\/webhooks\//.test(url)) throw new HttpError(400, 'That is not a Discord webhook URL.');
+    return Object.assign(mockSettings.contact, { email_to: String(body.email_to || 'support@studyhawk.app') }, url !== undefined && { discord_webhook_set: url !== '' });
+  }],
+  ['POST', /^\/admin\/contact\/test$/, () => ({ email: { status: 'sent' }, discord: { status: mockSettings.contact.discord_webhook_set ? 'sent' : 'off' } })],
   ['GET', /^\/admin\/models\/endpoints$/, () => db.endpoints],
   ['POST', /^\/admin\/models\/endpoints$/, ({ body }) => ({ ...body, id: id('ep'), enabled: true, models: [] })],
   ['POST', /^\/admin\/models\/endpoints\/([^/]+)\/discover$/, ({ params }) => db.endpoints.find((e) => e.id === params[0])],

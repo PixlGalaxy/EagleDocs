@@ -148,3 +148,8 @@ export const billingApi = {
   checkout: (tierId: string) => api.post<{ url: string }>('/billing/checkout', { tierId }),
   portal: () => api.post<{ url: string }>('/billing/portal'),
 };
+
+export const dataExportApi = {
+  /** GET /api/account/export: a plain link to it lets the browser stream the ZIP straight to disk. */
+  downloadUrl: () => apiUrl('/account/export'),
+};
