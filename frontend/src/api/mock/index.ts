@@ -36,6 +36,7 @@ const mcpApps = [
 const approvals: Approval[] = [];
 let codexPolls = 0;
 const mockSettings = {
+  betaReportWebhookSet: true,
   general: { registration_enabled: true, beta_test: false, default_language: 'en', default_theme_mode: 'system', default_theme_skin: 'hawk', studyhawk_daily_messages: 100, session_ttl_hours: 168, mcp_enabled: true, codex_enabled: true, codex_disabled_until: null as string | null, status_page_url: 'https://onlinestatus.eagledocs.org' },
   smtp: { host: 'smtp.gmail.com', port: 587, secure: false, user: 'no-reply@studyhawk.app', password_set: true, from_name: 'StudyHawk', from_email: 'no-reply@studyhawk.app' },
   contact: { email_to: 'support@studyhawk.app', discord_webhook_set: false, smtp_configured: true },
@@ -53,7 +54,8 @@ const routes: [string, RegExp, Handler][] = [
     defaultThemeSkin: 'hawk',
     registrationEnabled: true,
     emailConfigured: true,
-    betaTest: false,
+    betaTest: mockSettings.general.beta_test,
+    betaReport: mockSettings.general.beta_test && mockSettings.betaReportWebhookSet,
     institutions: db.institutions.map((i) => ({ name: i.name, domains: i.domains.map((d) => d.domain) })),
     billingEnabled: mockSettings.billing.enabled,
     codexEnabled: mockSettings.general.codex_enabled && !mockSettings.general.codex_disabled_until,
@@ -242,6 +244,10 @@ const routes: [string, RegExp, Handler][] = [
   ['PUT', /^\/memories\/paused$/, ({ body }) => {
     mockSettings.memoryPaused = Boolean(body.paused);
   }],
+  ['POST', /^\/beta-report$/, ({ body }) => {
+    if (String(body.message ?? '').trim().length < 10) throw new HttpError(400, 'Describe the problem in 10 to 3,000 characters.');
+    return undefined;
+  }],
   ['POST', /^\/contact$/, ({ body }) => {
     if (String(body.message ?? '').trim().length < 10) throw new HttpError(400, 'Write a message between 10 and 5,000 characters.');
     return undefined;
@@ -310,6 +316,12 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/admin\/smtp$/, () => mockSettings.smtp],
   ['PUT', /^\/admin\/smtp$/, ({ body }) => Object.assign(mockSettings.smtp, body, { password_set: true })],
   ['POST', /^\/admin\/smtp\/test$/, () => undefined],
+  ['GET', /^\/admin\/beta-report$/, () => ({ discord_webhook_set: mockSettings.betaReportWebhookSet })],
+  ['PUT', /^\/admin\/beta-report$/, ({ body }) => {
+    mockSettings.betaReportWebhookSet = Boolean(String(body.discord_webhook_url ?? '').trim());
+    return { discord_webhook_set: mockSettings.betaReportWebhookSet };
+  }],
+  ['POST', /^\/admin\/beta-report\/test$/, () => (mockSettings.betaReportWebhookSet ? { ok: true } : { ok: false, error: 'no webhook' })],
   ['GET', /^\/admin\/contact$/, () => mockSettings.contact],
   ['PUT', /^\/admin\/contact$/, ({ body }) => {
     const url = typeof body.discord_webhook_url === 'string' ? body.discord_webhook_url : undefined;

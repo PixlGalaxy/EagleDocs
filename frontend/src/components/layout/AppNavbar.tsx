@@ -17,6 +17,7 @@ import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
 import Avatar from '../ui/Avatar';
 import { BrandIcon, BrandLogo } from '../BrandLogo';
+import BetaReportButton from '../BetaReportButton';
 
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
   `flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 text-base font-medium transition sm:px-4 ${
@@ -72,13 +73,17 @@ const AppNavbar = () => {
   return (
     <nav className="shrink-0 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" aria-label={t('nav.label')}>
       <div className="flex h-16 w-full items-center justify-between gap-2 px-3 sm:h-20 sm:gap-4 sm:px-6">
-        <Link
-          to="/chat"
-          className="flex shrink-0 items-center gap-2.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]"
-        >
-          <BrandIcon label="StudyHawk" className="h-9 w-9 sm:h-10 sm:w-10 md:hidden" />
-          <BrandLogo className="hidden h-8 w-auto md:block" />
-        </Link>
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <Link
+            to="/chat"
+            className="flex shrink-0 items-center gap-2.5 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]"
+          >
+            <BrandIcon label="StudyHawk" className="h-9 w-9 sm:h-10 sm:w-10 md:hidden" />
+            <BrandLogo className="hidden h-8 w-auto md:block" />
+          </Link>
+          {/* Only while the app is in beta. */}
+          <BetaReportButton />
+        </div>
 
         <div className="flex min-w-0 items-center gap-0.5 sm:gap-1">
           {NAV_ITEMS.map(({ to, labelKey, icon: Icon }) => (

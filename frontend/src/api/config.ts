@@ -10,6 +10,8 @@ export interface RuntimeConfig {
   emailConfigured: boolean;
   /** Beta test (Admin -> General): sign-up shows the beta notice; testers sign in. */
   betaTest: boolean;
+  /** The navbar's BetaTest Bug Report button: beta test on and its Discord channel set. */
+  betaReport: boolean;
   institutions: PublicInstitution[];
   billingEnabled: boolean;
   /** Admin switch and circuit breaker combined: false hides "Connect ChatGPT". */

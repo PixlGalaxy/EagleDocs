@@ -223,6 +223,9 @@ export const adminApi = {
   contact: () => api.get<ContactSettings>('/admin/contact'),
   saveContact: (body: { email_to: string; discord_webhook_url?: string }) => api.put<ContactSettings>('/admin/contact', body),
   testContact: () => api.post<{ email: ContactChannelResult; discord: ContactChannelResult }>('/admin/contact/test'),
+  betaReport: () => api.get<{ discord_webhook_set: boolean }>('/admin/beta-report'),
+  saveBetaReport: (discord_webhook_url: string) => api.put<{ discord_webhook_set: boolean }>('/admin/beta-report', { discord_webhook_url }),
+  testBetaReport: () => api.post<{ ok: boolean; error?: string }>('/admin/beta-report/test'),
 
   endpoints: () => api.get<ModelEndpoint[]>('/admin/models/endpoints'),
   saveEndpoint: (body: Partial<ModelEndpoint> & { name: string; base_url: string; kind: ModelEndpoint['kind']; api_key?: string }) =>

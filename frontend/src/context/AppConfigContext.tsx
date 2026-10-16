@@ -8,6 +8,7 @@ const FALLBACK: RuntimeConfig = {
   registrationEnabled: true,
   emailConfigured: true,
   betaTest: false,
+  betaReport: false,
   institutions: [],
   billingEnabled: false,
   codexEnabled: false,

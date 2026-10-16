@@ -1,13 +1,100 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle2, CircleAlert, Loader2, Send, Trash2 } from 'lucide-react';
 import { adminApi, type GeneralSettings } from '../../api/admin';
+import { ApiError } from '../../api/client';
 import { useI18n } from '../../i18n/I18nContext';
 import { LANGUAGE_NAMES, SUPPORTED_LANGUAGES } from '../../i18n/translations';
 import { isSkinId, isThemeMode, type SkinId, type ThemeMode } from '../../theme/themes';
 import ThemePicker from '../../components/ThemePicker';
 import Toast from '../../components/ui/Toast';
-import { Field, Panel, Skeleton, Switch } from '../../components/ui/kit';
+import { Field, Notice, Panel, Skeleton, Switch } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
+import { PasswordInput } from '../auth/AuthShell';
+
+/** Under the beta switch: the Discord channel the testers' BetaTest Bug Report button posts to. */
+const BetaReportWebhook = () => {
+  const { t } = useI18n();
+  const [set, setSet] = useState<boolean | null>(null);
+  const [webhook, setWebhook] = useState('');
+  const [busy, setBusy] = useState<'save' | 'clear' | 'test' | null>(null);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    void adminApi
+      .betaReport()
+      .then((r) => setSet(r.discord_webhook_set))
+      .catch((err) => setLoadError(err instanceof ApiError ? err.message : t('common.networkError')));
+  }, [t]);
+
+  const run = async (kind: 'save' | 'clear' | 'test') => {
+    setBusy(kind);
+    setResult(null);
+    try {
+      if (kind === 'test') {
+        const r = await adminApi.testBetaReport();
+        setResult(r.ok ? { ok: true, message: t('admin.betaWebhookSent') } : { ok: false, message: t('admin.betaWebhookFailed', { error: r.error ?? '?' }) });
+      } else {
+        setSet((await adminApi.saveBetaReport(kind === 'save' ? webhook.trim() : '')).discord_webhook_set);
+        setWebhook('');
+        setResult({ ok: true, message: t('common.saved') });
+      }
+    } catch (err) {
+      setResult({ ok: false, message: err instanceof ApiError ? err.message : t('common.networkError') });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (loadError)
+    return (
+      <Notice tone="danger" icon={CircleAlert}>
+        {t('admin.betaWebhookLoadFailed', { error: loadError })}
+      </Notice>
+    );
+  if (set === null) return <Skeleton className="h-20 rounded-xl" />;
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (webhook.trim()) void run('save');
+      }}
+      className="space-y-4 border-t border-slate-200 pt-5 dark:border-slate-800"
+    >
+      <Field label={t('admin.betaWebhook')} hint={set ? t('admin.betaWebhookSet') : t('admin.betaWebhookHint')}>
+        {(id, d) => (
+          <div className="flex gap-2">
+            <div className="min-w-0 flex-1">
+              <PasswordInput id={id} aria-describedby={d} autoComplete="off" value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://discord.com/api/webhooks/..." maxLength={500} />
+            </div>
+            {set && (
+              <button type="button" onClick={() => void run('clear')} disabled={busy !== null} className={btn.secondary} aria-label={t('common.remove')} title={t('common.remove')}>
+                {busy === 'clear' ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} aria-hidden="true" />}
+              </button>
+            )}
+          </div>
+        )}
+      </Field>
+      {result && (
+        <Notice tone={result.ok ? 'success' : 'danger'} icon={result.ok ? CheckCircle2 : CircleAlert}>
+          {result.message}
+        </Notice>
+      )}
+      <div className="flex flex-wrap gap-3">
+        <button type="submit" disabled={busy !== null || !webhook.trim()} className={btn.primary}>
+          {busy === 'save' && <Loader2 size={16} className="animate-spin" />}
+          {t('common.save')}
+        </button>
+        <button type="button" onClick={() => void run('test')} disabled={busy !== null || !set} className={btn.secondary}>
+          {busy === 'test' ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} aria-hidden="true" />}
+          {t('admin.betaWebhookTest')}
+        </button>
+      </div>
+    </form>
+  );
+};
 
 export const GeneralSection = () => {
   const { t } = useI18n();
@@ -63,7 +150,9 @@ export const GeneralSection = () => {
             }}
           />
         }
-      />
+      >
+        {s.beta_test && <BetaReportWebhook />}
+      </Panel>
 
       <Panel
         title={t('admin.mcpTitle')}
