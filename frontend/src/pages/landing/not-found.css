@@ -1,0 +1,33 @@
+/* The 404 page's animated lines, restored from the original EagleDocs page. */
+
+.nf-lines line {
+  fill: none;
+  stroke-miterlimit: 10;
+}
+
+/* Thick yellow and orange strokes that pulse. */
+.nf-pulse {
+  opacity: 0.4;
+  stroke-width: 12;
+  animation: nf-show 4s ease-in-out infinite;
+}
+.nf-yellow { stroke: #ffdd00; }
+.nf-orange { stroke: #ff7b00; }
+
+/* Thin green strokes that draw themselves over and over. */
+.nf-drawn {
+  opacity: 0.4;
+  stroke: #00ff9d;
+  stroke-width: 6;
+  stroke-dasharray: 200;
+  stroke-dashoffset: 800;
+  animation: nf-draw 4s ease-in-out infinite;
+}
+
+@keyframes nf-draw { to { stroke-dashoffset: 0; } }
+@keyframes nf-show { 0%, 100% { opacity: 0.4; } 50% { opacity: 0.7; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .nf-pulse, .nf-drawn { animation: none; }
+  .nf-drawn { stroke-dashoffset: 0; }
+}
