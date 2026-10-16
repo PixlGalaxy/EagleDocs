@@ -5,7 +5,7 @@ Last full review: 2026-10-15.
 
 ## Reporting a problem
 
-Email fabrizio.gamboa.p@gmail.com with the steps to reproduce. Please do not open a public issue for a vulnerability.
+Email security@studyhawk.app with the steps to reproduce. Please do not open a public issue for a vulnerability.
 
 ## Accounts and sign-in
 
