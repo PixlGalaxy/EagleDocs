@@ -49,6 +49,7 @@ function chatsOf(ctx: ToolContext): ChatsHost {
 
 export const chatsSearch = defineTool<{ query?: string; days?: number; limit?: number }>({
   name: 'chats_search',
+  summary: "search the student's other conversations with you",
   description:
     "Searches the student's other conversations with you (not this one), for when they refer to something said before " +
     '("like I told you", "the essay from last week", "what did you say about...") or earlier context would help. Returns ' +
@@ -81,6 +82,7 @@ export const chatsSearch = defineTool<{ query?: string; days?: number; limit?: n
 
 export const chatsRead = defineTool<{ chat_id: string; around_message_id?: string; from?: number }>({
   name: 'chats_read',
+  summary: 'read one of those past conversations',
   description:
     "Reads one of the student's past chats (an id from chats_search): up to 20 messages, around a message from a search " +
     '(around_message_id), from a position (from, 1-based), or by default its latest messages. Use the range it reports to read more.',

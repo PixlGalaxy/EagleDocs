@@ -99,6 +99,7 @@ export const canvasUpcoming = defineTool<{ days?: number }>({
 
 export const canvasCourse = defineTool<{ course_id: number }>({
   name: 'canvas_course',
+  summary: 'one course in detail: every assignment with scores, recent announcements',
   description:
     'One course in detail: all its assignments (upcoming first, then past with scores) and the last 30 days of announcements. ' +
     "For what the student turned in and the teacher's feedback, use canvas_submissions.",
@@ -153,6 +154,7 @@ export const canvasAnnouncements = defineTool<{ course_id?: number; days?: numbe
 
 export const canvasModules = defineTool<{ course_id: number }>({
   name: 'canvas_modules',
+  summary: "a course's modules and their items",
   description:
     "A course's modules and their items, with completion when Canvas tracks it. Each item carries what opens it: " +
     '`file_id` (canvas_download), `page_url` (canvas_page), `assignment_id` (canvas_assignment), `quiz_id`, `external_url`.',
@@ -219,6 +221,7 @@ export const canvasBriefing = defineTool<{ days?: number }>({
 
 export const canvasFiles = defineTool<{ course_id: number }>({
   name: 'canvas_files',
+  summary: "a course's files (slides, readings, textbook PDFs)",
   description:
     "Files of a course (slides, readings, the textbook PDF...) with their size. Download what you need with canvas_download. " +
     'An empty list often means the material is in pages: try canvas_save_pages.',
@@ -233,6 +236,7 @@ export const canvasFiles = defineTool<{ course_id: number }>({
 
 export const canvasDownload = defineTool<{ file_ids: number[]; course_id?: number; folder?: string }>({
   name: 'canvas_download',
+  summary: "download course files into the user's files",
   timeoutMs: 10 * 60_000,
   description:
     "Download course files from Canvas into the user's files. With course_id they go to that course's Canvas/ folder " +
@@ -276,6 +280,7 @@ export const canvasDownload = defineTool<{ file_ids: number[]; course_id?: numbe
 
 export const canvasSavePages = defineTool<{ course_id: number; folder?: string; max?: number }>({
   name: 'canvas_save_pages',
+  summary: "save a course's pages as text files",
   timeoutMs: 5 * 60_000,
   description:
     "Save a course's Canvas pages (lessons, notes, syllabus pages) as text files in the user's files, by default " +
@@ -335,6 +340,7 @@ export const canvasFind = defineTool<{ query: string; course_id?: number }>({
 
 export const canvasPage = defineTool<{ course_id: number; page_url: string }>({
   name: 'canvas_page',
+  summary: 'read a Canvas page (lesson, syllabus) and the files and pages it links',
   description:
     'Read one Canvas page (a lesson, the syllabus, a "Files for the Semester" list) as text, with `links`: each linked file ' +
     '(file_id and its link text, so open only the one you need), the pages and the ' +
@@ -355,6 +361,7 @@ export const canvasPage = defineTool<{ course_id: number; page_url: string }>({
 
 export const canvasSubmissions = defineTool<{ course_id: number; assignment_id?: number }>({
   name: 'canvas_submissions',
+  summary: 'past work in a course: grades, submissions and teacher feedback',
   description:
     "The student's past work in a course. Without assignment_id: every submission with when it was turned in, the score and " +
     'grade, late/missing. With assignment_id: that submission in full: the text or files turned in (attachments with file_id ' +

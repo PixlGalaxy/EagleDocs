@@ -50,6 +50,7 @@ const step = (ctx: ToolContext) => ({ signal: ctx.signal, emit: ctx.emit });
 
 export const emailInbox = defineTool<{ limit?: number }>({
   name: 'email_inbox',
+  summary: "the student's school inbox (Outlook), newest first",
   description:
     "The student's school inbox (Outlook): newest messages with sender, subject, date and preview, plus an id for " +
     'email_read. Signs in with their saved school account; if the school asks for Duo, the student approves it on their ' +
@@ -68,6 +69,7 @@ export const emailInbox = defineTool<{ limit?: number }>({
 
 export const emailSearch = defineTool<{ query: string; limit?: number }>({
   name: 'email_search',
+  summary: "search the student's school email",
   description:
     "Search the student's school email (Outlook search: words, a sender, a course code like \"ACG 2021\", " +
     '"access code"...). Returns matching messages with an id for email_read. Read-only.',
@@ -91,6 +93,7 @@ export const emailSearch = defineTool<{ query: string; limit?: number }>({
 
 export const emailRead = defineTool<{ id: string }>({
   name: 'email_read',
+  summary: 'read one school email whole',
   description: 'Open one school email by the id from email_inbox or email_search and read it whole. Read-only.',
   parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   sideEffect: 'none',
@@ -114,6 +117,7 @@ interface Draft {
 
 export const emailDraft = defineTool<{ to: string[]; subject: string; body: string }>({
   name: 'email_draft',
+  summary: 'write an email draft for the student',
   description:
     `Write an email draft for the student (saved in their files under ${DRAFTS}/). Nothing is sent. Show them the ` +
     'draft (recipients, subject and body) and ask before sending it with email_send. Write it as the student, in their ' +
@@ -144,6 +148,7 @@ export const emailDraft = defineTool<{ to: string[]; subject: string; body: stri
 
 export const emailSend = defineTool<{ draft_id: string }>({
   name: 'email_send',
+  summary: "send a draft from the student's school email (the student approves first)",
   description:
     'Send a draft made with email_draft from the student\'s school email (Outlook). The student must approve it in the ' +
     'app first. StudyHawk then checks Sent Items; if it cannot confirm, say so and do NOT send again.',
@@ -181,6 +186,7 @@ export const emailSend = defineTool<{ draft_id: string }>({
 
 export const degreeworksAudit = defineTool({
   name: 'degreeworks_audit',
+  summary: "the student's Degree Works audit: requirements, credits, GPA, what is left",
   description:
     "Read the student's Degree Works audit (degree requirements, completed, in-progress and missing courses, " +
     'credits, GPA) and save it as text in their files. Use it to build degree maps and semester plans: Degree Works is ' +

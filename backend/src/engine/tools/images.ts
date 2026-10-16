@@ -52,6 +52,7 @@ async function freePath(host: ImagesHost, path: string): Promise<string> {
 
 export const imageGenerate = defineTool<{ prompt: string; size?: ImageSize; path?: string; reference_images?: string[] }>({
   name: 'image_generate',
+  summary: 'make a picture (PNG) and save it in the workspace',
   description:
     "Makes a real picture (PNG) with the student's own ChatGPT account or OpenAI key and saves it in the workspace. Use it whenever " +
     'the student asks for an image, picture, drawing, illustration, poster, logo, icon, photo or diagram-like art, instead of ' +

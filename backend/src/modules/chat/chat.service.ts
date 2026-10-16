@@ -397,6 +397,12 @@ export class ChatService {
             "INSERT INTO messages (chat_id, role, content, tool_call_id, tool_name, meta) VALUES ($1, 'tool', $2, $3, $4, $5)",
             [chatId, m.content, m.toolCallId, m.name, { internal: true, job_id: run.jobId }],
           );
+        } else if (m.role === 'assistant' && !m.toolCalls?.length && m.content.trim()) {
+          // A whole answer written before a correction (steer) was applied: the student read it, so it stays a visible answer.
+          await client.query(
+            "INSERT INTO messages (chat_id, role, content, meta, model_ref, model_label) VALUES ($1, 'assistant', $2, $3, $4, $5)",
+            [chatId, m.content, { job_id: run.jobId, before_steer: true }, run.final.modelRef, run.final.modelLabel],
+          );
         } else if (m.role === 'assistant') {
           await client.query("INSERT INTO messages (chat_id, role, content, tool_calls, meta) VALUES ($1, 'assistant', $2, $3, $4)", [
             chatId,

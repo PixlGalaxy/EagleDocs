@@ -24,6 +24,7 @@ function visionOf(ctx: ToolContext): VisionHost {
 
 export const imageView = defineTool<{ path: string; question?: string; refresh?: boolean }>({
   name: 'image_view',
+  summary: 'see what a picture in the workspace shows (you cannot see them otherwise)',
   description:
     "Tells you what a picture in the workspace shows (you cannot see workspace images yourself): a detailed description with " +
     'any text in it copied exactly, plus an answer to your question. Use it before saying anything about an image the ' +
@@ -75,6 +76,7 @@ export const imageView = defineTool<{ path: string; question?: string; refresh?:
 
 export const imagesSearch = defineTool<{ query: string; limit?: number }>({
   name: 'images_search',
+  summary: 'find pictures in the workspace by what they show',
   description:
     "Finds pictures in the student's workspace by what they show (\"the hawk with glasses\", \"slide with the supply curve\"), " +
     'among the ones you generated or have looked at before with image_view. Returns paths with their descriptions.',
