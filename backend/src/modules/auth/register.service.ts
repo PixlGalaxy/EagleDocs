@@ -56,6 +56,8 @@ export class RegisterService {
    * password, or anyone could plant credentials on someone else's address.
    */
   async register(body: Record<string, unknown>, lang: string): Promise<{ email: string; expires_at: Date }> {
+    // In a beta test the admin makes the accounts: nobody signs up on their own.
+    if (this.settings.getBoolean(SETTINGS_KEYS.betaTest, false)) throw forbidden('auth.betaClosed');
     if (!this.settings.getBoolean(SETTINGS_KEYS.registrationEnabled, true)) throw forbidden('auth.registrationClosed');
     if (!this.mail.isConfigured()) throw unavailable('auth.registrationUnavailable');
 

@@ -4,6 +4,8 @@ export const SETTINGS_KEYS = {
   defaultThemeMode: 'app.default_theme_mode',
   defaultThemeSkin: 'app.default_theme_skin',
   registrationEnabled: 'registration.enabled',
+  /** Beta test: nobody signs up on their own; testers sign in with accounts the admin made. */
+  betaTest: 'registration.beta_test',
   sessionTtlHours: 'session.ttl_hours',
   studyhawkDailyMessages: 'models.studyhawk_daily_messages',
   mcpEnabled: 'mcp.enabled',

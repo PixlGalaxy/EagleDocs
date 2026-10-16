@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CircleAlert, Loader2, MailWarning } from 'lucide-react';
+import { CircleAlert, FlaskConical, Loader2, MailWarning } from 'lucide-react';
 import { authApi } from '../../api/auth';
 import { ApiError } from '../../api/client';
 import { useAppConfig } from '../../context/AppConfigContext';
@@ -20,7 +20,7 @@ function domainAllowed(email: string, domains: string[]): boolean {
 const RegisterPage = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { institutions, registrationEnabled, emailConfigured, loaded } = useAppConfig();
+  const { institutions, registrationEnabled, emailConfigured, betaTest, loaded } = useAppConfig();
   const [form, setForm] = useState({ displayName: '', username: '', email: '', password: '', confirm: '' });
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +42,7 @@ const RegisterPage = () => {
   };
   const valid = Object.values(errors).every((e) => e === null);
   const show = (key: keyof typeof errors) => (touched ? errors[key] : null);
-  const closed = loaded && (!registrationEnabled || !emailConfigured);
+  const closed = loaded && (betaTest || !registrationEnabled || !emailConfigured);
 
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [key]: e.target.value });
 
@@ -80,7 +80,18 @@ const RegisterPage = () => {
         </>
       }
     >
-      {closed ? (
+      {closed && betaTest ? (
+        // A beta test comes first: testers already have an account.
+        <Notice tone="accent" icon={FlaskConical}>
+          <p className="font-medium">{t('auth.betaTitle')}</p>
+          <p className="mt-1">
+            {t('auth.betaBody')}{' '}
+            <Link to="/login" className={authLink}>
+              {t('auth.betaSignIn')}
+            </Link>
+          </p>
+        </Notice>
+      ) : closed ? (
         <Notice tone="warning" icon={MailWarning}>
           {!registrationEnabled ? t('auth.registrationClosed') : t('auth.registrationNoEmail')}
         </Notice>

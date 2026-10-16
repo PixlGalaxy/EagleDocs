@@ -110,6 +110,7 @@ export interface SandboxRow {
 
 export interface GeneralSettings {
   registration_enabled: boolean;
+  beta_test: boolean;
   default_language: string;
   default_theme_mode: string;
   default_theme_skin: string;

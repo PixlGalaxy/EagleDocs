@@ -302,6 +302,7 @@ export function createAdminRoutes(deps: {
 
   const generalView = () => ({
     registration_enabled: settings.getBoolean(K.registrationEnabled, true),
+    beta_test: settings.getBoolean(K.betaTest, false),
     default_language: settings.getString(K.defaultLanguage, config.LANGUAGE),
     default_theme_mode: settings.getString(K.defaultThemeMode, 'system'),
     default_theme_skin: settings.getString(K.defaultThemeSkin, 'hawk'),
@@ -319,6 +320,7 @@ export function createAdminRoutes(deps: {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const updates: Record<string, unknown> = {};
     if (body.registration_enabled !== undefined) updates[K.registrationEnabled] = bool(body.registration_enabled);
+    if (body.beta_test !== undefined) updates[K.betaTest] = bool(body.beta_test);
     if (body.default_language !== undefined) {
       if (typeof body.default_language !== 'string' || !isLanguage(body.default_language)) throw badRequest('adminSettings.invalidValue');
       updates[K.defaultLanguage] = body.default_language;

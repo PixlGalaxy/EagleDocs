@@ -20,6 +20,7 @@ const BACKEND_KEYS = [
   'auth.notVerified',
   'auth.accountDisabled',
   'auth.registrationClosed',
+  'auth.betaClosed',
   'auth.domainNotAllowed',
   'auth.registrationUnavailable',
   'auth.fieldsRequired',

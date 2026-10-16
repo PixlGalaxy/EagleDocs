@@ -7,6 +7,7 @@ const FALLBACK: RuntimeConfig = {
   defaultThemeSkin: 'hawk',
   registrationEnabled: true,
   emailConfigured: true,
+  betaTest: false,
   institutions: [],
   billingEnabled: false,
   codexEnabled: false,

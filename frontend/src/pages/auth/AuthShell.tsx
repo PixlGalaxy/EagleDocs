@@ -5,13 +5,24 @@ import { useI18n } from '../../i18n/I18nContext';
 import { BrandLogo } from '../../components/BrandLogo';
 import { input } from '../../components/ui/styles';
 
+// The S+H mark (BrandLogo.tsx), all white, twice per tile and staggered: the brand panel's pattern.
+const MARK_S = 'M318.1 439.2 339.6 515.9H703.5L566.4 697.6H17.5L152.1 519.2L78.5 258H436.3L414.6 181.3H56.2L5 -0H551.5L676.6 439.2Z';
+const MARK_H = 'M563.1 703.2 463.9 353.3H294.6L392.2 697.6H18.5L152.9 519.5L104.9 349.9L6 0H194.4L243.3 172H412.7L364.1 0H552.5L700.3 521.5Z';
+const mark = (x: number, y: number) =>
+  `<g transform="translate(${x},${y})"><path transform="scale(1,-1)" d="${MARK_S}"/><path transform="translate(386,516) scale(1,-1)" d="${MARK_H}"/></g>`;
+const PATTERN = `url("data:image/svg+xml,${encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2600 2600" fill="#fff">${mark(150, 760)}${mark(1450, 2060)}</svg>`,
+)}")`;
+
 /** Two-column auth layout: brand panel on large screens, form card everywhere. */
 export const AuthShell = ({ title, subtitle, children, footer }: { title: string; subtitle?: ReactNode; children: ReactNode; footer?: ReactNode }) => {
   const { t } = useI18n();
   return (
     <div className="grid min-h-[100dvh] bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <title>{`${title} - StudyHawk`}</title>
-      <aside className="relative hidden overflow-hidden bg-[var(--accent-700)] p-12 text-white lg:flex lg:flex-col lg:justify-between dark:bg-[var(--accent-900)]">
+      <aside className="relative isolate hidden overflow-hidden bg-[var(--accent-700)] p-12 text-white lg:flex lg:flex-col lg:justify-between dark:bg-[var(--accent-900)]">
+        {/* A faint repeat of the mark behind the text. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 opacity-[0.07]" style={{ backgroundImage: PATTERN, backgroundSize: '132px 132px' }} />
         <Link to="/" className="flex items-center gap-3">
           {/* On the colored panel the whole logo is white. */}
           <BrandLogo mono className="h-9 w-auto text-white" />

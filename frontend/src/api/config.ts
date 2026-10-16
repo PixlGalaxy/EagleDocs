@@ -8,6 +8,8 @@ export interface RuntimeConfig {
   registrationEnabled: boolean;
   /** False while SMTP is not configured: sign-up cannot send the verification email. */
   emailConfigured: boolean;
+  /** Beta test (Admin -> General): sign-up shows the beta notice; testers sign in. */
+  betaTest: boolean;
   institutions: PublicInstitution[];
   billingEnabled: boolean;
   /** Admin switch and circuit breaker combined: false hides "Connect ChatGPT". */

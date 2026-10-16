@@ -51,6 +51,21 @@ export const GeneralSection = () => {
       />
 
       <Panel
+        title={t('admin.betaTitle')}
+        description={t('admin.betaBody')}
+        actions={
+          <Switch
+            label={t('admin.betaTitle')}
+            checked={s.beta_test}
+            onChange={(on) => {
+              setS({ ...s, beta_test: on });
+              void save({ beta_test: on });
+            }}
+          />
+        }
+      />
+
+      <Panel
         title={t('admin.mcpTitle')}
         description={t('admin.mcpBody')}
         actions={

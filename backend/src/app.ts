@@ -116,6 +116,7 @@ export function createApp(deps: AppDeps): express.Application {
       defaultThemeSkin: settings.getString(K.defaultThemeSkin, 'hawk'),
       registrationEnabled: settings.getBoolean(K.registrationEnabled, true),
       emailConfigured: mail.isConfigured(),
+      betaTest: settings.getBoolean(K.betaTest, false),
       institutions: await institutions.listPublic(),
       billingEnabled: billing.enabled(),
       codexEnabled: catalog.codexAvailable(),
