@@ -46,8 +46,8 @@ interface LiveAnswer {
   queuePosition: number | null;
   mfa: string | null;
   /** Corrections sent while this answer runs. */
-  /** `at`: how many tool calls had run when the agent read it, to show it at that point of the answer. */
-  steers: { id: string; content: string; applied: boolean; at?: number }[];
+  /** `at` and `chars`: how many tool calls had run and how much text was written when the agent read it, to show it at that point of the answer. */
+  steers: { id: string; content: string; applied: boolean; at?: number; chars?: number }[];
   notice: string | null;
 }
 
@@ -279,8 +279,8 @@ const ChatPage = () => {
             return {
               ...prev,
               steers: known
-                ? prev.steers.map((s) => (s.id === event.id ? { ...s, applied: true, at: prev.toolCalls.length } : s))
-                : [...prev.steers, { id: event.id, content: event.content, applied: true, at: prev.toolCalls.length }],
+                ? prev.steers.map((s) => (s.id === event.id ? { ...s, applied: true, at: prev.toolCalls.length, chars: prev.content.length } : s))
+                : [...prev.steers, { id: event.id, content: event.content, applied: true, at: prev.toolCalls.length, chars: prev.content.length }],
             };
           }
           default:
@@ -929,12 +929,18 @@ const ChatPage = () => {
                   {(() => {
                     const applied = live.steers.filter((st) => st.applied).sort((a, b) => (a.at ?? 0) - (b.at ?? 0));
                     let from = 0;
+                    let fromChars = 0;
                     const parts = applied.map((st, i) => {
                       const calls = live.toolCalls.slice(from, st.at ?? from);
+                      // The text written before the agent read this correction stays above it.
+                      const written = live.content.slice(fromChars, st.chars ?? fromChars);
                       from = st.at ?? from;
+                      fromChars = st.chars ?? fromChars;
                       return (
                         <div key={st.id} className="space-y-6">
-                          {(calls.length > 0 || i === 0) && <MessageView role="assistant" content="" modelLabel={i === 0 ? live.modelLabel : null} toolCalls={calls} />}
+                          {(calls.length > 0 || written.trim() || i === 0) && (
+                            <MessageView role="assistant" content={written} modelLabel={i === 0 ? live.modelLabel : null} toolCalls={calls} />
+                          )}
                           <MessageView role="user" content={st.content} steer="applied" steerNote={steerNote(live.toolCalls.slice(0, st.at ?? 0))} />
                         </div>
                       );
@@ -944,7 +950,7 @@ const ChatPage = () => {
                         {parts}
                         <MessageView
                           role="assistant"
-                          content={live.content}
+                          content={live.content.slice(fromChars)}
                           modelLabel={applied.length ? null : live.modelLabel}
                           toolCalls={live.toolCalls.slice(from)}
                           streaming={live.status === 'running'}
