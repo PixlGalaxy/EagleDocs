@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle2, CircleAlert, Loader2, MailCheck } from 'lucide-react';
 import { authApi } from '../../api/auth';
@@ -7,7 +7,6 @@ import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { Field, Notice } from '../../components/ui/kit';
 import { AuthShell, PasswordInput, authInput, authLink, authSubmit } from './AuthShell';
-import BrandLoader from '../../components/ui/BrandLoader';
 
 const RESEND_COOLDOWN = 60;
 
@@ -20,6 +19,7 @@ export const CheckEmailPage = () => {
   const [params] = useSearchParams();
   const [email, setEmail] = useState(params.get('email') ?? '');
   const [code, setCode] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,7 +37,7 @@ export const CheckEmailPage = () => {
     setError('');
     setBusy(true);
     try {
-      const { user } = await authApi.verifyCode(email.trim(), code);
+      const { user } = await authApi.verifyCode(email.trim(), code, password);
       setSession(user);
       navigate('/chat', { replace: true });
     } catch (err) {
@@ -110,7 +110,11 @@ export const CheckEmailPage = () => {
           )}
         </Field>
 
-        <button type="submit" disabled={busy || code.length !== 6 || !email} className={authSubmit}>
+        <Field label={t('auth.verifyPassword')} hint={t('auth.verifyPasswordHint')}>
+          {(id, d) => <PasswordInput id={id} aria-describedby={d} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />}
+        </Field>
+
+        <button type="submit" disabled={busy || code.length !== 6 || !email || !password} className={authSubmit}>
           {busy && <Loader2 size={18} className="animate-spin" aria-hidden="true" />}
           {t('auth.verify')}
         </button>
@@ -126,46 +130,71 @@ export const CheckEmailPage = () => {
   );
 };
 
-/** Landing page for the emailed link: /verify?token=... */
+/**
+ * Landing page for the emailed link: /verify?token=... It never confirms on its
+ * own: the person types the account's password and clicks, so a mail scanner
+ * opening the link, or credentials someone else planted, activate nothing.
+ */
 export const VerifyPage = () => {
   const { t } = useI18n();
   const { setSession } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const token = params.get('token');
-  const [error, setError] = useState(token ? '' : t('auth.verifyMissing'));
-  const started = useRef(false);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
 
-  useEffect(() => {
-    // StrictMode runs effects twice in dev; the token is single-use.
-    if (!token || started.current) return;
-    started.current = true;
-    authApi
-      .verifyToken(token)
-      .then(({ user }) => {
-        setSession(user);
-        navigate('/chat', { replace: true });
-      })
-      .catch((err) => setError(err instanceof ApiError ? err.message : t('common.networkError')));
-  }, [token, setSession, navigate, t]);
+  const confirm = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setBusy(true);
+    setError('');
+    try {
+      const { user } = await authApi.verifyToken(token, password);
+      setSession(user);
+      navigate('/chat', { replace: true });
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+    } finally {
+      setBusy(false);
+    }
+  };
 
-  return (
-    <AuthShell title={t('auth.verifyingTitle')}>
-      {error ? (
+  if (!token) {
+    return (
+      <AuthShell title={t('auth.verifyingTitle')}>
         <div className="space-y-5">
           <Notice tone="danger" icon={CircleAlert}>
-            {error}
+            {t('auth.verifyMissing')}
           </Notice>
           <Link to="/check-email" className={authLink}>
             {t('auth.useCode')}
           </Link>
         </div>
-      ) : (
-        <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-          <BrandLoader size={24} />
-          {t('auth.verifying')}
-        </p>
-      )}
+      </AuthShell>
+    );
+  }
+
+  return (
+    <AuthShell title={t('auth.verifyingTitle')}>
+      <form onSubmit={(e) => void confirm(e)} className="space-y-5">
+        {error && (
+          <Notice tone="danger" icon={CircleAlert}>
+            {error}
+          </Notice>
+        )}
+        <Field label={t('auth.verifyPassword')} hint={t('auth.verifyPasswordHint')}>
+          {(id, d) => <PasswordInput id={id} aria-describedby={d} autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required autoFocus />}
+        </Field>
+        <button type="submit" disabled={busy || !password} className={authSubmit}>
+          {busy && <Loader2 size={18} className="animate-spin" aria-hidden="true" />}
+          {t('auth.verifyConfirm')}
+        </button>
+        <Link to="/check-email" className={`${authLink} block text-center text-sm`}>
+          {t('auth.useCode')}
+        </Link>
+      </form>
     </AuthShell>
   );
 };

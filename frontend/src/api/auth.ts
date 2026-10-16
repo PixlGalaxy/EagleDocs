@@ -9,8 +9,9 @@ export const authApi = {
   logout: () => api.post<void>('/auth/logout'),
   register: (body: { email: string; username: string; displayName: string; password: string }) =>
     api.post<RegisterResult>('/auth/register', body),
-  verifyToken: (token: string) => api.post<SessionInfo>('/auth/verify', { token }),
-  verifyCode: (email: string, code: string) => api.post<SessionInfo>('/auth/verify', { email, code }),
+  /** The account's password goes along: the link or code alone never activates an account. */
+  verifyToken: (token: string, password: string) => api.post<SessionInfo>('/auth/verify', { token, password }),
+  verifyCode: (email: string, code: string, password: string) => api.post<SessionInfo>('/auth/verify', { email, code, password }),
   resendVerification: (email: string) => api.post<void>('/auth/resend-verification', { email }),
   forgotPassword: (email: string) => api.post<void>('/auth/forgot-password', { email }),
   resetPassword: (token: string, newPassword: string) => api.post<void>('/auth/reset-password', { token, newPassword }),

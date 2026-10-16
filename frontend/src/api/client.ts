@@ -12,11 +12,14 @@ export class ApiError extends Error {
   }
 }
 
-function csrfToken(): string | undefined {
-  return document.cookie
-    .split('; ')
-    .find((part) => part.startsWith('csrf='))
-    ?.slice('csrf='.length);
+/** The double-submit token: `__Host-csrf` over https, `csrf` in plain http dev. */
+export function csrfToken(): string | undefined {
+  const parts = document.cookie.split('; ');
+  for (const name of ['__Host-csrf=', 'csrf=']) {
+    const part = parts.find((p) => p.startsWith(name));
+    if (part) return part.slice(name.length);
+  }
+  return undefined;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

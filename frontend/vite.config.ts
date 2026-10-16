@@ -12,9 +12,11 @@ export default defineConfig({
     alias: { '@locales': localesDir },
   },
   server: {
+    // The dev server is for development only: never route a public production hostname to it.
     allowedHosts: ['studyhawk.app', 'eagledocs.org', 'eagledocs.ai'],
-    // Locales are shared with the backend, so they live outside the Vite root.
-    fs: { allow: ['..'] },
+    // Locales are shared with the backend, so they live outside the Vite root. Only that folder:
+    // the repo root also holds data/ (the dev database and dev-master.key), which /@fs/ must never serve.
+    fs: { allow: ['.', '../locales'] },
     proxy: {
       '/api': {
         target: `http://localhost:${process.env.VITE_BACKEND_PORT || 4000}`,

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
-import { CircleAlert, Loader2, ShieldCheck } from 'lucide-react';
+import { CircleAlert, Loader2, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { mcpApi } from '../../api/account';
 import { ApiError } from '../../api/client';
 import type { McpScope, OAuthConsent } from '../../api/types';
@@ -11,6 +11,9 @@ import { btn } from '../../components/ui/styles';
 import { SCOPE_LABEL } from '../settings/AppsSection';
 import { AuthShell } from './AuthShell';
 import BrandLoader from '../../components/ui/BrandLoader';
+
+/** Where the well-known MCP clients send the code back. Any other app is shown as unverified, with its address. */
+const KNOWN_APP_HOSTS = ['chatgpt.com', 'chat.openai.com', 'openai.com', 'claude.ai', 'claude.com', 'anthropic.com', 'localhost', '127.0.0.1'];
 
 const SCOPE_HINT: Record<McpScope, 'apps.scopeCanvasHint' | 'apps.scopeDegreeworksHint' | 'apps.scopeWorkspaceHint' | 'apps.scopeMemoryHint'> = {
   'canvas.read': 'apps.scopeCanvasHint',
@@ -61,9 +64,14 @@ const ConsentPage = () => {
 
   const toggle = (scope: McpScope) => setGranted((prev) => (prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]));
 
+  // Anyone can register an app with any name ("ChatGPT"): where the access goes is what counts.
+  const redirectHost = consent && URL.canParse(consent.redirect_uri) ? new URL(consent.redirect_uri).hostname.toLowerCase() : '';
+  const verified = KNOWN_APP_HOSTS.some((h) => redirectHost === h || redirectHost.endsWith(`.${h}`));
+  const shownName = consent ? (verified ? consent.client_name : `${consent.client_name} (${redirectHost})`) : '';
+
   return (
     <AuthShell
-      title={consent ? t('apps.consentTitle', { name: consent.client_name }) : t('apps.consentLoading')}
+      title={consent ? t('apps.consentTitle', { name: shownName }) : t('apps.consentLoading')}
       subtitle={consent ? t('apps.consentBody', { email: user.email }) : undefined}
     >
       {error ? (
@@ -77,6 +85,11 @@ const ConsentPage = () => {
         </p>
       ) : (
         <div className="space-y-6">
+          {!verified && (
+            <Notice tone="warning" icon={TriangleAlert}>
+              {t('apps.consentUnverified', { host: redirectHost })}
+            </Notice>
+          )}
           <fieldset>
             <legend className="text-sm font-medium text-slate-700 dark:text-slate-300">{t('apps.consentScopes')}</legend>
             <ul className="mt-3 space-y-2">

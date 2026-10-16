@@ -1,4 +1,4 @@
-import { api, apiUrl, ApiError } from './client';
+import { api, apiUrl, ApiError, csrfToken } from './client';
 import type {
   CanvasAnnouncement,
   CanvasCourse,
@@ -62,10 +62,7 @@ export const filesApi = {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', apiUrl(`/files/upload?path=${encodeURIComponent(dir)}`));
       xhr.withCredentials = true;
-      const csrf = document.cookie
-        .split('; ')
-        .find((part) => part.startsWith('csrf='))
-        ?.slice('csrf='.length);
+      const csrf = csrfToken();
       if (csrf) xhr.setRequestHeader('X-CSRF-Token', decodeURIComponent(csrf));
       xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
       xhr.onload = () => {

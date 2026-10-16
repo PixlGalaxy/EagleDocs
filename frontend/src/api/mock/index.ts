@@ -85,6 +85,7 @@ const routes: [string, RegExp, Handler][] = [
   }],
   ['POST', /^\/auth\/verify$/, ({ body }) => {
     if (body.code && body.code !== '123456') throw new HttpError(400, 'That code is not valid. Try again or request a new one.');
+    if (!body.password) throw new HttpError(400, 'Fill in every field.');
     localStorage.setItem(SESSION_KEY, db.users[1]!.id);
     return { user: db.asUser(db.users[1]!) };
   }],
