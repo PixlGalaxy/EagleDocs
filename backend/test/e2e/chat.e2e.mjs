@@ -129,7 +129,7 @@ r = await user.req(A, 'POST', `/chats/${chatId}/messages`, { content: 'remember 
 await user.stream(A, chatId, r.json.job_id);
 r = await user.req(B, 'GET', '/memories');
 check('agent saved it to USER.md', r.json.docs?.user.includes('Likes end-to-end tests'), JSON.stringify(r.json?.docs));
-r = await user.req(B, 'PUT', '/memories/docs/soul', { content: 'You are Eagle, a calm study partner who answers in short steps.' });
+r = await user.req(B, 'PUT', '/memories/docs/soul', { content: 'You are Hawk, a calm study partner who answers in short steps.' });
 check('the student edits SOUL.md', r.status === 200 && /calm study partner/.test(r.json.docs.soul));
 r = await user.req(B, 'PUT', '/memories/docs/notes', { content: 'x'.repeat(r.json.limits.notes + 1) });
 check('files keep their size limit', r.status === 400);

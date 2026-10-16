@@ -10,7 +10,7 @@ const GitHubPage = () => {
   const [updated, setUpdated] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('https://api.github.com/repos/PixlGalaxy/EagleDocs')
+    fetch('https://api.github.com/repos/PixlGalaxy/StudyHawk')
       .then((r) => r.json())
       .then((data: { pushed_at?: string }) => {
         if (data.pushed_at) setUpdated(new Date(data.pushed_at).toLocaleDateString(language, { year: 'numeric', month: 'long', day: 'numeric' }));
@@ -33,7 +33,7 @@ const GitHubPage = () => {
           <BrandIcon className="h-20 w-20" />
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-xl font-semibold text-slate-950 dark:text-white">
-              PixlGalaxy/EagleDocs
+              PixlGalaxy/StudyHawk
               <ExternalLink size={16} aria-hidden="true" />
             </p>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{updated ? t('github.updated', { date: updated }) : t('github.loading')}</p>

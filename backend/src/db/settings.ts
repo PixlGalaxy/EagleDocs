@@ -136,7 +136,7 @@ export class SettingsService {
  */
 export async function verifyMasterKey(db: Db, crypto: Secrets): Promise<void> {
   const KEY = 'master_key_check';
-  const EXPECTED = 'eagledocs';
+  const EXPECTED = 'studyhawk';
   const { rows } = await db.query<{ secret_enc: Buffer | null }>('SELECT secret_enc FROM app_settings WHERE key = $1', [KEY]);
   const stored = rows[0]?.secret_enc;
   if (!stored) {

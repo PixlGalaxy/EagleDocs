@@ -17,7 +17,7 @@ interface GitHubUser {
 }
 
 const FOUNDER = 'PixlGalaxy';
-const REPO = 'PixlGalaxy/EagleDocsFE';
+const REPO = 'PixlGalaxy/StudyHawk';
 
 const DevelopersPage = () => {
   const { t } = useI18n();

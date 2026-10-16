@@ -34,7 +34,7 @@ ARG APP_IMAGE_REVISION=
 ENV APP_IMAGE_REF=$APP_IMAGE_REF \
     APP_IMAGE_REVISION=$APP_IMAGE_REVISION
 
-LABEL org.opencontainers.image.source="https://github.com/PixlGalaxy/EagleDocs" \
+LABEL org.opencontainers.image.source="https://github.com/PixlGalaxy/StudyHawk" \
       org.opencontainers.image.title="StudyHawk" \
       org.opencontainers.image.version="1.0.0" \
       org.opencontainers.image.description="Hosted academic AI agent for university students: Canvas, Degree Works and a private workspace."

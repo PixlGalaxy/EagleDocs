@@ -101,7 +101,7 @@ const routes: [string, RegExp, Handler][] = [
   ['GET', /^\/chats\/([^/]+)$/, ({ params }) => {
     const chat = db.chats.find((c) => c.id === params[0]);
     if (!chat) throw new HttpError(404, 'Chat not found');
-    return { chat, messages: db.messages[chat.id] ?? [], pending_approvals: approvals.filter((a) => a.status === 'pending' && jobs.get(a.job_id)?.chatId === chat.id) };
+    return { chat, messages: db.messages[chat.id] ?? [], pending_approvals: approvals.filter((a) => a.status === 'pending' && jobs.get(a.job_id)?.chatId === chat.id), background_jobs: [] };
   }],
   ['PATCH', /^\/chats\/([^/]+)$/, ({ params, body }) => Object.assign(db.chats.find((c) => c.id === params[0])!, { title: body.title })],
   ['DELETE', /^\/chats\/([^/]+)$/, ({ params }) => {

@@ -46,7 +46,7 @@ const ContactPage = () => {
             <div>
               <dt className="text-slate-500 dark:text-slate-400">{t('contact.elsewhere')}</dt>
               <dd className="mt-1 flex flex-wrap gap-x-5 gap-y-2 font-medium">
-                <a href="https://github.com/PixlGalaxy/EagleDocs" target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
+                <a href="https://github.com/PixlGalaxy/StudyHawk" target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">
                   GitHub
                 </a>
                 <a href="https://discord.gg/4RuUjT2jNv" target="_blank" rel="noopener noreferrer" className="text-slate-700 hover:text-slate-950 dark:text-slate-300 dark:hover:text-white">

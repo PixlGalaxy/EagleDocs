@@ -2,7 +2,7 @@
 
 To begin using this template:
 1. Clone the repository:
-   `git clone https://github.com/PixlGalaxy/EagleDocs.git`
+   `git clone https://github.com/PixlGalaxy/StudyHawk.git`
 2. Install dependencies with `npm install` or `yarn`.
 3. Start the development server using `npm run dev` or `yarn dev`.
 

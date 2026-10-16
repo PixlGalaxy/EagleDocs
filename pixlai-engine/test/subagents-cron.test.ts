@@ -173,10 +173,10 @@ test('the main agent picks a model per helper from the host list', async () => {
   const fast = new ScriptedProvider([() => text('quick report')]);
   const helperModels = {
     list: [
-      { ref: 'eagle:fast', label: 'Eagle Fast', tags: ['fast'] },
-      { ref: 'eagle:smart', label: 'Eagle Smart', tags: ['smart'] },
+      { ref: 'hawk:fast', label: 'Hawk Fast', tags: ['fast'] },
+      { ref: 'hawk:smart', label: 'Hawk Smart', tags: ['smart'] },
     ],
-    resolve: async (choice: string) => (choice === 'fast' || choice === 'eagle:fast' ? model(fast, { label: 'Eagle Fast', ref: 'eagle:fast' }) : null),
+    resolve: async (choice: string) => (choice === 'fast' || choice === 'hawk:fast' ? model(fast, { label: 'Hawk Fast', ref: 'hawk:fast' }) : null),
   };
   const parent = new ScriptedProvider([
     () => toolCall('agent_delegate', { tasks: [{ goal: 'list due dates', model: 'fast' }, { goal: 'plan the week', model: 'missing' }] }),
@@ -185,12 +185,12 @@ test('the main agent picks a model per helper from the host list', async () => {
   ]);
   const result = await agent.run({ runId: 'r1', model: model(parent), history: [user('plan')], sink, helperModels });
   assert.equal(result.content, 'all done');
-  assert.match(parent.requests[0]!.messages[0]!.content, /## Models for helpers[\s\S]*`eagle:fast`: Eagle Fast \[fast\]/);
+  assert.match(parent.requests[0]!.messages[0]!.content, /## Models for helpers[\s\S]*`hawk:fast`: Hawk Fast \[fast\]/);
   assert.equal(fast.requests.length, 1, 'the fast helper ran on the fast model');
   const labels = events.filter((e) => e.type === 'subagent').map((e) => e.type === 'subagent' && `${e.index}:${e.model_label}`);
-  assert.ok(labels.includes('0:Eagle Fast') && labels.includes('1:Fake'), 'an unknown choice falls back to the parent model');
+  assert.ok(labels.includes('0:Hawk Fast') && labels.includes('1:Fake'), 'an unknown choice falls back to the parent model');
   const report = String(result.messages.find((m) => m.role === 'tool')?.content);
-  assert.match(report, /"model": "Eagle Fast"/);
+  assert.match(report, /"model": "Hawk Fast"/);
 
   // Without a host list there is no prompt section and helpers use the parent's model.
   const plain = new ScriptedProvider([() => text('hi')]);

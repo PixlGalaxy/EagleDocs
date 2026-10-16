@@ -57,8 +57,8 @@ export async function prepareDevEnvironment(): Promise<(() => Promise<void>) | n
   };
   const pg = new EmbeddedPostgres({
     databaseDir: dataDir,
-    user: 'eagledocs',
-    password: 'eagledocs',
+    user: 'studyhawk',
+    password: 'studyhawk',
     port,
     persistent: true,
     // Windows would otherwise default to WIN1252, which cannot store emoji or most non-Latin text.
@@ -76,11 +76,11 @@ export async function prepareDevEnvironment(): Promise<(() => Promise<void>) | n
     throw new Error(`The development PostgreSQL did not start:\n${recent.filter(Boolean).join('\n')}`);
   }
   try {
-    await pg.createDatabase('eagledocs');
+    await pg.createDatabase('studyhawk');
   } catch {
     // Already created on a previous run.
   }
-  process.env.DATABASE_URL = `postgres://eagledocs:eagledocs@localhost:${port}/eagledocs`;
+  process.env.DATABASE_URL = `postgres://studyhawk:studyhawk@localhost:${port}/studyhawk`;
   logger.warn(`DATABASE_URL not set: using the embedded development PostgreSQL on port ${port}`);
   return () => pg.stop();
 }

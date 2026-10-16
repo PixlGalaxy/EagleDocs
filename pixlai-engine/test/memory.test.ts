@@ -25,7 +25,7 @@ test('entries are added, patched and removed in one batch, checked against the l
 
 test('SOUL.md, USER.md and MEMORY.md reach every conversation; the agent edits them', async () => {
   const { agent, stores, sink } = setup();
-  await stores.memory.write('u1', 'soul', 'You are Eagle, a calm and direct study partner.');
+  await stores.memory.write('u1', 'soul', 'You are Hawk, a calm and direct study partner.');
   const saving = new ScriptedProvider([
     () => toolCall('memory_update', { target: 'user', operations: [{ action: 'add', content: 'Ana works Tuesday nights' }] }),
     () => toolCall('memory_update', { target: 'notes', action: 'add', content: 'Canvas briefing works best with days=14' }),
@@ -35,7 +35,7 @@ test('SOUL.md, USER.md and MEMORY.md reach every conversation; the agent edits t
   const next = new ScriptedProvider([() => text('hi')]);
   await agent.run({ runId: 'r2', model: model(next), history: [user('hola')], sink });
   const system = next.requests[0]!.messages[0]!.content;
-  assert.match(system, /## Your personality \(SOUL\.md\)\nYou are Eagle/);
+  assert.match(system, /## Your personality \(SOUL\.md\)\nYou are Hawk/);
   assert.match(system, /## What you know about the user \(USER\.md\)\n- Ana works Tuesday nights/);
   assert.match(system, /## Your notes \(MEMORY\.md\)\n- Canvas briefing works best/);
   assert.match(system, new RegExp(`USER\.md 24/${DEFAULT_LIMITS.userChars}`));
