@@ -17,6 +17,8 @@ import { FileCards } from './LinkedFiles';
 import UserBubble from './UserBubble';
 import type { UserQuestion } from '../../api/types';
 import { fileUrl, workspaceLinkPath } from './attachments';
+import { normalizeMath, useMathPlugins } from './math';
+import MermaidDiagram from './MermaidDiagram';
 
 /** The agent's picture tool: shown as a loader square while it works, never as a tool card. */
 const IMAGE_TOOL = 'image_generate';
@@ -90,52 +92,70 @@ const AnswerImage = ({ src, alt }: { src: string; alt: string }) => {
  * `fileCards`: under each paragraph or list item that links to files in the
  * workspace, a small preview card of each (the chat's finished answers).
  */
-export const MarkdownBody = memo(({ text, fileCards = false }: { text: string; fileCards?: boolean }) => (
-  <Markdown
-    remarkPlugins={[remarkGfm]}
-    urlTransform={urlTransform}
-    components={{
-      ...(fileCards && {
-        p: ({ node, children }) => (
-          <>
-            <p>{children}</p>
-            <FileCards paths={linkedFilesIn(node)} />
-          </>
-        ),
-        li: ({ node, children }) => (
-          <li>
-            {children}
-            <FileCards paths={linkedFilesIn(node)} />
-          </li>
-        ),
-      }),
-      a: ({ href, children }) =>
-        // An address the transform dropped (an unknown scheme) would open this app again in a new tab: plain text instead.
-        !href ? (
-          <span>{children}</span>
-        ) : isOwnFile(href) ? (
-          // The server answers with an attachment: the browser saves it and stays on the chat.
-          <a href={href} download>
-            {children}
-          </a>
-        ) : (
-          <a href={href} target="_blank" rel="noopener noreferrer">
-            {children}
-          </a>
-        ),
-      img: ({ src, alt }) =>
-        isOwnFile(src) ? (
-          <AnswerImage src={src as string} alt={alt ?? ''} />
-        ) : (
-          <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer">
-            {alt || 'image'}
-          </a>
-        ),
-    }}
-  >
-    {text}
-  </Markdown>
-));
+/** A fenced block's language, e.g. "mermaid" for ```mermaid. */
+const fenceLanguage = (node: { children?: unknown[] } | undefined) => {
+  const code = node?.children?.[0] as { tagName?: string; properties?: { className?: unknown } } | undefined;
+  const classes = code?.tagName === 'code' && Array.isArray(code.properties?.className) ? code.properties.className : [];
+  return String(classes.find((c) => String(c).startsWith('language-')) ?? '').slice('language-'.length);
+};
+
+/** The text inside a fenced block. */
+const fenceText = (node: { children?: unknown[] } | undefined) =>
+  ((node?.children?.[0] as { children?: { value?: string }[] } | undefined)?.children ?? []).map((c) => c.value ?? '').join('');
+
+export const MarkdownBody = memo(({ text, fileCards = false }: { text: string; fileCards?: boolean }) => {
+  const source = normalizeMath(text);
+  const math = useMathPlugins(source);
+  return (
+    <Markdown
+      remarkPlugins={[remarkGfm, ...math.remark]}
+      rehypePlugins={math.rehype}
+      urlTransform={urlTransform}
+      components={{
+        // Formulas (KaTeX) and diagrams (```mermaid) render; other code blocks stay code.
+        pre: ({ node, children }) => (fenceLanguage(node) === 'mermaid' ? <MermaidDiagram code={fenceText(node).trim()} /> : <pre>{children}</pre>),
+        ...(fileCards && {
+          p: ({ node, children }) => (
+            <>
+              <p>{children}</p>
+              <FileCards paths={linkedFilesIn(node)} />
+            </>
+          ),
+          li: ({ node, children }) => (
+            <li>
+              {children}
+              <FileCards paths={linkedFilesIn(node)} />
+            </li>
+          ),
+        }),
+        a: ({ href, children }) =>
+          // An address the transform dropped (an unknown scheme) would open this app again in a new tab: plain text instead.
+          !href ? (
+            <span>{children}</span>
+          ) : isOwnFile(href) ? (
+            // The server answers with an attachment: the browser saves it and stays on the chat.
+            <a href={href} download>
+              {children}
+            </a>
+          ) : (
+            <a href={href} target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          ),
+        img: ({ src, alt }) =>
+          isOwnFile(src) ? (
+            <AnswerImage src={src as string} alt={alt ?? ''} />
+          ) : (
+            <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer">
+              {alt || 'image'}
+            </a>
+          ),
+      }}
+    >
+      {source}
+    </Markdown>
+  );
+});
 
 /** One chat turn. Assistant answers render markdown; user turns stay plain text. */
 const MessageView = ({

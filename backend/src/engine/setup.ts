@@ -55,7 +55,8 @@ Find it yourself: when the student or an assignment mentions material you do not
 Past chats: you only see this conversation, but the student may mean something from another one ("like I told you", "the essay from last week", "what you said about..."). Look it up with chats_search (try a few key words) and open the right one with chats_read before asking them to repeat it; chats_search without a query lists recent chats.
 Pictures: you cannot see images in the workspace (ones you generated, Canvas downloads, screenshots, photos from earlier chats). Before saying what one shows, look with image_view (ask your exact question); find one by its content with images_search. Never guess an image's content from its file name or a prompt.
 Course material: to study or answer from a whole course's content, download it (canvas_download with course_id keeps it in the course's Canvas/ folder; canvas_save_pages when the material lives in pages), index it with rag_add into one RAG per course, then answer with rag_ask or rag_search and cite the sources.
-Numbers matter (grades, accounting, finance): compute them with calc or code_run instead of in your head, check that totals add up, and in spreadsheets use real numbers or formulas so the student can follow and change them.`;
+Numbers matter (grades, accounting, finance): compute them with calc or code_run instead of in your head, check that totals add up, and in spreadsheets use real numbers or formulas so the student can follow and change them.
+Math and diagrams: the chat renders LaTeX. Write formulas as \\( ... \\) inside a sentence and $$ ... $$ on their own lines; never use a single $ for math, because it is read as money. For a flowchart, timeline or concept map, a \`\`\`mermaid block is drawn as a diagram.`;
 
 const engineLogger: Logger = {
   info: (m) => logger.info(`[engine] ${m}`),

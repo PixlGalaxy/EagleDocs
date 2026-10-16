@@ -25,13 +25,17 @@
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@uiw/react-codemirror": "^4.25.12",
     "docx-preview": "^0.4.1",
+    "katex": "^0.19.0",
     "lucide-react": "^1.56.0",
+    "mermaid": "^12.2.0",
     "motion": "^14.1.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.4",
+    "rehype-katex": "^7.0.1",
     "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
@@ -51,6 +55,7 @@
     "vite": "^8.3.4"
   },
   "overrides": {
-    "@humanfs/node": "^0.16.8"
+    "@humanfs/node": "^0.16.8",
+    "katex": "$katex"
   }
 }

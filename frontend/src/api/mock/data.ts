@@ -85,6 +85,7 @@ export const chats: Chat[] = [
   { id: 'c2', title: 'ACG 2021 study plan', model_ref: 'auto', created_at: iso(-30), updated_at: iso(-28), active_job_id: null },
   { id: 'c3', title: 'Lab report outline', model_ref: 'codex:conn-codex:gpt-5', created_at: iso(-80), updated_at: iso(-79), active_job_id: null },
   { id: 'c4', title: 'Degree map, spring and fall', model_ref: 'auto', created_at: iso(-24 * 12), updated_at: iso(-24 * 12), active_job_id: null },
+  { id: 'c5', title: 'MAC 2311 derivatives', model_ref: 'auto', created_at: iso(-1), updated_at: iso(-1), active_job_id: null },
 ];
 
 export const messages: Record<string, Message[]> = {
@@ -102,6 +103,38 @@ export const messages: Record<string, Message[]> = {
         { id: 't2', name: 'canvas.announcements', args: { since: '7d' }, status: 'done', result_preview: '1 announcement in ENC 1102' },
       ],
       created_at: iso(-3),
+    },
+  ],
+  // Formulas (KaTeX), money that must stay text, and a diagram (Mermaid).
+  c5: [
+    { id: 'm5', role: 'user', content: 'How do I differentiate x^2 sin x? And I paid $50 and $60 for the books.', model_ref: null, created_at: iso(-1) },
+    {
+      id: 'm6',
+      role: 'assistant',
+      content: String.raw`Use the **product rule**: if \( f(x) = u(x)\,v(x) \), then \( f'(x) = u'v + uv' \).
+
+With \( u = x^2 \) and \( v = \sin x \):
+
+$$
+\frac{d}{dx}\left(x^2 \sin x\right) = 2x \sin x + x^2 \cos x
+$$
+
+A related limit you will see on the exam: \[ \lim_{x \to 0} \frac{\sin x}{x} = 1 \]
+
+The books cost $50 and $60, so $110 in total.
+
+${'```'}mermaid
+flowchart LR
+  A[Product of two functions?] -->|yes| B[Product rule]
+  A -->|no| C[Chain rule?]
+  C -->|yes| D[Chain rule]
+  C -->|no| E[Basic rules]
+${'```'}
+
+Inline code keeps its dollars: ${'`'}echo $HOME${'`'}.`,
+      model_ref: 'codex:conn-codex:gpt-5',
+      model_label: 'Auto -> GPT-5',
+      created_at: iso(-1),
     },
   ],
 };

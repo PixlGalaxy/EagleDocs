@@ -105,6 +105,8 @@ Email security@studyhawk.app with the steps to reproduce. Please do not open a p
 ## Web client and nginx
 
 - No `dangerouslySetInnerHTML`. Markdown runs without raw HTML, and `javascript:` links are dropped.
+- Formulas are rendered by KaTeX (no raw HTML, no links). Mermaid diagrams use `securityLevel: 'strict'` with plain-text
+  labels and are shown as an `<img>` of the SVG, so a diagram cannot run scripts or load anything.
 - Pictures in the agent's answers load only from the user's own files; other images become links. Otherwise a
   prompt injection could leak data in an image address.
 - **Headers:** `Content-Security-Policy` (scripts from our origin only), `Strict-Transport-Security`, `nosniff`,

@@ -530,6 +530,9 @@ h3 {
   color: #e2e8f0;
 }
 .prose-chat pre code { padding: 0; background: none; font-size: inherit; }
+/* KaTeX: a wide formula scrolls on its own instead of widening the chat. */
+.prose-chat .katex { font-size: 1.08em; }
+.prose-chat .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.25em 0; }
 /* Code blocks keep their own lines; the dark block needs an edge on the dark page. */
 .prose-chat pre { overflow-wrap: normal; border: 1px solid transparent; }
 .dark .prose-chat pre { background: #020617; border-color: rgb(51 65 85 / 0.7); }
