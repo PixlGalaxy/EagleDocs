@@ -39,6 +39,7 @@ import type { SchoolService } from './modules/school/school.service.js';
 import type { AppRequest } from './types/index.js';
 import { createPushRoutes, latestBroadcast } from './modules/push/push.routes.js';
 import type { PushService } from './modules/push/push.service.js';
+import { DailySummaryService } from './modules/push/daily-summary.js';
 import type { BuiltinSkills } from './modules/skills/builtin.js';
 import { createBillingRoutes } from './modules/billing/billing.routes.js';
 import { createUsageRoutes } from './modules/usage/usage.routes.js';
@@ -149,7 +150,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/skills', agentData.skills);
   app.use('/api/browser', createBrowserRoutes({ db, config, sandboxes, tools: sandbox }));
 
-  const pushRoutes = createPushRoutes({ db, push, settings, t });
+  const pushRoutes = createPushRoutes({ db, push, settings, t, dailySummary: new DailySummaryService(db, canvas, push, t) });
   app.use('/api/push', pushRoutes.user);
   app.use('/api/oauth', mcpRoutes.consent);
   app.use('/api/mcp-apps', mcpRoutes.apps);

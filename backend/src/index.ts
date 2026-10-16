@@ -28,6 +28,7 @@ import { SandboxManager } from './modules/sandbox/manager.js';
 import { SandboxTools } from './engine/sandbox.js';
 import { SchoolService } from './modules/school/school.service.js';
 import { PushService } from './modules/push/push.service.js';
+import { DailySummaryService } from './modules/push/daily-summary.js';
 import { BuiltinSkills, loadBuiltinSkills } from './modules/skills/builtin.js';
 import { TiersService } from './modules/billing/tiers.service.js';
 import { BillingService } from './modules/billing/billing.service.js';
@@ -169,6 +170,9 @@ async function main() {
   scheduleExclusive(db, 'temp-sweep', LOCKS.tempSweep, 15 * 60 * 1000, async () => {
     await sweepTemp(config.DATA_ROOT);
   });
+  // The morning summary of what is due (Settings → Notifications): checked every minute, sent once per local day.
+  const dailySummary = new DailySummaryService(db, canvas, push, t);
+  scheduleExclusive(db, 'daily-summary', LOCKS.dailySummary, 60 * 1000, () => dailySummary.run());
 
   const app = createApp({
     db,

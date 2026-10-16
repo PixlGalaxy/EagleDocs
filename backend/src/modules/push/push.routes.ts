@@ -8,6 +8,7 @@ import type { Translate } from '../../i18n/index.js';
 import type { AppRequest } from '../../types/index.js';
 import { requireAdmin, requireAuth } from '../auth/session.middleware.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
+import type { DailySummaryService } from './daily-summary.js';
 import { PUSH_KINDS, type PushKind, type PushService } from './push.service.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -22,8 +23,8 @@ function kindsOf(value: unknown): PushKind[] {
 }
 
 /** Settings → Notifications (every user) and Admin → Push. */
-export function createPushRoutes(deps: { db: Db; push: PushService; settings: SettingsService; t: Translate }) {
-  const { db, push, settings, t } = deps;
+export function createPushRoutes(deps: { db: Db; push: PushService; settings: SettingsService; t: Translate; dailySummary: DailySummaryService }) {
+  const { db, push, settings, t, dailySummary } = deps;
   const user = Router();
   const admin = Router();
   user.use(requireAuth);
@@ -54,6 +55,21 @@ export function createPushRoutes(deps: { db: Db; push: PushService; settings: Se
       { anyKind: true },
     );
     res.json({ sent });
+  });
+
+  // Daily summary: what is due today and tomorrow, every morning at the student's hour.
+  user.get('/daily-summary', async (req: AppRequest, res) => res.json(await dailySummary.get(req.user!.id)));
+
+  user.put('/daily-summary', async (req: AppRequest, res) => {
+    const body = (req.body ?? {}) as { enabled?: unknown; hour?: unknown };
+    const hour = Number(body.hour);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) throw badRequest('push.invalidHour');
+    await dailySummary.set(req.user!.id, { enabled: body.enabled === true, hour });
+    res.json(await dailySummary.get(req.user!.id));
+  });
+
+  user.post('/daily-summary/preview', perUser('daily', 20), async (req: AppRequest, res) => {
+    res.json(await dailySummary.preview(req.user!.id, req.user!.language));
   });
 
   const view = async () => ({

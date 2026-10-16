@@ -42,6 +42,7 @@ const mockSettings = {
   push: { vapid_public_key: 'BNbV3s3E4cPq0wP3u4oFv9M2u0n2T3x1Yb4ZQ7m8K1aJx0YfS2o9r6c7d8e9f0g1h2i3j4k5l6m7n8o9p0q1r2s3', subscriptions: 37, contact_email: 'admin@studyhawk.app' },
   billing: { enabled: false, stripe_secret_set: false, stripe_webhook_secret_set: false, grace_days: 3 },
   memoryPaused: false,
+  dailySummary: { enabled: false, hour: 7, devices: 1, canvas_connected: true },
 };
 
 const routes: [string, RegExp, Handler][] = [
@@ -251,6 +252,9 @@ const routes: [string, RegExp, Handler][] = [
   ['POST', /^\/schedules$/, ({ body }) => ({ ...body, id: id('s'), next_run_at: iso(), last_run_at: null })],
   ['PATCH', /^\/schedules\/([^/]+)$/, ({ params, body }) => Object.assign(db.schedules.find((s) => s.id === params[0]) ?? {}, body)],
   ['DELETE', /^\/schedules\/([^/]+)$/, () => undefined],
+  ['GET', /^\/push\/daily-summary$/, () => mockSettings.dailySummary],
+  ['PUT', /^\/push\/daily-summary$/, ({ body }) => Object.assign(mockSettings.dailySummary, { enabled: Boolean(body.enabled), hour: Number(body.hour) })],
+  ['POST', /^\/push\/daily-summary\/preview$/, () => ({ nothing_due: false, sent: mockSettings.dailySummary.devices })],
   ['POST', /^\/push\/.*/, () => undefined],
   ['GET', /^\/billing\/plan$/, () => ({ tier: db.tiers[0], billing_enabled: true, subscription_status: null, current_period_end: null, usage_today: { messages: 23, tokens_in: 48211, tokens_out: 12007 } })],
   ['GET', /^\/usage$/, () => ({

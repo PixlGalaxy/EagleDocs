@@ -36,6 +36,8 @@ export const LOCKS = {
   billingGrace: 7_301_011,
   /** Moving chats' title-named folders to Chats/<id>, once. */
   chatFolders: 7_301_012,
+  /** The morning "due today and tomorrow" push, one replica per tick. */
+  dailySummary: 7_301_013,
 } as const;
 
 /**

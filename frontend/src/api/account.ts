@@ -15,6 +15,7 @@ import type {
   PlanInfo,
   UsageInfo,
   PushKind,
+  DailySummary,
   Schedule,
   Skill,
   TempUsage,
@@ -124,6 +125,9 @@ export const pushApi = {
   subscribe: (subscription: PushSubscriptionJSON, kinds: PushKind[]) => api.post<void>('/push/subscriptions', { subscription, kinds }),
   unsubscribe: (endpoint: string) => api.post<void>('/push/unsubscribe', { endpoint }),
   test: () => api.post<void>('/push/test'),
+  dailySummary: () => api.get<DailySummary>('/push/daily-summary'),
+  saveDailySummary: (body: { enabled: boolean; hour: number }) => api.put<DailySummary>('/push/daily-summary', body),
+  previewDailySummary: () => api.post<{ nothing_due: boolean; sent: number }>('/push/daily-summary/preview'),
 };
 
 export const mcpApi = {

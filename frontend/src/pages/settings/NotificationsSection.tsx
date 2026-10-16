@@ -8,6 +8,7 @@ import type { TranslationKey } from '../../i18n/translations';
 import { currentSubscription, isIos, isStandalone, pushSupported, subscribe } from '../../push';
 import { Notice, Panel, Switch } from '../../components/ui/kit';
 import { btn } from '../../components/ui/styles';
+import DailySummaryPanel from './DailySummaryPanel';
 
 const KINDS: { id: PushKind; label: TranslationKey; hint: TranslationKey }[] = [
   { id: 'mfa_required', label: 'push.kindMfa', hint: 'push.kindMfaHint' },
@@ -157,6 +158,8 @@ const NotificationsSection = () => {
           ))}
         </ul>
       </Panel>
+
+      <DailySummaryPanel thisDeviceOn={Boolean(subscription)} />
     </>
   );
 };

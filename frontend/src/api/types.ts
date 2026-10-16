@@ -541,3 +541,12 @@ export interface PlanInfo {
 // ---------------------------------------------------------------- push
 
 export type PushKind = 'mfa_required' | 'job_done' | 'approval_required' | 'broadcast';
+
+/** Settings → Notifications → Daily summary. The hour is local to the user's timezone. */
+export interface DailySummary {
+  enabled: boolean;
+  hour: number;
+  /** Devices with notifications on (any browser). */
+  devices: number;
+  canvas_connected: boolean;
+}

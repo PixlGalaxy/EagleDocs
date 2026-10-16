@@ -11,7 +11,8 @@ export type PushKind = (typeof PUSH_KINDS)[number];
 
 /** What the service worker shows (frontend/public/sw.js). */
 export interface PushMessage {
-  kind: PushKind | 'test';
+  /** 'daily_summary' has its own switch in Settings, so it goes to every device (anyKind). */
+  kind: PushKind | 'test' | 'daily_summary';
   title: string;
   body: string;
   /** Opened on click, e.g. the chat. */

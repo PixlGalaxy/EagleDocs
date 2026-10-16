@@ -91,6 +91,20 @@ PORT=4000 npx tsx src/index.ts &
 node test/e2e/push.e2e.mjs
 ```
 
+## Daily summary (`daily-summary.e2e.mjs`)
+
+The morning push of what is due today and tomorrow, built from Canvas without a model. Covers the setting and its
+validation, "send one now" (reaches a device whatever kinds it picked, leaves out overdue and submitted work, opens
+Courses), the leader task sending it once the student's hour comes, and not sending it twice the same local day. Uses
+`fake-canvas.mjs` and its own fake push service on port 4995; waits for the leader task's ticks, so it takes ~2.5 min.
+Run it on a fresh database: a second run the same day finds today's summary already sent.
+
+```bash
+node test/e2e/fake-canvas.mjs 4998 &
+PORT=4000 npx tsx src/index.ts &
+node test/e2e/daily-summary.e2e.mjs
+```
+
 ## Accounts and admin (`auth-admin.e2e.mjs`)
 
 Production-mode replicas (no dev seed) with `ADMIN_USERNAME=pixl` (or set `E2E_ADMIN`) and password `change-me-now`.
