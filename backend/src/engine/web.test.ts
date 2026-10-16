@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { BrowserSearch, studyhawkSearch, isPrivateAddress, paidSearch, parseDuckDuckGo, SafeFetch, unwrapBingUrl } from './web.js';
+import { BrowserSearch, DuckDuckGoSearch, studyhawkSearch, isPrivateAddress, paidSearch, parseDuckDuckGo, relevantHits, SafeFetch, unwrapBingUrl } from './web.js';
 
 test('internal addresses are refused, public ones allowed', () => {
   for (const ip of ['127.0.0.1', '10.1.2.3', '172.20.0.5', '192.168.0.150', '169.254.169.254', '100.64.1.1', '0.0.0.0', '::1', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:192.168.1.1', 'not-an-ip']) {
@@ -64,6 +64,27 @@ test('browser search reads Bing in a tab of its own in the user\'s sandbox', asy
   assert.deepEqual(hits.map((h) => h.url), ['https://real.example/a', 'https://b.example/']);
   assert.deepEqual(calls, ['/browser/read'], 'one call: the runner opens and closes the tab');
   await assert.rejects(new BrowserSearch(undefined).search('q', { limit: 5, signal: AbortSignal.timeout(5000), userId: 'u1' }), /No browser/);
+});
+
+test('DuckDuckGo\'s bot check is a failure, not an empty result', async (t) => {
+  const real = globalThis.fetch;
+  t.after(() => { globalThis.fetch = real; });
+  globalThis.fetch = (async () => new Response('<form id="challenge-form" action="//duckduckgo.com/anomaly.js?sv=html"></form>', { status: 202 })) as typeof fetch;
+  await assert.rejects(new DuckDuckGoSearch().search('sutumed', { limit: 5, signal: AbortSignal.timeout(5000) }), /bot check/);
+});
+
+test('search hits that share no word with the query are dropped', () => {
+  const hits = [
+    { title: 'The World Economy Is On The Brink Of Epochal Change', url: 'https://example.com/economy', snippet: 'Markets...' },
+    { title: 'Sutumed - Home', url: 'https://sutumed.com/', snippet: '' },
+    { title: 'Calculate MSNF', url: 'https://dairyscience.info/msnf', snippet: 'Medical supplies' },
+  ];
+  assert.deepEqual(relevantHits('Sutumed empresa', hits).map((h) => h.url), ['https://sutumed.com/']);
+  // Accents, plurals and site: operators.
+  assert.equal(relevantHits('assignment rúbrica site:fgcu.edu', [{ title: 'Assignments and rubrica', url: 'https://x.example/', snippet: '' }]).length, 1);
+  assert.equal(relevantHits('Sutumed', hits.slice(0, 1)).length, 0);
+  // Nothing to match on: left alone.
+  assert.equal(relevantHits('q', hits).length, 3);
 });
 
 test('the chain has the browser last and the paid API only with a key', async () => {

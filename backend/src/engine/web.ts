@@ -168,7 +168,10 @@ export class DuckDuckGoSearch implements SearchPort {
       signal: AbortSignal.any([options.signal, AbortSignal.timeout(20_000)]),
     });
     if (!res.ok) throw new Error(`DuckDuckGo answered ${res.status}`);
-    return parseDuckDuckGo(await res.text()).slice(0, options.limit);
+    const html = await res.text();
+    // Its bot check answers 202 with an "anomaly" challenge and no results: a failure (logged, cooled down), not "nothing found".
+    if (res.status === 202 || /anomaly\.js|anomaly-modal/.test(html)) throw new Error('DuckDuckGo blocked the search with its bot check');
+    return parseDuckDuckGo(html).slice(0, options.limit);
   }
 }
 
@@ -292,8 +295,34 @@ export class BrowserSearch implements SearchPort {
       const url = unwrapBingUrl(r.url);
       if (url && /^https?:\/\//.test(url) && !hits.some((h) => h.url === url)) hits.push({ title: r.title.slice(0, 200), url, snippet: r.snippet.slice(0, 400) });
     }
-    return hits.slice(0, options.limit);
+    return relevantHits(query, hits).slice(0, options.limit);
   }
+}
+
+const STOPWORDS = new Set(
+  'the and for with from that this what how who why when where are was not you your about into ' +
+    'que del los las para con una uno por como sobre más mas sus esta este entre sin'.split(' '),
+);
+
+/** Lowercase words without accents, split on anything that is not a letter or digit. */
+function words(text: string): string[] {
+  return text.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+}
+
+/**
+ * Drops hits that share no word with the query. Bing never says "no results": for a
+ * rare term it fills the page with unrelated popular pages, which the agent would
+ * then take as findings. Short or stop words do not count, and a query made only of
+ * those is not filtered.
+ */
+export function relevantHits(query: string, hits: SearchHit[]): SearchHit[] {
+  const terms = [...new Set(words(query.replace(/\b(site|inurl|intitle|filetype):\S+/gi, '')))].filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+  if (terms.length === 0) return hits;
+  return hits.filter((h) => {
+    const seen = new Set(words(`${h.title} ${h.snippet} ${h.url}`));
+    // Long terms also match their plural or a longer form ("assignment" in "assignments").
+    return terms.some((t) => seen.has(t) || (t.length >= 5 && [...seen].some((w) => w.startsWith(t))));
+  });
 }
 
 // ------------------------------------------------------------------ the chain
