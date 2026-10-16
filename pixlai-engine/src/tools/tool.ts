@@ -74,6 +74,8 @@ export interface ToolContext {
    * `background`). Only for the main agent, and only when the host supports it.
    */
   startBackground?: (tasks: { goal: string; context?: string; model?: string }[]) => Promise<void>;
+  /** Offers groups of tools from the next model call on (tools_load). Only in runs with lazy tool groups. */
+  loadToolGroups?: (groups: string[]) => { loaded: { group: string; tools: string[] }[]; unknown: string[] };
 }
 
 export type RunKind = 'chat' | 'scheduled' | 'subagent';
@@ -112,6 +114,12 @@ export interface Tool<Args extends Record<string, unknown> = Record<string, unkn
   untrusted?: boolean;
   /** Never offered to subagents (e.g. scheduling, memory writes). */
   mainAgentOnly?: boolean;
+  /**
+   * With `EngineOptions.lazyToolGroups`, tools of a group are offered only after
+   * the agent loads it with tools_load (or the conversation already used one).
+   * Tools without a group are always offered.
+   */
+  group?: string;
   /** Read-only and independent of other calls: may run at the same time as neighbouring safe calls. */
   parallelSafe?: boolean;
   /** Overrides limits.toolTimeoutMs for tools that legitimately take minutes (downloads, indexing). */

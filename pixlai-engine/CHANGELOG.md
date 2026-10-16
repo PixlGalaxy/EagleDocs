@@ -1,8 +1,14 @@
 # Changelog
 
-All notable changes to PixlAI-Engine. The engine is pre-1.0: minor versions can change the API, and every breaking change is listed under **Breaking**.
+All notable changes to PixlAI-Engine. Every breaking change is listed under **Breaking**.
 
-## Unreleased
+## 1.0.1 (2026-10-16)
+
+### Added
+
+- **Lazy tool groups** (`EngineOptions.lazyToolGroups`, `toolGroupNotes`, `Tool.group`, `inGroup`): the model sees the ungrouped tools plus `tools_load`, loads the groups a task needs, and the prompt lists the groups. Engine packs are grouped as `schedules`, `rag`, `code`, `web`, `browser` and `display`. Groups already used in the conversation, and `RunOptions.toolGroups`, are loaded from the start; helpers inherit their parent's. See [Tools: Lazy tool groups](docs/tools.md#lazy-tool-groups).
+
+## 1.0.0 (2026-10-16)
 
 ### Breaking
 

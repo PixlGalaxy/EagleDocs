@@ -20,6 +20,7 @@ interfaces ("ports").
 | **Schedules** | Cron, intervals and one-offs in the user's timezone; the agent creates them, the host runs them. |
 | **Files and RAG** | A per-user workspace with quotas and an expiring `TEMP/`, document extraction and RAG with citations. |
 | **Code, web, browser** | `code_run` in your sandbox, web search and safe fetching, a real browser with an approval policy. |
+| **Lazy tool groups** | The model sees the everyday tools and loads the rest by group (`tools_load`) when a task needs them: half the tokens per step in StudyHawk. |
 | **Robust loop** | Step and token budgets, per-tool timeouts, retries of dropped model connections, context compaction at 75%. |
 
 It powers [StudyHawk](../README.md), but the folder is self-contained: copy
@@ -108,6 +109,7 @@ const sendEmail = defineTool<{ to: string; body: string }>({
 - `mainAgentOnly: true`: never offered to subagents.
 - `timeoutMs`: overrides the default 60 s for tools that legitimately take minutes.
 - `gate(args, ctx)`: per-call decision (`run`, `approve` or `{ refuse }`) when the risk depends on the arguments or the state.
+- `group`: with `lazyToolGroups: true`, the tool is offered only after the agent loads its group with `tools_load`.
 
 Built-in tools: `time_now`, `memory_update`, `skills_load`, `skills_note`,
 `plan_update`, `ask_user`, `notify`, `calc`, `cron_create`, `cron_list`, `cron_update`, `cron_delete`,
@@ -120,6 +122,12 @@ adds `rag_list`, `rag_create`, `rag_add`, `rag_search`, `rag_ask` and `rag_delet
 (see [Workspace, files and RAG](docs/workspace-and-rag.md)). A `sandbox` adds `code_run`; `search` and `fetcher`
 add `web_search`, `web_fetch` and `web_download`; a `browser` adds the `browser_*` tools
 (see [Code, web and browser](docs/code-web-browser.md)).
+
+Every tool schema travels with every model call. With many tools, set `lazyToolGroups: true`: the model gets the
+tools without a group plus `tools_load`, and a list of groups to load when a task needs them. The engine's packs come
+grouped (`schedules`, `rag`, `code`, `web`, `browser`, `display`); group your own with `inGroup('email', tools)` and
+describe them in `toolGroupNotes`. Groups already used in the conversation stay loaded (see
+[Lazy tool groups](docs/tools.md#lazy-tool-groups)).
 
 ## How a run works
 

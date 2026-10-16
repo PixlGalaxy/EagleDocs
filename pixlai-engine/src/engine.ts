@@ -25,6 +25,7 @@ import { BUILTIN_TOOLS } from './tools/builtin.js';
 import { CORE_TOOLS } from './tools/core.js';
 import { DISPLAY_TOOLS } from './tools/display.js';
 import { FILES_TOOLS } from './tools/files.js';
+import { ENGINE_GROUP_NOTES, inGroup, toolsLoad } from './tools/groups.js';
 import { RAG_TOOLS } from './rag/tools.js';
 import { ToolRegistry, type RunKind, type Tool } from './tools/tool.js';
 import {
@@ -74,6 +75,16 @@ export interface EngineOptions {
   tools?: Tool[];
   /** Built-in tools to leave out, by name. */
   disableBuiltins?: string[];
+  /**
+   * Offers grouped tools on demand: the model sees the tools without a `group`
+   * and tools_load, plus a list of the groups it can load. Cuts the tokens every
+   * step spends on tool schemas, which matters with many tools and small models.
+   * Engine packs come grouped (schedules, rag, code, web, browser, display); give
+   * the host's tools a `group` and describe it in `toolGroupNotes`.
+   */
+  lazyToolGroups?: boolean;
+  /** One line per host group for the prompt's list of groups, e.g. `{ email: 'Read and send school email.' }`. */
+  toolGroupNotes?: Record<string, string>;
   limits?: Partial<Limits>;
   logger?: Logger;
   clock?: Clock;
@@ -109,6 +120,8 @@ export interface RunOptions {
    * prompt with guidance to match the model to the work. Without it, helpers use the run's model.
    */
   helperModels?: HelperModels;
+  /** With lazy tool groups: groups offered from the start (e.g. the user turned on "browser" for this chat). */
+  toolGroups?: string[];
 }
 
 export interface SubagentRunOptions {
@@ -123,6 +136,8 @@ export interface SubagentRunOptions {
   helperModels?: HelperModels;
   /** Same as RunOptions.notes. */
   notes?: string;
+  /** Same as RunOptions.toolGroups. */
+  toolGroups?: string[];
 }
 
 /** One user's agent: isolated memory, skills, schedules and limits. Cheap to create per request. */
@@ -160,17 +175,20 @@ export function createEngine(options: EngineOptions): Engine {
   const packs = [
     ...BUILTIN_TOOLS,
     ...CORE_TOOLS,
-    ...CRON_TOOLS,
+    ...inGroup('schedules', CRON_TOOLS),
     agentDelegate,
     // Packs that need host services only appear when the host provides them.
     ...(options.workspace ? FILES_TOOLS : []),
-    ...(options.workspace && options.embeddings ? RAG_TOOLS : []),
-    ...(options.sandbox ? CODE_TOOLS : []),
-    ...(options.search ? [webSearch] : []),
-    ...(options.fetcher ? [webFetch] : []),
-    ...(options.fetcher && options.workspace ? [webDownload] : []),
-    ...(options.browser ? BROWSER_TOOLS : []),
-    ...(options.displays?.includes('html') ? DISPLAY_TOOLS : []),
+    ...(options.workspace && options.embeddings ? inGroup('rag', RAG_TOOLS) : []),
+    ...(options.sandbox ? inGroup('code', CODE_TOOLS) : []),
+    ...inGroup('web', [
+      ...(options.search ? [webSearch] : []),
+      ...(options.fetcher ? [webFetch] : []),
+      ...(options.fetcher && options.workspace ? [webDownload] : []),
+    ]),
+    ...(options.browser ? inGroup('browser', BROWSER_TOOLS) : []),
+    ...(options.displays?.includes('html') ? inGroup('display', DISPLAY_TOOLS) : []),
+    ...(options.lazyToolGroups ? [toolsLoad] : []),
   ];
   const builtins = packs.filter((t) => !disabled.has(t.name));
   const registry = new ToolRegistry([...builtins, ...(options.tools ?? [])]);
@@ -189,6 +207,8 @@ export function createEngine(options: EngineOptions): Engine {
     browserPolicy: options.browserPolicy,
   };
   const engineLimits: Limits = { ...DEFAULT_LIMITS, ...options.limits };
+  const groupNotes = { ...ENGINE_GROUP_NOTES, ...options.toolGroupNotes };
+  const lazyGroups = (active?: string[]) => (options.lazyToolGroups ? { toolGroups: { notes: groupNotes, active } } : {});
 
   return {
     forUser(user, userOptions) {
@@ -227,6 +247,7 @@ export function createEngine(options: EngineOptions): Engine {
             helperModels: run.helperModels,
             reasoning: run.reasoning,
             notes: run.notes,
+            ...lazyGroups(run.toolGroups),
           });
         },
         callTool(name, args, opts = {}) {
@@ -275,6 +296,7 @@ export function createEngine(options: EngineOptions): Engine {
                 extraInstructions: 'You are a helper at depth 1, working in the background.',
                 notes: run.notes,
                 budget,
+                ...lazyGroups(run.toolGroups),
               });
               return toReport(goal, {
                 status: child.status === 'done' ? 'done' : child.status === 'cancelled' ? 'cancelled' : 'failed',

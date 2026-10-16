@@ -35,6 +35,7 @@ import type {
 import { compactIfNeeded, estimateTokens } from './compact.js';
 import { helperModelsNote, SUBAGENT_PROMPT } from './delegate.js';
 import { buildSystemPrompt, toProviderMessages, wrapUntrusted } from './prompt.js';
+import { groupsOf, toolGroupsNote } from '../tools/groups.js';
 
 /** Characters of one tool result kept in the context. */
 const TOOL_RESULT_CHARS = 20_000;
@@ -108,6 +109,11 @@ export interface LoopInput {
   /** Models the agent may give its helpers. */
   helperModels?: HelperModels;
   reasoning?: ReasoningLevel;
+  /**
+   * Lazy tool groups: grouped tools are offered only once loaded (tools_load),
+   * already used in `history`, or listed in `active`. Absent: every tool is offered.
+   */
+  toolGroups?: { notes: Record<string, string>; active?: string[] };
 }
 
 /** The model a helper runs on: the one chosen when the host knows it, else its parent's. */
@@ -296,6 +302,9 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
   let questions: UserQuestion[] | undefined;
   /** What show_html put in the conversation, in order. */
   const displays: Display[] = [];
+  /** Lazy tool groups this run can load (empty when they are off or nothing is grouped), and the ones offered now. */
+  let groups = new Map<string, string[]>();
+  const activeGroups = new Set<string>();
 
   /** Ends a run that did not finish normally, telling the sink first. */
   const finish = async (status: 'failed' | 'cancelled', error?: string): Promise<RunResult> => {
@@ -318,6 +327,17 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     if (depth === 0) await emit({ type: 'model', model_ref: model.ref, model_label: model.label });
 
     const canUseTools = model.supportsTools && tools.list().length > 0;
+    if (canUseTools && input.toolGroups) groups = groupsOf(tools.list());
+    if (groups.size) {
+      for (const group of input.toolGroups?.active ?? []) if (groups.has(group)) activeGroups.add(group);
+      // A conversation that already used a group keeps it, so a follow-up does not have to load it again.
+      for (const message of input.history) {
+        for (const call of message.toolCalls ?? []) {
+          const group = tools.get(call.name)?.group;
+          if (group && groups.has(group)) activeGroups.add(group);
+        }
+      }
+    }
     const [docs, skills, workspaceNote, sandboxNote] = await Promise.all([
       input.kind === 'subagent' ? Promise.resolve(null) : services.memory.read(user.id),
       input.kind === 'subagent' || !canUseTools ? Promise.resolve([]) : services.skills.list(user.id),
@@ -336,6 +356,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
           workspaceNote && `## Workspace\n${workspaceNote}`,
           sandboxNote && `## Code sandbox\n${sandboxNote}`,
           canUseTools && tools.get('agent_delegate') && input.helperModels?.list.length && helperModelsNote(input.helperModels.list),
+          groups.size > 0 && toolGroupsNote(groups, input.toolGroups!.notes),
           input.notes,
           input.extraInstructions,
         ]
@@ -363,9 +384,14 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       return steers.length > 0;
     };
 
-    const toolSpecs = canUseTools
-      ? tools.list().map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }))
-      : undefined;
+    /** What the model is offered this step: everything, or (lazy groups) the ungrouped tools plus the loaded groups. */
+    const toolSpecs = () =>
+      canUseTools
+        ? tools
+            .list()
+            .filter((t) => (groups.size ? !t.group || activeGroups.has(t.group) : t.name !== 'tools_load'))
+            .map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }))
+        : undefined;
 
     let emptyRetried = false;
     let transientRetries = 0;
@@ -408,11 +434,12 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
           { vision: model.supportsVision },
         );
         if (depth === 0) await emit({ type: 'context', used: estimateTokens(outgoing), window: model.contextWindow });
+        const specs = toolSpecs();
         const request = {
           model: model.model,
           messages: outgoing,
           ...(input.reasoning && { reasoning: input.reasoning }),
-          ...(toolSpecs && !finalCall && { tools: toolSpecs }),
+          ...(specs && !finalCall && { tools: specs }),
           signal: attempt.signal,
         };
         for await (const chunk of model.provider.stream(request)) {
@@ -505,6 +532,8 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
     };
 
     const tool = tools.get(call.name);
+    // A call to a tool of a group not loaded yet still runs (the model knew its name), and loads the group.
+    if (tool?.group && groups.has(tool.group)) activeGroups.add(tool.group);
     if (!tool) {
       await emit({ type: 'tool_call', call: { ...view } });
       return finish('error', stringify({ error: `Tool "${call.name}" does not exist. Available: ${tools.list().map((t) => t.name).join(', ')}` }));
@@ -597,6 +626,7 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         spawnSubagent: (goal: string, index: number, choice?: string) => spawn(goal, index, call.id, choice),
       }),
       ...(depth === 0 && input.startBackground && { startBackground: input.startBackground }),
+      ...(groups.size > 0 && { loadToolGroups }),
     };
     try {
       const value = await abortable(tool.run(call.args, ctx), toolSignal);
@@ -609,6 +639,21 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       }
       return finish('error', stringify({ error: errorText(err) }));
     }
+  }
+
+  /** tools_load: offers the asked groups from the next model call on. */
+  function loadToolGroups(asked: string[]) {
+    const loaded: { group: string; tools: string[] }[] = [];
+    const unknown: string[] = [];
+    for (const group of asked) {
+      const names = groups.get(group);
+      if (!names) unknown.push(group);
+      else {
+        activeGroups.add(group);
+        loaded.push({ group, tools: names });
+      }
+    }
+    return { loaded, unknown };
   }
 
   /** One standalone call to the run's model (no tools, no history), for tools like rag_ask. */
@@ -644,6 +689,8 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       depth: childDepth,
       history: [{ role: 'user', content: goal }],
       extraInstructions: `You are a helper at depth ${childDepth}.`,
+      // Helpers start with the groups their parent had loaded.
+      ...(input.toolGroups && { toolGroups: { ...input.toolGroups, active: [...activeGroups] } }),
       budget,
       sink: {
         emit: (event) =>

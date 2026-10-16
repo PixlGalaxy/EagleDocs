@@ -172,6 +172,28 @@ await agent.run({
 
 `agent.tools()` returns the tools a normal chat run would offer, which is useful for building a settings screen.
 
+### Lazy tool groups
+
+Every tool's description and schema goes out with every model call. With a large catalog that is thousands of tokens per step, and small models pick tools worse when they see too many. With `lazyToolGroups`, the model sees the tools without a `group` plus `tools_load`, and the system prompt lists the groups it can load, one line each with their tool names:
+
+```ts
+const engine = createEngine({
+  // ...
+  tools: [...everydayTools, ...inGroup('email', EMAIL_TOOLS)],
+  lazyToolGroups: true,
+  toolGroupNotes: { email: 'Read, draft and send email.' },
+});
+```
+
+- Engine packs come grouped: `schedules` (cron), `rag`, `code`, `web`, `browser` and `display`. Memory, skills, files, time, plans, questions and delegation are always offered.
+- `tools_load({ groups: [...] })` offers those groups from the next model call on. The system prompt never changes during a run, so prompt caches stay valid; only the tool list grows.
+- A conversation that already called a tool of a group starts with that group loaded, so follow-ups do not load it again. `RunOptions.toolGroups` (and `SubagentRunOptions.toolGroups`) load groups from the start.
+- A call to a grouped tool that was not loaded still runs, and loads its group.
+- Helpers start with the groups their parent had loaded and can load more.
+- `agent.tools()` and `callTool` are not affected: they always see every tool.
+
+In StudyHawk this took a step from about 10,000 to 4,900 tokens (65 tools offered down to 24), and Qwopus 27B loaded the right group on its own for browsing, scheduling and email.
+
 ## Tool packs and roadmap
 
 Packs turn on when the host provides their port (a `workspace` enables files, `embeddings` with it enables rag, and so on). Rows marked **Planned** are the roadmap: names and behaviour may change, and packs that need infrastructure will ask the host for it through a port instead of assuming a vendor.
