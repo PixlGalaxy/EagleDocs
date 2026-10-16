@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
+import { motion, useReducedMotion, useScroll, useTransform, type TargetAndTransition, type Transition } from 'motion/react';
 import { ArrowRight, BookOpen, Box, GraduationCap, KeyRound, Server, Sparkles, Wand2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
@@ -95,21 +95,100 @@ function ProductShot() {
   );
 }
 
+/** crash: ED flies in and knocks SH away · eagle: the old EagleDocs logo holds the spot · back: SH lands again. */
+type EggPhase = 'idle' | 'crash' | 'eagle' | 'back';
+type EggAnim = { animate: TargetAndTransition; transition: Transition };
+
+const CRASH_S = 1.3;
+/** Where in the crash ED reaches SH (a fraction of CRASH_S). */
+const HIT = 0.38;
+const EGG_MS = { crash: CRASH_S * 1000, eagle: 6000, back: 800 };
+
+/** The hero logo. Its easter egg: ten clicks and the old EagleDocs logo crashes in, sends SH flying, and stays a while. */
+function HeroLogo() {
+  const reduce = useReducedMotion();
+  const [clicks, setClicks] = useState(0);
+  const [phase, setPhase] = useState<EggPhase>('idle');
+
+  useEffect(() => {
+    if (phase === 'idle') return;
+    const next: Record<Exclude<EggPhase, 'idle'>, EggPhase> = { crash: 'eagle', eagle: 'back', back: 'idle' };
+    const timer = setTimeout(() => setPhase(next[phase]), EGG_MS[phase]);
+    return () => clearTimeout(timer);
+  }, [phase]);
+
+  const onClick = () => {
+    if (phase !== 'idle') return;
+    if (clicks + 1 >= 10) {
+      setClicks(0);
+      setPhase('crash');
+    } else setClicks(clicks + 1);
+  };
+
+  const eagleShown = phase === 'crash' || phase === 'eagle';
+  const times = [0, HIT, 1];
+
+  const sh: EggAnim = reduce
+    ? { animate: { opacity: eagleShown ? 0 : 1 }, transition: { duration: 0.3 } }
+    : phase === 'crash'
+      ? { animate: { x: [0, 0, 560], y: [0, 0, -320], rotate: [0, 0, 720], opacity: [1, 1, 0] }, transition: { duration: CRASH_S, times, ease: 'easeOut' } }
+      : phase === 'eagle'
+        ? { animate: { opacity: 0 }, transition: { duration: 0 } }
+        : phase === 'back'
+          ? { animate: { x: [0, 0], y: [-240, 0], rotate: [-120, 0], opacity: [0, 1] }, transition: { duration: 0.7, ease: [0.34, 1.56, 0.64, 1] } }
+          : { animate: { x: 0, y: 0, rotate: 0, opacity: 1 }, transition: { duration: 0.6, ease } };
+
+  const ed: EggAnim = reduce
+    ? { animate: { opacity: eagleShown ? 1 : 0 }, transition: { duration: 0.3 } }
+    : phase === 'crash'
+      ? {
+          // In fast and tilted, squashes on the hit, settles.
+          animate: { x: [-720, 0, 14, 0], rotate: [-28, 0, 8, 0], scaleX: [1, 0.82, 1.06, 1], opacity: [1, 1, 1, 1] },
+          transition: { duration: CRASH_S, times: [0, HIT, 0.52, 0.75], ease: ['easeIn', 'easeOut', 'easeInOut'] },
+        }
+      : phase === 'eagle'
+        ? { animate: { x: 0, y: [0, -5, 0], rotate: [0, -3, 0], opacity: 1 }, transition: { duration: 2, repeat: Infinity, ease: 'easeInOut' } }
+        : { animate: { x: 0, y: 0, rotate: 0, scale: phase === 'back' ? 0.6 : 1, opacity: 0 }, transition: { duration: 0.3 } };
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={eagleShown ? 'EagleDocs' : 'StudyHawk'}
+      className="mx-auto mb-8 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]"
+    >
+      <span className="relative block h-[72px] w-[72px]">
+        <motion.span className="absolute inset-0 block" initial={false} {...sh}>
+          <BrandIcon className="h-full w-full" />
+        </motion.span>
+        <motion.img
+          src="/brand/eagledocs-legacy.webp"
+          alt=""
+          width={72}
+          height={72}
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          initial={{ opacity: 0 }}
+          {...ed}
+        />
+        {/* The bump: a ring that flashes where they hit. */}
+        {phase === 'crash' && !reduce && (
+          <motion.span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 rounded-full border-4 border-[#22d3ee]"
+            initial={{ scale: 0.5, opacity: 0 }}
+            animate={{ scale: [0.5, 0.5, 1.3, 2], opacity: [0, 0, 0.9, 0] }}
+            transition={{ duration: CRASH_S, times: [0, HIT, HIT + 0.04, 0.75] }}
+          />
+        )}
+      </span>
+    </button>
+  );
+}
+
 const HomePage = () => {
   const { t } = useI18n();
   const { user } = useAuth();
   const reduce = useReducedMotion();
-  const [clicks, setClicks] = useState(0);
-  const [falling, setFalling] = useState(false);
-
-  // The old homepage's easter egg: ten clicks on the logo make it fall.
-  const onLogoClick = () => {
-    if (clicks + 1 >= 10) {
-      setFalling(true);
-      setClicks(0);
-      setTimeout(() => setFalling(false), 2600);
-    } else setClicks(clicks + 1);
-  };
 
   const ctaTo = user ? '/chat' : '/register';
   const ctaLabel = user ? t('landingNav.openApp') : t('landingNav.getStarted');
@@ -132,15 +211,7 @@ const HomePage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.9, ease }}
         >
-          <button type="button" onClick={onLogoClick} aria-label="StudyHawk" className="mx-auto mb-8 block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-500)]">
-            <motion.div
-              className="h-[72px] w-[72px]"
-              animate={falling && !reduce ? { y: 480, rotate: 90, opacity: 0 } : { y: 0, rotate: 0, opacity: 1 }}
-              transition={{ duration: falling ? 1.8 : 0.6, ease: falling ? 'easeIn' : ease }}
-            >
-              <BrandIcon className="h-full w-full" />
-            </motion.div>
-          </button>
+          <HeroLogo />
           <h1 className="text-5xl font-semibold leading-[1.02] tracking-[-0.045em] text-slate-950 sm:text-6xl md:text-8xl dark:text-white">{t('home.title')}</h1>
           <div className="mt-6">
             <Typewriter />
