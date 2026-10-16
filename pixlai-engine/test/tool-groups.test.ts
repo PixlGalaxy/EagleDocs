@@ -40,8 +40,10 @@ test('grouped tools wait for tools_load; the prompt lists the groups', async () 
   assert.ok(!first.includes('crm_lookup') && !first.includes('cron_create'), 'grouped tools are not offered yet');
   const system = provider.requests[0]!.messages[0]!.content;
   assert.match(system, /## More tools/);
-  assert.match(system, /- crm: Look up customers\. \(crm_lookup\)/);
-  assert.match(system, /- schedules: .*\(cron_create, cron_list, cron_update, cron_delete\)/, 'engine packs come grouped');
+  assert.match(system, /### crm: Look up customers\.\n- crm_lookup: Find a customer/, 'a folded tool without a summary shows its first sentence');
+  assert.match(system, /### schedules: .*\n- cron_create: schedule a task/, 'engine packs come grouped, each tool with its summary');
+  assert.match(system, /not a chatbot/, 'the note tells the agent to use them');
+  assert.doesNotMatch(system, /Find a customer by name/, 'never the full description');
 
   const second = offered(provider.requests[1]!);
   assert.ok(second.includes('crm_lookup'), 'the loaded group is offered from the next call');
@@ -101,4 +103,11 @@ test('with nothing grouped, tools_load is not offered', async () => {
   await agent.run({ runId: 'r1', model: model(provider), history: [user('hola')], sink });
   assert.ok(!offered(provider.requests[0]!).includes('tools_load'));
   assert.doesNotMatch(provider.requests[0]!.messages[0]!.content, /## More tools/);
+});
+
+test('a summary is one short line: given, or the first sentence', async () => {
+  const { toolSummary } = await import('../src/index.js');
+  assert.equal(toolSummary({ summary: 'run code', description: 'Long text. More.' }), 'run code');
+  assert.equal(toolSummary({ description: 'Create a RAG, e.g. one per course. Then add files.' }), 'Create a RAG, e.g. one per course');
+  assert.equal(toolSummary({ description: 'First line\nSecond line' }), 'First line');
 });

@@ -100,6 +100,12 @@ export interface Tool<Args extends Record<string, unknown> = Record<string, unkn
   /** Letters, digits, `_` and `-` only: what every provider accepts. Group with a prefix, e.g. `crm_contacts`. */
   name: string;
   description: string;
+  /**
+   * One short line on what the tool is for. With lazy tool groups the prompt lists a folded tool by
+   * this line; its full description and parameters arrive once its group is loaded. Defaults to the
+   * description's first sentence.
+   */
+  summary?: string;
   parameters: JsonSchema;
   /**
    * `external` tools act outside the user's own workspace and cannot be undone

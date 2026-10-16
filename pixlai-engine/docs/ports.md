@@ -37,7 +37,7 @@ interface PendingSteer { id: string; content: string }
 | Method | Contract |
 |---|---|
 | `takeSteers(runId)` | Returns the steers for this run that were not applied yet, oldest first, and marks them applied **atomically**: two concurrent calls must never return the same steer, and a steer must not be lost if the process dies right after. Returns `[]` when there are none. Called before every model call. |
-| `watchSteers(runId, onSteer)` | Calls `onSteer()` **promptly** (well under a second) when a new steer for this run exists. Returns an unsubscribe function that must stop all callbacks. It does not hand over the steer: the engine then reads it with `takeSteers`. Called around each model generation. |
+| `watchSteers(runId, onSteer)` | Calls `onSteer()` **promptly** (well under a second) when a new steer for this run exists. Returns an unsubscribe function that must stop all callbacks. It does not hand over the steer: the engine then reads it with `takeSteers`. Kept for hosts that want it; the loop no longer calls it, since steers never cut a generation. |
 | `createApproval(input)` | Stores a pending approval for the run and returns its id. `summary` and `details` are what you show to the user. |
 | `waitForApproval(id, timeoutMs, signal)` | Resolves with the user's decision. It must also resolve when `timeoutMs` passes (`'expired'`) and when `signal` aborts (any value; the engine checks the signal first). It must never hang. An unknown id should resolve `'expired'`. If the decision was already made before the call, resolve immediately. |
 
@@ -207,7 +207,7 @@ Things that can happen in a valid history:
 
 **Abort signal:**
 
-- Pass `request.signal` to your HTTP request, or check it between chunks. When it aborts (cancellation, or a steer that interrupts a generation), stop. Throwing an abort error or ending the stream silently are both fine: the engine checks its own state afterwards.
+- Pass `request.signal` to your HTTP request, or check it between chunks. When it aborts (the run was cancelled), stop. Throwing an abort error or ending the stream silently are both fine: the engine checks its own state afterwards.
 - Do not swallow other errors. Throw them with a numeric `status` (the HTTP status) and a `code` when the backend gives one: the engine retries 5xx and 429 (except `code: 'usage_limit_reached'`) and dropped connections twice, after 1 s and 4 s. Anything else ends the run with `status: 'failed'` and its message in `error` (cut to 600 characters), so keep secrets out of error messages.
 
 ## Running on several processes

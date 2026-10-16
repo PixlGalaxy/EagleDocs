@@ -7,10 +7,21 @@ const STATUSES: PlanStep['status'][] = ['pending', 'in_progress', 'done', 'skipp
 /** A visible checklist for multi-step work; hosts render it from the `plan` event. */
 export const planUpdate = defineTool<{ title?: string; steps: { title: string; status?: string }[] }>({
   name: 'plan_update',
+  summary: 'show the user a live checklist of your plan and tick it off as you work',
   description:
-    'Show the user your plan for a task with several steps, and keep it updated as you work (send the full list each time, ' +
-    'with the step you are on as in_progress and finished ones as done). Use it for work that takes 3 or more steps; skip it ' +
-    'for quick answers.',
+    'Shows the user a live checklist of your plan, right above the message box, and updates it as you work. Use it often: ' +
+    'it is how the user sees what you are doing and how far along you are.\n' +
+    'When: every task that takes 3 or more steps. Examples: a project or app, an assignment or essay, a study plan, code ' +
+    'with several files, research that needs several searches, a document or spreadsheet, anything with tools in a row. ' +
+    'Skip it only for a quick answer or a single tool call.\n' +
+    'How:\n' +
+    '- Call it before you start the work, with every step as pending and the first one in_progress.\n' +
+    '- Call it again each time a step is finished (done) and the next one starts (in_progress). Send the full list every ' +
+    'time; mark a step you drop as skipped, and add steps if the work grows.\n' +
+    '- Steps are short and concrete (what you will do, e.g. "Read the assignment in Canvas", "Write the Flask routes", ' +
+    '"Test the app"), 3 to 8 of them. The title names the task, e.g. "Chapter 7 homework".\n' +
+    '- Finish with every step done (or skipped) before your final answer.\n' +
+    'Writing a plan as a list in your message is not the same: the user only sees the checklist from this tool.',
   parameters: {
     type: 'object',
     properties: {
@@ -83,10 +94,19 @@ export function questionsAsText(questions: UserQuestion[]): string {
  */
 export const askUser = defineTool<{ question?: string; questions?: unknown }>({
   name: 'ask_user',
+  summary: 'ask the user questions with clickable options (the only way to ask anything)',
   description:
-    'Ask the user questions when you cannot go on well without their decision: a real choice between approaches, a ' +
-    'preference only they know, or a detail you cannot find with your tools. The user sees each question with clickable ' +
-    'options and answers in one go; your turn ends right after this call and their answers arrive as their next message.\n' +
+    'Asks the user questions they answer by clicking options in a card, and ends your turn; their answers arrive as their ' +
+    'next message. This is the only way to ask the user something: never write questions or lists of choices in your ' +
+    'message, because there they are plain text the user cannot click. Use it often, whenever their answer would change ' +
+    'what you do.\n' +
+    'When:\n' +
+    '- Before starting a project, plan, essay, app or study plan whose key choices the user did not give (type, scope, ' +
+    'level, format, length, deadline, tools, style).\n' +
+    '- When the user says "ask me if you have questions", or the request is ambiguous enough that you would otherwise guess.\n' +
+    '- A real choice between approaches, a preference only they know, or a detail you cannot find with your tools.\n' +
+    '- When you reach a point where you need their decision to go on.\n' +
+    'Before asking, look up what you can yourself (their courses, files, the web), and you may show a plan_update first.\n' +
     'How to ask well:\n' +
     '- Ask everything you need at once (1 to 4 questions), not one question per turn.\n' +
     '- Give each question 2 to 4 options that are clearly different. Labels are short (1-5 words); the description says ' +

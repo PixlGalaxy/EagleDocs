@@ -52,6 +52,7 @@ const refParam = { type: 'string', description: 'Element ref from the latest sna
 
 export const browserOpen = defineTool<{ url: string; profile?: string }>({
   name: 'browser_open',
+  summary: 'open a site in a real browser (stays signed in, clicks and types like a person)',
   description:
     "Open a URL in the user's own browser (a real Chromium that keeps cookies, so sites they logged into stay logged in). " +
     'Returns a snapshot of the page: text and interactive elements with refs like [@e12] for browser_click/browser_type. ' +
@@ -75,6 +76,7 @@ export const browserOpen = defineTool<{ url: string; profile?: string }>({
 
 export const browserSnapshot = defineTool<{ profile?: string }>({
   name: 'browser_snapshot',
+  summary: 'read the open page again',
   description: 'Read the page that is open now again (after it changed, or after scrolling).',
   parameters: { type: 'object', properties: { profile: profileParam } },
   sideEffect: 'none',
@@ -88,6 +90,7 @@ export const browserSnapshot = defineTool<{ profile?: string }>({
 
 export const browserClick = defineTool<{ ref: string; profile?: string }>({
   name: 'browser_click',
+  summary: 'click something on the open page',
   description: 'Click an element of the open page by its ref. May need the user\'s approval depending on the site.',
   parameters: { type: 'object', properties: { ref: refParam, profile: profileParam }, required: ['ref'] },
   sideEffect: 'none',
@@ -103,6 +106,7 @@ export const browserClick = defineTool<{ ref: string; profile?: string }>({
 
 export const browserType = defineTool<{ ref: string; text: string; submit?: boolean; profile?: string }>({
   name: 'browser_type',
+  summary: 'type into a field on the open page',
   description: 'Type text into a field of the open page (replacing what it had). submit: press Enter after typing.',
   parameters: {
     type: 'object',
@@ -126,6 +130,7 @@ export const browserType = defineTool<{ ref: string; text: string; submit?: bool
 
 export const browserPress = defineTool<{ key: string; profile?: string }>({
   name: 'browser_press',
+  summary: 'press a key on the open page',
   description: 'Press a key on the open page, e.g. "Enter", "Escape", "Tab", "ArrowDown".',
   parameters: { type: 'object', properties: { key: { type: 'string' }, profile: profileParam }, required: ['key'] },
   sideEffect: 'none',
@@ -143,6 +148,7 @@ export const browserPress = defineTool<{ key: string; profile?: string }>({
 
 export const browserScroll = defineTool<{ direction: 'up' | 'down'; profile?: string }>({
   name: 'browser_scroll',
+  summary: 'scroll the open page',
   description: 'Scroll the open page one screen up or down and return the new snapshot.',
   parameters: { type: 'object', properties: { direction: { type: 'string', enum: ['up', 'down'] }, profile: profileParam }, required: ['direction'] },
   sideEffect: 'none',
@@ -157,6 +163,7 @@ export const browserScroll = defineTool<{ direction: 'up' | 'down'; profile?: st
 
 export const browserBack = defineTool<{ profile?: string }>({
   name: 'browser_back',
+  summary: 'go back a page',
   description: 'Go back to the previous page.',
   parameters: { type: 'object', properties: { profile: profileParam } },
   sideEffect: 'none',
@@ -170,6 +177,7 @@ export const browserBack = defineTool<{ profile?: string }>({
 
 export const browserScreenshot = defineTool<{ profile?: string }>({
   name: 'browser_screenshot',
+  summary: 'save a picture of the open page',
   description: "Save a picture of the open page into the user's files (to show them what you see, or keep evidence).",
   parameters: { type: 'object', properties: { profile: profileParam } },
   sideEffect: 'none',
@@ -182,6 +190,7 @@ export const browserScreenshot = defineTool<{ profile?: string }>({
 
 export const browserClose = defineTool<{ profile?: string }>({
   name: 'browser_close',
+  summary: 'close the browser when done',
   description: 'Close the browser for this profile when you are done (cookies are kept for next time).',
   parameters: { type: 'object', properties: { profile: profileParam } },
   sideEffect: 'none',

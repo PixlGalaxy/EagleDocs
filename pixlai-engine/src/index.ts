@@ -4,7 +4,7 @@ export * from './types.js';
 export type * from './ports.js';
 export { defineTool, ToolRegistry, type Tool, type ToolContext, type GateContext, type ApprovalText, type RunKind, type SubagentOutcome } from './tools/tool.js';
 export { BUILTIN_TOOLS } from './tools/builtin.js';
-export { ENGINE_GROUP_NOTES, inGroup, toolsLoad } from './tools/groups.js';
+export { ENGINE_GROUP_NOTES, inGroup, toolSummary, toolsLoad } from './tools/groups.js';
 export { applyOperations, DOC_FILES, ENTRY_SEPARATOR, entriesOf, memoryUpdate } from './tools/memory.js';
 export { CORE_TOOLS, askUser, calc, notify, planUpdate } from './tools/core.js';
 export { evaluate } from './tools/calc.js';

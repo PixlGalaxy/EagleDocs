@@ -24,6 +24,7 @@ export function clipMiddle(text: string, max = MAX_OUTPUT_CHARS): string {
 
 export const codeRun = defineTool<{ language: CodeLanguage; code: string; cwd?: string; timeout_s?: number }>({
   name: 'code_run',
+  summary: 'run Python, Node.js or shell in the sandbox: math, data, charts, Word/Excel/PDF files, installing packages',
   description:
     "Run Python, Node.js or shell code in the user's sandbox. The working directory is their workspace (the same files as " +
     'the files_ tools), so scripts can read and write documents there: compute exactly, analyze CSV/Excel with pandas, ' +

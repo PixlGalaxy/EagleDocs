@@ -114,19 +114,21 @@ test('a steer sent while tools run is applied before the next model call', async
   assert.deepEqual(result.messages.find((m) => m.steer), { role: 'user', content: 'answer in English', steer: true });
 });
 
-test('a steer mid-answer interrupts the generation and keeps the partial text as context', async () => {
+test('a steer mid-answer never cuts it: the answer finishes, then the correction is answered', async () => {
   const { agent, stores, events, sink } = setup();
-  const provider = new ScriptedProvider([() => slowText(['Here', 'is', 'a', 'very', 'long', 'answer', 'about', 'all', 'courses']), () => text('Solo este semestre')]);
+  const words = ['Here', 'is', 'a', 'very', 'long', 'answer', 'about', 'all', 'courses'];
+  const provider = new ScriptedProvider([() => slowText(words), () => text('Solo este semestre')]);
   const run = agent.run({ runId: 'r1', model: model(provider), history: [user('mis cursos')], sink });
   await new Promise((r) => setTimeout(r, 70));
   stores.runs.steer('r1', 'only this semester');
   const result = await run;
   assert.equal(result.status, 'done');
   assert.equal(result.content, 'Solo este semestre');
-  assert.ok(events.some((e) => e.type === 'interrupted'));
+  assert.ok(!events.some((e) => e.type === 'interrupted'), 'nothing the user saw is taken back');
   const second = provider.requests[1]!.messages;
-  assert.match(second.at(-2)!.content, /interrupted by the user's correction/);
+  assert.equal(second.at(-2)!.content.trim(), words.join(' '), 'the first answer is kept whole');
   assert.match(second.at(-1)!.content, /only this semester/);
+  assert.ok(events.some((e) => e.type === 'steer_applied'));
 });
 
 test('running out of steps forces a final answer without tools', async () => {

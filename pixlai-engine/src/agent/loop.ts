@@ -35,7 +35,7 @@ import type {
 import { compactIfNeeded, estimateTokens } from './compact.js';
 import { helperModelsNote, SUBAGENT_PROMPT } from './delegate.js';
 import { buildSystemPrompt, toProviderMessages, wrapUntrusted } from './prompt.js';
-import { groupsOf, toolGroupsNote } from '../tools/groups.js';
+import { groupsOf, toolGroupsNote, toolSummary } from '../tools/groups.js';
 
 /** Characters of one tool result kept in the context. */
 const TOOL_RESULT_CHARS = 20_000;
@@ -351,12 +351,13 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       ...(docs && { memory: { docs, limits, editable: canUseTools && Boolean(tools.get('memory_update')) } }),
       skills,
       canUseTools,
+      toolNames: new Set(tools.list().map((t) => t.name)),
       extra:
         [
           workspaceNote && `## Workspace\n${workspaceNote}`,
           sandboxNote && `## Code sandbox\n${sandboxNote}`,
           canUseTools && tools.get('agent_delegate') && input.helperModels?.list.length && helperModelsNote(input.helperModels.list),
-          groups.size > 0 && toolGroupsNote(groups, input.toolGroups!.notes),
+          groups.size > 0 && toolGroupsNote(groups, input.toolGroups!.notes, (name) => toolSummary(tools.get(name)!)),
           input.notes,
           input.extraInstructions,
         ]
@@ -408,18 +409,11 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       const compacted = await compactIfNeeded(context, model, signal);
       context = compacted.messages;
 
-      // A steer arriving while the model writes cuts this answer short.
+      // A steer never cuts what the model is writing: it is applied before the next model call
+      // (or right after this answer, which then does not end the run). Only cancelling stops a call.
       const attempt = new AbortController();
       const onCancel = () => attempt.abort(signal.reason);
       signal.addEventListener('abort', onCancel, { once: true });
-      let steered = false;
-      const stopWatching =
-        depth === 0
-          ? services.runs.watchSteers(runId, () => {
-              steered = true;
-              attempt.abort(new Error('steer'));
-            })
-          : () => undefined;
 
       let text = '';
       let retrying = false;
@@ -456,31 +450,21 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
         }
       } catch (err) {
         if (signal.aborted) return finish('cancelled');
-        if (!steered) {
-          const delay = RETRY_DELAYS_MS[transientRetries];
-          if (delay === undefined || !isTransient(err)) throw err;
-          // The connection dropped mid-answer: start this step over instead of failing the run.
-          transientRetries++;
-          services.logger.warn(`Run ${runId}: model call failed (${(err as Error).message}); retrying in ${delay} ms`);
-          if (text) await emit({ type: 'interrupted' });
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          steps--;
-          retrying = true;
-        }
+        const delay = RETRY_DELAYS_MS[transientRetries];
+        if (delay === undefined || !isTransient(err)) throw err;
+        // The connection dropped mid-answer: start this step over instead of failing the run.
+        transientRetries++;
+        services.logger.warn(`Run ${runId}: model call failed (${(err as Error).message}); retrying in ${delay} ms`);
+        if (text) await emit({ type: 'interrupted' });
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        steps--;
+        retrying = true;
       } finally {
         signal.removeEventListener('abort', onCancel);
-        stopWatching();
       }
       if (signal.aborted) return finish('cancelled');
       if (retrying) continue;
       transientRetries = 0;
-
-      if (steered) {
-        // Keep what the user already saw as context, then loop: the steer is applied at the top.
-        await emit({ type: 'interrupted' });
-        if (text) push({ role: 'assistant', content: `${text}\n[interrupted by the user's correction]` });
-        continue;
-      }
 
       nudge = null;
       if (calls.length === 0 && !text.trim() && !finalCall && !emptyRetried) {
@@ -492,8 +476,10 @@ export async function runLoop(input: LoopInput): Promise<RunResult> {
       }
 
       if (calls.length === 0 || finalCall) {
-        finalText = text;
         push({ role: 'assistant', content: text });
+        // A correction sent while this answer was written: answer it before ending, the answer stays as written.
+        if (!finalCall && (await applySteers())) continue;
+        finalText = text;
         await emit({ type: 'status', status: 'done' });
         return result('done');
       }

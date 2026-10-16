@@ -12,7 +12,7 @@ interfaces ("ports").
 | | |
 |---|---|
 | **One agent per user** | Isolated memory, skills, schedules and limits; no per-user state in the process, so many processes can serve the same users. |
-| **Live steering** | The user corrects the agent while it works; a correction can cut an answer short and the agent starts again with it. |
+| **Live steering** | The user corrects the agent while it works; the correction is applied at the next step without cutting what the agent is writing. |
 | **Approvals** | Anything irreversible outside the user's files waits for the user, with a card that shows the real effect. |
 | **Subagents** | Parallel helpers with read-only tools, each on the model its task needs, waiting or in the background. |
 | **Memory** | SOUL.md, USER.md and MEMORY.md, in every conversation, edited by the agent within a size limit. |

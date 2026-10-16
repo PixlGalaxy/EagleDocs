@@ -35,14 +35,37 @@ export function groupsOf(tools: Tool[]): Map<string, string[]> {
   return groups;
 }
 
-/** The system prompt section listing the groups the agent can load. Stable for the whole run. */
-export function toolGroupsNote(groups: Map<string, string[]>, notes: Record<string, string>): string {
-  const lines = [...groups].map(([group, names]) => `- ${group}: ${notes[group] ?? 'More tools.'} (${names.join(', ')})`);
+/** A tool's line in the list of folded tools: its `summary`, or the first sentence of its description. */
+export function toolSummary(tool: Pick<Tool, 'summary' | 'description'>): string {
+  if (tool.summary) return tool.summary;
+  // A sentence ends at ". " before a capital letter, so "e.g. a list" stays whole.
+  const first = tool.description.split(/\n|(?<=\.)\s+(?=[A-Z])/)[0] ?? '';
+  return first.replace(/\.$/, '');
+}
+
+/**
+ * The system prompt section with every folded tool, one short line each, and
+ * how to open them. Their full descriptions and parameters reach the model only
+ * once their group is loaded. Stable for the whole run, so prompt caches hold.
+ */
+export function toolGroupsNote(groups: Map<string, string[]>, notes: Record<string, string>, summaryOf: (name: string) => string): string {
+  const sections = [...groups].map(([group, names]) => {
+    const head = `### ${group}: ${notes[group] ?? 'More tools.'}`;
+    return [head, ...names.map((name) => `- ${name}: ${summaryOf(name)}`)].join('\n');
+  });
   return (
     '## More tools\n' +
-    'Besides the tools you see, these groups are available. Load the ones a task needs with tools_load (several at once ' +
-    'if needed) before using them; when an instruction or skill names a tool you do not see, load its group.\n' +
-    lines.join('\n')
+    'You also have the tools below. They are folded to save space: each one shows only a short line here. When you ' +
+    'decide to use one, load its group with tools_load (several groups in one call if the task needs them); from your ' +
+    'next step you get its full description and parameters. Loading is instant and costs nothing, and a call to a ' +
+    'listed tool by name opens its group too.\n' +
+    'Use them. You are an agent that does the work, not a chatbot that only talks: before answering from memory, ' +
+    'check this list. When a tool would make the answer correct, current or finished (computing with real numbers, ' +
+    "checking the web for anything recent, reading the actual page, file, email or course, making the file the user " +
+    'asked for, showing it interactively), load it and use it in this same turn. Combine several when the task needs ' +
+    'them. Never tell the user you cannot do something a tool here does, and when an instruction or skill names a tool ' +
+    'you do not see, load its group.\n\n' +
+    sections.join('\n\n')
   );
 }
 

@@ -9,6 +9,7 @@ const MAX_HTML_CHARS = 200_000;
  */
 export const showHtml = defineTool<{ title: string; html: string }>({
   name: 'show_html',
+  summary: 'show an interactive page in the chat: simulations, sliders, animated steps, quizzes, calculators',
   description:
     'Show an interactive HTML page right inside the chat, to explain something visually: a simulation, an animated ' +
     'flow or process, a math function with sliders, an algorithm step by step, a small calculator or quiz. The user ' +

@@ -156,3 +156,16 @@ test('show_html puts pages in the result (max 3), only when the host can show th
   assert.ok(events.some((e) => e.type === 'display' && e.title === 'Projectile motion'));
   assert.ok(!setup().agent.tools().some((t) => t.name === 'show_html'), 'off unless the host shows pages');
 });
+
+test('the rules push tools, ask_user for questions and plan_update for long tasks, only when they exist', async () => {
+  const { buildSystemPrompt } = await import('../src/agent/prompt.js');
+  const base = { basePrompt: 'You are a test.', user: { id: 'u', name: 'Ana', language: 'en', timezone: 'UTC' }, skills: [], today: new Date('2026-10-16T12:00:00Z') } as never;
+  const all = buildSystemPrompt({ ...(base as object), canUseTools: true, toolNames: new Set(['ask_user', 'plan_update']) } as never);
+  assert.match(all, /not a chatbot that describes it/);
+  assert.match(all, /call ask_user with options\. Never write the questions in your message/);
+  assert.match(all, /call plan_update with the steps before you start/);
+  const none = buildSystemPrompt({ ...(base as object), canUseTools: true, toolNames: new Set() } as never);
+  assert.doesNotMatch(none, /ask_user|plan_update/);
+  const noTools = buildSystemPrompt({ ...(base as object), canUseTools: false } as never);
+  assert.doesNotMatch(noTools, /not a chatbot/);
+});

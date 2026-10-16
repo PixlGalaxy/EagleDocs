@@ -174,7 +174,7 @@ await agent.run({
 
 ### Lazy tool groups
 
-Every tool's description and schema goes out with every model call. With a large catalog that is thousands of tokens per step, and small models pick tools worse when they see too many. With `lazyToolGroups`, the model sees the tools without a `group` plus `tools_load`, and the system prompt lists the groups it can load, one line each with their tool names:
+Every tool's description and schema goes out with every model call. With a large catalog that is thousands of tokens per step, and small models pick tools worse when they see too many. With `lazyToolGroups`, the model sees the tools without a `group` plus `tools_load`, and the system prompt lists the tools it can load, grouped, with one short line each (`Tool.summary`, or the first sentence of the description). Their full description and parameters reach the model only once their group is loaded:
 
 ```ts
 const engine = createEngine({
@@ -186,6 +186,7 @@ const engine = createEngine({
 ```
 
 - Engine packs come grouped: `schedules` (cron), `rag`, `code`, `web`, `browser` and `display`. Memory, skills, files, time, plans, questions and delegation are always offered.
+- Give folded tools a `summary` (one short line on what it is for). The list also tells the agent to use them instead of answering from memory: with only group names, agents rarely loaded anything.
 - `tools_load({ groups: [...] })` offers those groups from the next model call on. The system prompt never changes during a run, so prompt caches stay valid; only the tool list grows.
 - A conversation that already called a tool of a group starts with that group loaded, so follow-ups do not load it again. `RunOptions.toolGroups` (and `SubagentRunOptions.toolGroups`) load groups from the start.
 - A call to a grouped tool that was not loaded still runs, and loads its group.

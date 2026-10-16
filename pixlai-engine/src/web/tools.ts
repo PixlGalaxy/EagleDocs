@@ -78,6 +78,7 @@ async function renderInBrowser(browser: BrowserPort | undefined, ctx: ToolContex
 
 export const webSearch = defineTool<{ query: string; limit?: number }>({
   name: 'web_search',
+  summary: 'search the web for current information, news, docs and sources',
   description:
     'Search the web. Returns titles, URLs and snippets; open the promising ones with web_fetch. Write queries like a ' +
     'person would type them; search in English for broader results unless the topic is local.',
@@ -107,6 +108,7 @@ export const webSearch = defineTool<{ query: string; limit?: number }>({
 
 export const webFetch = defineTool<{ url: string; offset?: number; page?: number }>({
   name: 'web_fetch',
+  summary: 'read a web page or online PDF/DOCX as text',
   description:
     'Open a web page or online document (PDF, DOCX...) and read it as text, without a browser: articles, docs, syllabi, ' +
     `search results. Long content comes in parts of ${PAGE_CHARS} characters: pass next_offset to continue. Pages drawn by ` +
@@ -163,6 +165,7 @@ export const webFetch = defineTool<{ url: string; offset?: number; page?: number
 
 export const webDownload = defineTool<{ url: string; folder?: string }>({
   name: 'web_download',
+  summary: "save a file from the web into the user's files",
   description:
     "Save a file from the web (PDF, slides, a dataset...) into the user's files, by default TEMP/web/ (deleted after 24 h " +
     'when the workspace has that rule). Then read it with files_read, index it with rag_add or process it with code_run.',

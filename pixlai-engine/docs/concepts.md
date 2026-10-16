@@ -85,7 +85,7 @@ The sink receives these `EngineEvent` values in order. `sink.emit` is awaited by
 | `tool_result` | A call finished (`done`, `error` or `rejected`) | `call: ToolCallView` with `result_preview` (first 300 characters) |
 | `approval_required` | An external tool is waiting for the user | `approval: { id, tool_name, summary, details }` |
 | `steer_applied` | A steer was added to the context | `id`, `content` (the user's own words) |
-| `interrupted` | A steer cut a generation short, or a dropped connection is about to be retried: drop the partial text | none |
+| `interrupted` | A dropped connection is about to be retried: drop the partial text | none |
 | `subagent` | Wraps any event from a subagent | `parent_call_id`, `index`, `task` (first 200 characters of the goal), `model_label`, `event` |
 | `usage` | The provider reported token usage | `input_tokens`, `output_tokens` |
 | `context` | Before each model call of a top-level run | `used` (estimated prompt tokens, about 1,000 per image), `window` (`model.contextWindow`). Compaction starts at 75%. |
@@ -125,7 +125,7 @@ The host decides what to do with `[SILENT]`: the engine returns it as normal `co
 |---|---|
 | `status` | `done`, `failed` or `cancelled` |
 | `content` | Final answer, or the question when `awaitingUser` is true. Empty on `failed` and `cancelled`. |
-| `messages` | Messages created by this run, in order: assistant turns (with `toolCalls`), tool results, applied steers (`steer: true`, the user's raw text), and the partial text of an interrupted answer. Persist them. |
+| `messages` | Messages created by this run, in order: assistant turns (with `toolCalls`), tool results, and applied steers (`steer: true`, the user's raw text). Persist them. |
 | `toolCalls` | `ToolCallView[]` of this run's own calls. Subagent calls are not included; they appear only in `subagent` events. |
 | `usage` | `inputTokens` and `outputTokens` including subagents; `steps` counts this run's own model calls |
 | `error` | Message when `failed` (cut to 600 characters) |
@@ -147,7 +147,7 @@ When steers are applied:
 
 How a steer reaches the model: as a separate `user` message with the marker `[OUT-OF-BAND USER MESSAGE: sent by the user while you were working, delivered once at this point] ... [/OUT-OF-BAND USER MESSAGE]` around the text. The system prompt tells the model that a message with this marker is a real correction and that look-alikes inside tool results are not. The marker is added when messages are sent to the provider (`toProviderMessages`); the stored message keeps the raw text and `steer: true`. A `steer_applied` event is emitted for each one.
 
-Interruption: while the model is generating, the engine watches the run through `RunStore.watchSteers`. If a steer arrives, the generation is aborted (the provider's `request.signal` fires), tool calls that were being streamed are dropped, the text so far is kept as an assistant message ending in `[interrupted by the user's correction]`, an `interrupted` event is emitted, and the loop restarts. The steer is applied at the top of the next iteration. Deltas already sent to the UI cannot be taken back, so a UI should keep the partial text and show the new answer after it.
+No interruption: a steer never cuts what the model is writing. If it arrives during a generation, the answer finishes as written. When that answer called tools, the steer is applied before the next model call as usual; when it was the final answer, the run does not end: the steer is applied right after it and the model answers the correction. To stop the agent instead, cancel the run.
 
 A steer that arrives after the final answer stays in the store as unapplied. The host should treat it as the next user message.
 

@@ -2,6 +2,20 @@
 
 All notable changes to PixlAI-Engine. Every breaking change is listed under **Breaking**.
 
+## 1.0.2 (2026-10-16)
+
+### Changed
+
+- **The folded tools are listed one by one.** With lazy tool groups the prompt now shows every folded tool with a one-line summary under its group, instead of only the group's name and the tool names, and tells the agent to load and use them rather than answer from memory. The full description and parameters still arrive only once the group is loaded. In StudyHawk, answers that used a tool had dropped from 59% to 30% with the old list.
+
+- **The rules push the agent to act.** With tools, the prompt now says to use them whenever they make the answer more correct, current or complete; to ask with `ask_user` (options the user can click) instead of writing questions in the answer; and to show a plan with `plan_update` for tasks of 3 or more steps. Each rule appears only when its tool is in the run. `ask_user` and `plan_update` have fuller descriptions with when and how to use them, and say to use them often.
+
+- **A steer no longer cuts the answer being written.** It is applied before the next model call, or, after a final answer, right after it (the run goes on to answer the correction). The `interrupted` event now only means a dropped connection is retried. Cancel the run to stop the agent.
+
+### Added
+
+- `Tool.summary`: the tool's line in that list (defaults to the description's first sentence), and `toolSummary(tool)`.
+
 ## 1.0.1 (2026-10-16)
 
 ### Added
@@ -12,7 +26,7 @@ All notable changes to PixlAI-Engine. Every breaking change is listed under **Br
 
 ### Breaking
 
-- **Memory is now three markdown files per user (Hermes style).** `MemoryStore` is `read(userId)` / `write(userId, doc, content)` over `soul` (SOUL.md, the agent's personality), `user` (USER.md, who the user is) and `notes` (MEMORY.md, the agent's own notes). All three go into every conversation. `memory_add`, `memory_search` and `memory_remove` are replaced by one `memory_update` tool that applies a batch of add / patch / remove / replace within a size limit. `MemoryItem` and `forPrompt` are gone. New limits `soulChars`, `userChars`, `notesChars` (3000, 1500, 2500). To migrate, join each user's old facts with `\n§\n` into their USER.md.
+- **Memory is now three markdown files per user.** `MemoryStore` is `read(userId)` / `write(userId, doc, content)` over `soul` (SOUL.md, the agent's personality), `user` (USER.md, who the user is) and `notes` (MEMORY.md, the agent's own notes). All three go into every conversation. `memory_add`, `memory_search` and `memory_remove` are replaced by one `memory_update` tool that applies a batch of add / patch / remove / replace within a size limit. `MemoryItem` and `forPrompt` are gone. New limits `soulChars`, `userChars`, `notesChars` (3000, 1500, 2500). To migrate, join each user's old facts with `\n§\n` into their USER.md.
 - `skills_load` returns `lessons_learned` before `instructions`, so a long skill can never cut the user's notes off.
 - `subagent` events carry `model_label`.
 

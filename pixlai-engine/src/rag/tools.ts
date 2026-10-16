@@ -44,6 +44,7 @@ async function retrieve(ctx: ToolContext, name: unknown, query: string, k: numbe
 
 export const ragList = defineTool({
   name: 'rag_list',
+  summary: "the user's document collections (RAGs) and what they hold",
   description: "The user's RAG collections (and shared ones, as \"shared:<id>\") with what they contain.",
   parameters: { type: 'object', properties: {} },
   sideEffect: 'none',
@@ -67,6 +68,7 @@ export const ragList = defineTool({
 
 export const ragCreate = defineTool<{ name: string; description: string }>({
   name: 'rag_create',
+  summary: 'create a new collection to index documents into',
   description:
     'Create an empty RAG (a searchable index of documents), e.g. "ACG 2021 textbook". Then fill it with rag_add. ' +
     'Make one per subject or source so searches stay precise.',
@@ -95,6 +97,7 @@ export const ragCreate = defineTool<{ name: string; description: string }>({
 
 export const ragAdd = defineTool<{ rag: string; paths: string[] }>({
   name: 'rag_add',
+  summary: 'index files or whole folders (PDF, Word, slides...) into a collection',
   timeoutMs: ADD_TIMEOUT_MS,
   description:
     'Add files or whole folders to a RAG: their text is extracted (PDF, Word, PowerPoint, text...), split into chunks and ' +
@@ -269,6 +272,7 @@ async function embedAll(embeddings: EmbeddingPort, texts: string[], signal: Abor
 
 export const ragSearch = defineTool<{ rag: string; query: string; k?: number }>({
   name: 'rag_search',
+  summary: 'find the passages of a collection that match a query',
   description:
     'Find the passages of a RAG most related to a query. Returns the text with its source file and page, so you can ' +
     'quote and cite them. Use it instead of reading whole documents.',
@@ -289,6 +293,7 @@ export const ragSearch = defineTool<{ rag: string; query: string; k?: number }>(
 
 export const ragAsk = defineTool<{ rag: string; question: string; k?: number }>({
   name: 'rag_ask',
+  summary: 'answer a question from a collection, with citations',
   description:
     'Answer a specific question from a RAG in a separate call that only sees the best passages, and get the answer with ' +
     'citations. Keeps this conversation short when the material is long. Use rag_search instead when you need the raw passages.',
@@ -318,6 +323,7 @@ export const ragAsk = defineTool<{ rag: string; question: string; k?: number }>(
 
 export const ragDelete = defineTool<{ rag: string }>({
   name: 'rag_delete',
+  summary: 'delete a collection',
   description: "Delete one of the user's RAGs to free space (shared ones cannot be deleted).",
   parameters: { type: 'object', properties: { rag: { type: 'string' } }, required: ['rag'] },
   sideEffect: 'none',

@@ -12,6 +12,7 @@ function assertMayManage(ctx: ToolContext): void {
 
 export const cronCreate = defineTool<{ name: string; schedule: string; prompt: string; timezone?: string }>({
   name: 'cron_create',
+  summary: 'schedule a task for later or on repeat (reminders, weekly summaries)',
   description:
     'Schedule a task to run later or repeatedly, without the user present. When it runs, a fresh agent receives ' +
     '`prompt` with your tools and the result is delivered to the user. Write `prompt` so it is self-contained: ' +
@@ -54,6 +55,7 @@ export const cronCreate = defineTool<{ name: string; schedule: string; prompt: s
 
 export const cronList = defineTool({
   name: 'cron_list',
+  summary: "list the user's scheduled tasks",
   description: "List the user's scheduled tasks.",
   parameters: { type: 'object', properties: {} },
   sideEffect: 'none',
@@ -76,6 +78,7 @@ export const cronList = defineTool({
 
 export const cronUpdate = defineTool<{ id: string; name?: string; schedule?: string; prompt?: string; enabled?: boolean }>({
   name: 'cron_update',
+  summary: 'change, pause or resume a scheduled task',
   description: 'Change, pause (enabled=false) or resume a scheduled task.',
   parameters: {
     type: 'object',
@@ -111,6 +114,7 @@ export const cronUpdate = defineTool<{ id: string; name?: string; schedule?: str
 
 export const cronDelete = defineTool<{ id: string }>({
   name: 'cron_delete',
+  summary: 'delete a scheduled task',
   description: 'Delete a scheduled task.',
   parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
   sideEffect: 'none',
