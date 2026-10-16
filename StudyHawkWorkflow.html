@@ -1,0 +1,1442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StudyHawk Workflow</title>
+<meta name="description" content="Interactive architecture map of StudyHawk: every component, how they connect, and how a request travels through the system.">
+<style>
+  :root {
+    --bg: #f5f6f8; --fg: #1b1f24; --muted: #5b6470; --panel: #ffffff; --border: #d5dae1;
+    --accent: #0f766e; --accent-soft: #d8f0ed; --line: #7d8796; --off: #9aa3af; --plan: #a3abb6;
+    --hl: #d97706; --hl-soft: #fdecd3; --hot: #2563eb;
+    --c1: #e7f0ff; --c2: #e9f7ee; --c3: #f1ecfb; --c4: #fff4e5; --c5: #e0f5f2; --c6: #eef2ff; --c7: #fdecef;
+    --b1: #f4efe6; --b2: #eef3f5; --b3: #e9f1fb; --b4: #f3f4f6; --eng: #0f766e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --fg: #e6e9ee; --muted: #9aa4b2; --panel: #171b21; --border: #2b323d;
+      --accent: #2dd4bf; --accent-soft: #123a36; --line: #6f7a8c; --off: #6b7482; --plan: #5f6875;
+      --hl: #fbbf24; --hl-soft: #3a2c0c; --hot: #60a5fa;
+      --c1: #142339; --c2: #13261c; --c3: #201833; --c4: #2b2010; --c5: #0f2a28; --c6: #161d38; --c7: #2c1520;
+      --b1: #2a2418; --b2: #15252a; --b3: #14202e; --b4: #1c1f25; --eng: #2dd4bf;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --fg: #e6e9ee; --muted: #9aa4b2; --panel: #171b21; --border: #2b323d;
+    --accent: #2dd4bf; --accent-soft: #123a36; --line: #6f7a8c; --off: #6b7482; --plan: #5f6875;
+    --hl: #fbbf24; --hl-soft: #3a2c0c; --hot: #60a5fa;
+    --c1: #142339; --c2: #13261c; --c3: #201833; --c4: #2b2010; --c5: #0f2a28; --c6: #161d38; --c7: #2c1520;
+    --b1: #2a2418; --b2: #15252a; --b3: #14202e; --b4: #1c1f25; --eng: #2dd4bf;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; overflow: hidden; }
+  code, .mono { font-family: ui-monospace, Consolas, "Cascadia Mono", monospace; font-size: 12px; }
+  header { padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+  header h1 { font-size: 17px; margin: 0; }
+  header .sum { color: var(--muted); font-size: 12.5px; }
+  .tabs, .tools { display: flex; gap: 4px; flex-wrap: wrap; }
+  .tools { margin-left: auto; }
+  button { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 7px; padding: 5px 11px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.active { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+  main { flex: 1; min-height: 0; position: relative; }
+  .view { position: absolute; inset: 0; display: none; }
+  .view.on { display: block; }
+  .view.scroll { overflow-y: auto; padding: 20px 16px 60px; }
+  .wrapw { max-width: 1080px; margin: 0 auto; }
+  .muted { color: var(--muted); }
+  h2 { font-size: 20px; margin: 4px 0 8px; }
+  h3 { font-size: 15px; margin: 24px 0 8px; }
+  p { margin: 6px 0; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .pill { display: inline-block; font-size: 11.5px; border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; margin: 2px 4px 2px 0; background: var(--bg); }
+  .num { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; border-radius: 12px; padding: 0 6px; background: var(--accent); color: var(--bg); font-weight: 700; font-size: 12.5px; margin-right: 8px; flex: none; }
+  button.lnk { color: var(--accent); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; font: inherit; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .tablewrap { overflow-x: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+  pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin: 6px 0; }
+
+  /* ---- overview ---- */
+  .layers { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  .layer { border-radius: 12px; padding: 12px 14px; border: 1px solid var(--border); }
+  .layer h4 { margin: 0 0 4px; font-size: 14px; display: flex; align-items: center; }
+  .layer p { font-size: 13px; }
+  .layer code { overflow-wrap: anywhere; }
+  dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  dl.gloss dt { font-weight: 700; }
+  dl.gloss dd { margin: 0; }
+  @media (max-width: 640px) { dl.gloss { grid-template-columns: 1fr; } dl.gloss dd { margin-bottom: 6px; } }
+
+  /* ---- map ---- */
+  #svg { width: 100%; height: 100%; display: block; user-select: none; cursor: grab; touch-action: none; }
+  #svg.drag { cursor: grabbing; }
+  .region { stroke: var(--border); stroke-width: 1.2; }
+  .rc1 { fill: var(--c1); } .rc2 { fill: var(--c2); } .rc3 { fill: var(--c3); } .rc4 { fill: var(--c4); }
+  .rc5 { fill: var(--c5); stroke: var(--eng); stroke-width: 2.4; } .rc6 { fill: var(--c6); } .rc7 { fill: var(--c7); }
+  .rb1 { fill: var(--b1); } .rb2 { fill: var(--b2); } .rb3 { fill: var(--b3); } .rb4 { fill: var(--b4); stroke-dasharray: 6 5; }
+  .rnum { fill: var(--accent); } .rnumt { fill: var(--bg); font-weight: 800; font-size: 13px; }
+  .rlabel { font-size: 14px; font-weight: 700; fill: var(--fg); }
+  .rnote { font-size: 11px; fill: var(--muted); }
+  .rpath { font-size: 10.5px; fill: var(--muted); font-family: ui-monospace, Consolas, monospace; }
+  .nbox { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; }
+  .nlabel { font-size: 13px; font-weight: 700; fill: var(--fg); pointer-events: none; }
+  .nsub { font-size: 10.5px; fill: var(--muted); pointer-events: none; }
+  g.node { cursor: pointer; outline: none; }
+  g.node:hover .nbox, g.node:focus-visible .nbox, g.node.ends .nbox { stroke: var(--hot); stroke-width: 2.4; }
+  g.node.sel .nbox { stroke: var(--hl); stroke-width: 3; fill: var(--hl-soft); }
+  g.node.off .nbox { stroke: var(--off); stroke-dasharray: 6 4; }
+  g.node.plan .nbox { stroke: var(--plan); stroke-dasharray: 2 4; fill: transparent; }
+  g.node.off .nlabel, g.node.off .nsub, g.node.plan .nlabel, g.node.plan .nsub { opacity: .7; }
+  g.node.inflow .nbox { stroke: var(--hl); stroke-width: 2.2; }
+  g.node.dim { opacity: .22; }
+
+  /* Edges: square (orthogonal) lines, each on its own lane. Hover turns one blue; a highlight turns it amber. */
+  g.edge { cursor: pointer; }
+  g.edge .hit { fill: none; stroke: transparent; stroke-width: 12; pointer-events: stroke; }
+  g.edge .line { fill: none; stroke: var(--line); stroke-width: 1.5; stroke-linejoin: miter; stroke-linecap: butt; pointer-events: none; transition: stroke .12s, stroke-width .12s; }
+  g.edge .head { fill: var(--line); pointer-events: none; transition: fill .12s; }
+  g.edge .dot { fill: var(--line); pointer-events: none; }
+  g.edge.off .line { stroke: var(--off); stroke-dasharray: 6 4; }
+  g.edge.plan .line { stroke: var(--plan); stroke-dasharray: 2 4; }
+  g.edge.off .head, g.edge.off .dot { fill: var(--off); } g.edge.plan .head, g.edge.plan .dot { fill: var(--plan); }
+  g.edge.hl .line { stroke: var(--hl); stroke-width: 2.4; } g.edge.hl .head, g.edge.hl .dot { fill: var(--hl); }
+  g.edge.hot .line { stroke: var(--hot); stroke-width: 2.8; stroke-dasharray: none; }
+  g.edge.hot .head, g.edge.hot .dot { fill: var(--hot); }
+  g.edge.dim { opacity: .12; }
+  g.edge.dim.hot { opacity: 1; }
+  .badge-c { fill: var(--hl); } .badge-t { fill: var(--bg); font-size: 11px; font-weight: 800; pointer-events: none; }
+
+  #tip { position: fixed; z-index: 30; pointer-events: none; background: var(--panel); color: var(--fg); border: 1px solid var(--hot); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; max-width: 340px; box-shadow: 0 6px 20px rgba(0,0,0,.18); display: none; }
+  #tip .lab { color: var(--muted); display: block; margin-top: 2px; }
+
+  .legend { position: absolute; left: 12px; bottom: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; max-width: calc(100% - 24px); }
+  .legend svg { vertical-align: middle; margin-right: 4px; }
+
+  #panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(440px, 100%); background: var(--panel); border-left: 1px solid var(--border); overflow-y: auto; padding: 16px 18px 40px; transform: translateX(105%); transition: transform .18s ease; z-index: 10; }
+  #panel.open { transform: none; box-shadow: -10px 0 30px rgba(0,0,0,.12); }
+  #panel .close { position: sticky; top: 0; float: right; }
+  #panel ul { padding-left: 18px; margin: 4px 0; }
+  #panel li { margin: 3px 0; }
+  code.file { display: block; padding: 3px 8px; margin: 3px 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; word-break: break-all; }
+  .badge { display: inline-block; font-size: 11.5px; border-radius: 999px; padding: 1px 9px; font-weight: 600; }
+  .badge.on { background: var(--accent-soft); color: var(--accent); }
+  .badge.off { background: var(--hl-soft); color: var(--hl); }
+  .badge.plan { background: var(--bg); color: var(--muted); border: 1px dashed var(--border); }
+
+  #tour { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); width: min(620px, calc(100% - 24px)); background: var(--panel); border: 1px solid var(--hl); border-radius: 12px; padding: 12px 14px; box-shadow: 0 8px 26px rgba(0,0,0,.16); display: none; z-index: 9; }
+  #tour.on { display: block; }
+  #tour .row { display: flex; align-items: center; gap: 8px; }
+  #tour .row .sp { flex: 1; }
+  #tour h4 { margin: 0; font-size: 14px; }
+  #tour .ref { margin-top: 6px; color: var(--muted); font-size: 11.5px; }
+
+  /* ---- flows ---- */
+  .step { display: flex; gap: 4px; padding: 10px 0; border-top: 1px solid var(--border); }
+  .step:first-of-type { border-top: none; }
+  .step .body { flex: 1; min-width: 0; }
+  .step .ref { font-size: 11.5px; color: var(--muted); word-break: break-word; }
+
+  /* ---- deployment ---- */
+  .box { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--panel); }
+  .box.app { border-color: var(--accent); }
+  .box h4 { margin: 0 0 2px; font-size: 14px; }
+  .box .img { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--muted); display: block; margin-bottom: 6px; word-break: break-all; }
+  .box ul { margin: 4px 0 0; padding-left: 18px; font-size: 13px; }
+
+  @media (max-width: 640px) {
+    header { padding: 8px 12px; }
+    .tools { margin-left: 0; }
+    .legend { display: none; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>StudyHawk Workflow</h1>
+  <nav class="tabs" id="tabs">
+    <button data-tab="overview">Overview</button>
+    <button data-tab="map" class="active">Map</button>
+    <button data-tab="flows">Flows</button>
+    <button data-tab="deploy">Deployment</button>
+  </nav>
+  <span class="sum" id="summary"></span>
+  <div class="tools">
+    <button id="zIn" title="Zoom in">+</button>
+    <button id="zOut" title="Zoom out">−</button>
+    <button id="zFit" title="Fit the whole map">Fit</button>
+    <button id="themeBtn" title="Switch theme">Theme: auto</button>
+  </div>
+</header>
+<main>
+  <section class="view scroll" id="overviewView"><div class="wrapw" id="overview"></div></section>
+  <section class="view on" id="mapView">
+    <svg id="svg" role="img" aria-label="StudyHawk architecture map"></svg>
+    <div id="tour"></div>
+    <div class="legend">
+      <span><svg width="34" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--line)" stroke-width="1.6"/><path d="M26,1 L34,5 L26,9 z" fill="var(--line)"/></svg>connected</span>
+      <span><svg width="34" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--off)" stroke-width="1.6" stroke-dasharray="6 4"/><path d="M26,1 L34,5 L26,9 z" fill="var(--off)"/></svg>exists, not wired</span>
+      <span><svg width="34" height="10"><line x1="0" y1="5" x2="26" y2="5" stroke="var(--plan)" stroke-width="1.6" stroke-dasharray="2 4"/><path d="M26,1 L34,5 L26,9 z" fill="var(--plan)"/></svg>planned</span>
+      <span class="muted">Hover an arrow or a box · click a box for details · drag to pan · wheel to zoom</span>
+    </div>
+    <aside id="panel" aria-live="polite"><button class="close" id="closePanel" aria-label="Close">✕</button><div id="panelBody"></div></aside>
+  </section>
+  <section class="view scroll" id="flowsView"><div class="wrapw" id="flows"></div></section>
+  <section class="view scroll" id="deployView"><div class="wrapw" id="deploy"></div></section>
+</main>
+<div id="tip"></div>
+
+<script>
+/* =====================================================================
+   DATA. Checked against the code on 2026-10-16 (commit 0e29b32).
+   st: on = exists and is wired · off = exists but not wired · plan = does not exist yet
+   To add a box: push to NODES with a region id (r). To add an arrow: push [from, to, label, st] to EDGES.
+   The layout and the arrow routing are computed, so nothing here has coordinates.
+   ===================================================================== */
+const REVIEWED = '2026-10-16';
+
+/* Top band: columns 1-7 follow a request from left to right. */
+const COLS = [
+  { id: 'c1', n: '1', w: 250, label: 'Clients', path: 'frontend/src/', note: 'Who talks to StudyHawk',
+    about: 'The React 19 web app (installable as a PWA), and outside apps such as ChatGPT or Claude that use StudyHawk through MCP.' },
+  { id: 'c2', n: '2', w: 240, label: 'Entry', path: 'nginx.conf · entrypoint.sh', note: 'How each request gets in',
+    about: 'One container per machine runs nginx on :80 and Node on :4000, supervised by entrypoint.sh. nginx serves the SPA and proxies /api, /mcp and /oauth to Node.' },
+  { id: 'c3', n: '3', w: 280, label: 'Backend: Express API :4000', path: 'backend/src/modules/', note: 'The /api/* routes and their services',
+    about: 'Express 5. Middleware (session, CSRF, rate limits) then one router per module. Requests that would take long never run here: they become jobs.' },
+  { id: 'c4', n: '4', w: 260, label: 'Jobs and coordination', path: 'backend/src/modules/jobs/ · leader/ · nodes/', note: 'Long work runs here, on any replica',
+    about: 'A Postgres table is the queue. Every replica runs JOB_WORKERS loops that claim jobs, run the agent and write each event to job_events. Leader tasks run on one replica at a time.' },
+  { id: 'c5', n: '5', w: 300, label: 'PixlAI-Engine (separate package)', path: 'pixlai-engine/src/', note: 'Imports nothing from StudyHawk: gets ports and tools',
+    about: 'The agent itself: builds the prompt, calls the model, runs tools, compacts context and emits events. Stateless; everything it stores goes through ports the backend implements.' },
+  { id: 'c6', n: '6', w: 290, label: 'Tools the model sees · 66', path: 'pixlai-engine/src/*/tools.ts · backend/src/engine/tools/', note: 'What the agent can do',
+    about: '42 engine tools (files, RAG, web, code, browser, memory, schedules, helpers...) plus 24 StudyHawk tools (Canvas, school email, Degree Works, past chats, images). Most sit in lazy groups loaded on demand.' },
+  { id: 'c7', n: '7', w: 250, label: 'External services', path: '(outside the repo)', note: 'What StudyHawk calls over the network',
+    about: 'Model providers, Canvas, the school sites (Microsoft, Duo, Outlook, Degree Works), the web, Stripe, SMTP, browser push services and Discord.' },
+];
+
+/* Bottom band: what everything shares. from/to = which columns it spans. */
+const BOTTOM = [
+  { id: 'b1', n: 'A', from: 0, to: 2, label: 'Shared data (PostgreSQL)', path: 'backend/src/db/ · bus/ · engine/stores.ts', note: 'The only state the replicas share, besides /data',
+    about: 'Data, the job queue, events, the LISTEN/NOTIFY bus, advisory locks for leader tasks, settings and encrypted secrets. 28 migrations.' },
+  { id: 'b2', n: 'B', from: 3, to: 3, label: 'Shared disk /data', path: 'backend/src/engine/workspace.ts', note: 'Seen by every replica and every sandbox',
+    about: 'Each student\'s workspace (files, RAG indexes, browser profiles), a TEMP folder that empties itself after 24 h, and avatars.' },
+  { id: 'b3', n: 'C', from: 4, to: 5, label: 'Sandbox, web and browser', path: 'backend/src/modules/sandbox/ · engine/ · sandbox/', note: 'One Docker container per student for code and Chromium',
+    about: 'The backend starts one locked-down container per student through docker.sock. Inside, a runner on :7070 runs code and drives Chromium. Web fetches go through an SSRF guard.' },
+  { id: 'b4', n: 'D', from: 6, to: 6, label: 'Gaps and planned work', path: 'SECURITY.md · plans (local)', note: 'Not built yet, or built but not wired',
+    about: 'Things the map should not let you assume: shared course RAGs are not wired, the sandbox has no egress filter, there is no MCP client yet.' },
+];
+
+const NODES = [
+  /* ---------- 1 · Clients ---------- */
+  { id: 'fe-spa', r: 'c1', label: 'React SPA and routes', sub: 'main.tsx · App.tsx · contexts · lazy pages', st: 'on',
+    desc: 'The web app: React 19, react-router 7, Tailwind 4, Vite. Public pages (landing, legal, login, register, verify), protected pages (/chat, /courses, /files, /settings) and /admin for admins only.',
+    files: ['frontend/src/main.tsx', 'frontend/src/App.tsx', 'frontend/src/components/layout/routes.tsx', 'frontend/src/context/ (AppConfig, Auth, Theme)', 'frontend/src/i18n/ · locales/en.json · locales/es.json'],
+    det: ['Providers: AppConfig → Auth → I18n → Theme → Confirm. Auth sits outside I18n and Theme because language and look are account data.',
+      'AppConfig loads GET /api/config once: registration, beta test, institutions, billing, MCP, VAPID key, broadcast banner, status page.',
+      'ProtectedRoute redirects to /login; AdminRoute needs role admin. GuestRoute sends signed-in users to /chat.',
+      'Old eagledocs hostnames render only MovedPage.',
+      'npm run dev:mock swaps fetch, EventSource and XHR for an in-browser fake backend (frontend/src/api/mock/).',
+      'locales/ is shared with the backend; a missing key in es.json fails the build because the key type comes from en.json.'] },
+  { id: 'fe-chat', r: 'c1', label: 'Chat page', h: 70, sub: 'Composer · MessageView · approvals · questions · plan · workspace', st: 'on',
+    desc: 'Where the student talks to the agent. Sends messages, renders the live answer, lets the student steer, queue or stop while it works, approve actions, answer questions and browse files.',
+    files: ['frontend/src/pages/chat/ChatPage.tsx', 'frontend/src/pages/chat/ChatSidebar.tsx · TasksPanel.tsx · WorkspacePanel.tsx', 'frontend/src/components/chat/Composer.tsx · MessageView.tsx · ToolCallList.tsx', 'frontend/src/components/chat/ApprovalCard.tsx · QuestionCard.tsx · PlanDock.tsx', 'frontend/src/components/chat/BackgroundTasks.tsx · BackgroundReport.tsx', 'frontend/src/components/files/ (FilePreview, CodeEditor, DocumentViewer, SpreadsheetViewer)'],
+    det: ['Composer: up to 10 attachments (paste, drop, clip), dictation, model and reasoning pickers, context ring.',
+      'While busy, Enter steers, queues or interrupts depending on the user setting (busy_input).',
+      'Markdown with GFM, KaTeX math and lazy Mermaid; useSmoothText smooths the stream.',
+      'show_html pages render in a sandboxed iframe (allow-scripts only) served by the backend with its own CSP.',
+      'Sidebar polls GET /chats every 4 s while something runs (20 s otherwise); TasksPanel polls GET /jobs.',
+      'Workspace panel: folder tree, previews, text edit and save, attach to chat; reloads after each run.'] },
+  { id: 'fe-other', r: 'c1', label: 'Other pages', sub: 'Courses · Files · Settings (13 sections) · Admin (11 sections)', st: 'on',
+    desc: 'The rest of the app. Courses and files pages, user settings (account, appearance, connections, models, apps, notifications, schedules, memory, RAGs, browser, skills, usage, plan) and the admin panel (dashboard, users, institutions, models, sandbox, web search, email, push, billing, settings, logs).',
+    files: ['frontend/src/pages/courses/', 'frontend/src/pages/files/FilesPage.tsx', 'frontend/src/pages/settings/', 'frontend/src/pages/admin/'],
+    det: ['Admin → Logs streams every replica\'s logs live over SSE (/api/admin/logs/stream).',
+      'Settings → Apps lists and revokes MCP apps (ChatGPT, Claude).',
+      'Appearance also holds daily summary, export data and delete account.'] },
+  { id: 'fe-api', r: 'c1', label: 'API client and SSE', sub: 'api/client.ts · api/chat.ts · EventSource', st: 'on',
+    desc: 'Every call goes to the relative /api with the session cookie. Non-GET requests echo the csrf cookie in X-CSRF-Token. Chat answers arrive over EventSource.',
+    files: ['frontend/src/api/client.ts', 'frontend/src/api/chat.ts', 'frontend/src/api/types.ts'],
+    det: ['Errors become ApiError(status, error, code).',
+      'Stream: EventSource /api/chats/:id/stream?job=<id>. Closes on done or error; the browser reconnects with Last-Event-ID and the backend replays.',
+      'If GET /chats/:id returns active_job_id, the page re-attaches to the running job (closing the tab loses nothing).',
+      'Event types: status, model, delta, tool_call, tool_result, approval_required, mfa_required, steer_applied, interrupted, notice, plan, context, subagent, background_results, done, error.'] },
+  { id: 'fe-pwa', r: 'c1', label: 'PWA and notifications', sub: 'sw.js · manifest · push.ts', st: 'on',
+    desc: 'Installable app (standalone, starts at /chat). The service worker only shows push notifications and opens the right page; it caches nothing offline on purpose.',
+    files: ['frontend/public/sw.js', 'frontend/public/manifest.webmanifest', 'frontend/src/push.ts', 'frontend/src/pages/settings/NotificationsSection.tsx'],
+    det: ['Subscribes with the VAPID public key from /api/config and posts the subscription to /api/push/subscriptions.',
+      'Kinds: mfa_required (stays on screen), approval_required, job_done, broadcast, daily_summary.',
+      'Click focuses an open window or opens data.url.'] },
+  { id: 'mcp-client', r: 'c1', label: 'MCP apps: ChatGPT, Claude', sub: 'use StudyHawk as an app (OAuth 2.1)', st: 'on',
+    desc: 'Outside AI apps connect to StudyHawk as an MCP server. The student approves them once on a consent page and they can call a subset of tools (Canvas, files, RAG, code, memory).',
+    files: ['frontend/src/pages/auth/ConsentPage.tsx', 'backend/src/modules/mcp/'],
+    det: ['Off unless an admin turns on mcp.enabled.', 'Scopes: canvas.read, degreeworks.read, workspace, memory.'] },
+
+  /* ---------- 2 · Entry ---------- */
+  { id: 'balancer', r: 'c2', label: 'Dev balancer', sub: 'nginx:alpine :8080 → node-a, node-b', st: 'on',
+    desc: 'Only in docker-compose.dev.yml: round-robin over two replicas so multi-replica paths (shared sessions, NOTIFY, advisory locks) get exercised locally. In production you bring your own TLS proxy.',
+    files: ['docker-compose.dev.yml'], det: ['proxy_buffering off and a 3600 s read timeout so SSE works through it.'] },
+  { id: 'ngx', r: 'c2', label: 'nginx :80 (each replica)', h: 70, sub: 'serves the SPA · /api, /mcp, /oauth → 127.0.0.1:4000', st: 'on',
+    desc: 'Serves the built SPA from /usr/share/nginx/html and proxies the API to Node on loopback. Sets the security headers and the CSP.',
+    files: ['nginx.conf'],
+    det: ['/api/: HTTP/1.1, buffering and cache off, 3600 s timeouts for SSE, client_max_body_size 25m.',
+      '/mcp, /oauth/{authorize,token,register,revoke}, /.well-known/oauth-* and openid-*: proxied with a 300 s timeout.',
+      '/assets/ cached 1 year (immutable); /sw.js no-cache; everything else falls back to index.html.',
+      'Strict CSP (self only) except for show_html pages, where the backend sends its own sandbox CSP.',
+      'Access log goes to stdout and /tmp/nginx-access.log, which the backend tails into Admin → Logs.'] },
+  { id: 'sup', r: 'c2', label: 'Container supervisor', sub: 'tini → entrypoint.sh: nginx + node', st: 'on',
+    desc: 'PID 1 is tini, which runs entrypoint.sh. It starts nginx and the Node backend, checks both every 2 s and restarts whichever died.',
+    files: ['entrypoint.sh', 'Dockerfile'],
+    det: ['More than 8 restarts in 60 s kills the other process and exits 1, so Docker can react.',
+      'Writes [ENTRYPOINT] lines to stdout and /tmp/entrypoint.log (tailed into Admin → Logs).',
+      'HEALTHCHECK: GET 127.0.0.1:4000/api/health (also checks the database) every 30 s.'] },
+
+  /* ---------- 3 · Backend ---------- */
+  { id: 'be-app', r: 'c3', label: 'index.ts + app.ts', h: 70, sub: 'startup · middleware: session, CSRF, rate limits · mounts /api/*', st: 'on',
+    desc: 'index.ts wires every service by hand (no DI container) and starts the worker and leader tasks. app.ts builds Express: request log → Stripe webhook (raw body) → JSON 1 MB → MCP/OAuth open routes → cookies → session → CSRF → routers → errors.',
+    files: ['backend/src/index.ts', 'backend/src/app.ts', 'backend/src/middleware/ (csrf, rate-limit, error-handler, request-logger)', 'backend/src/modules/auth/session.middleware.ts', 'backend/src/config/env.ts · trust-proxy.ts'],
+    det: ['CSRF: refuses cross-site Sec-Fetch-Site on writes, then a double-submit cookie (csrf, or __Host-csrf when COOKIE_SECURE is on) vs X-CSRF-Token (timingSafeEqual).',
+      'Session cookie: HttpOnly, SameSite=Lax, 32-byte token; only its sha256 is stored in sessions.',
+      'Rate limits are a fixed-window upsert in the rate_limits table, shared by all replicas.',
+      'Errors: AppError → JSON {error, code} translated to the request language.',
+      'GET /api/health (SELECT 1), GET /api/status (status page), GET /api/config (frontend settings).',
+      'Shutdown on SIGTERM: close server → stop worker → stop sandboxes → stop bus → flush logs → close pool (forced after 10 s).'] },
+  { id: 'be-auth', r: 'c3', label: 'Auth, users, institutions', sub: 'argon2id · email verify · domain → school', st: 'on',
+    desc: 'Login, logout, sign-up with email verification (link or 6-digit code), password reset and change, profile and appearance. Sign-up needs an email whose domain belongs to an enabled institution.',
+    files: ['backend/src/modules/auth/', 'backend/src/modules/users/', 'backend/src/modules/institutions/', 'backend/src/modules/avatars/'],
+    det: ['Routes: /api/auth/{login, logout, register, verify, resend-verification, forgot-password, reset-password, change-password, delete-account, me, profile, appearance}.',
+      'Login of an unknown user still checks a dummy hash, so timing reveals nothing.',
+      'Registration is closed while the beta test is on, when registration is off, or when SMTP is not set.',
+      'Verification TTL 72 h from creation (resending does not extend it), max 5 wrong codes. Reset links last 60 min.',
+      'First admin from ADMIN_* env vars (only when no admin exists). Dev seeds admin/admin and user/user.',
+      'Institutions: Canvas, Degree Works, SSO and Outlook URLs, email domains, per-school skill switches.',
+      'Avatars: 5 MB, png/jpeg/webp/gif, stored on /data/assets/avatars.'] },
+  { id: 'be-chat', r: 'c3', label: 'Chat API', h: 70, sub: 'messages · stream (SSE) · steer · cancel · approvals · fork · versions', st: 'on',
+    desc: 'Stores chats and messages and turns each message into a job. Also serves the SSE stream, which reads job_events from the database, so it works from any replica.',
+    files: ['backend/src/modules/chat/chat.routes.ts (chats, jobs, approvals routers)', 'backend/src/modules/chat/chat.service.ts (history, saveRun)', 'backend/src/modules/chat/attachments.ts · titles.ts · chat-search.ts · chat-versions.ts'],
+    det: ['POST /api/chats/:id/messages: 409 if a job is active; else one transaction locks the chat row, saves the message and inserts a chat job, then NOTIFY job_queued.',
+      'Message max 20,000 characters. Attachments move into the chat folder Chats/<id>.',
+      'GET /:id/stream?job=: SSE with id = seq, ping every 20 s, retry 3000, resumes from Last-Event-ID, 5 s poll as safety net.',
+      'Jobs: GET /api/jobs, POST /:id/cancel, /:id/retry, /:id/steer (max 2000 chars, 5 pending). Approvals: POST /api/approvals/:id/approve|reject.',
+      'Also: fork, edit with versions, regenerate, compact, chat info, show_html pages.',
+      'Titles come from a quick model in the background.'] },
+  { id: 'be-models', r: 'c3', label: 'Models: catalog and Auto', h: 70, sub: 'ModelCatalog · routeTier · providers/* · quotas', st: 'on',
+    desc: 'Lists the models a student can pick, resolves "Auto" to a tier (fast, smart, code, vision), builds the provider for the chosen model and checks the daily message quota for StudyHawk-hosted models.',
+    files: ['backend/src/modules/models/catalog.ts', 'backend/src/modules/models/router.ts', 'backend/src/modules/models/providers/ (ollama, openai-compat, anthropic, codex, codex-auth, http)', 'backend/src/modules/models/images.ts · vision.ts · models.routes.ts'],
+    det: ['Ref format provider:source:model. Providers: studyhawk (hosted, Admin → Models), codex (ChatGPT account), openai_compat (OpenAI, DeepSeek, OpenRouter, Gemini, custom), anthropic.',
+      'Auto: image → vision; code keywords → code; small talk → fast; score ≥ 45 → smart.',
+      'Codex guard: one request per account at a time across replicas; 3 accounts blocked in 10 min pause Codex for everyone for 6 h.',
+      'Context windows: Codex 272k, Anthropic 200k, OpenAI-compatible 128k, hosted from the admin setting.',
+      'Also picks helper models, the vision model and the image generator.'] },
+  { id: 'be-conn', r: 'c3', label: 'Connections', sub: 'Canvas token · SSO · API keys · ChatGPT device login', st: 'on',
+    desc: 'Per-student credentials, encrypted with MASTER_KEY: Canvas token, school SSO account, Degree Works, ChatGPT/Codex tokens and model API keys.',
+    files: ['backend/src/modules/connections/connections.service.ts', 'backend/src/modules/models/models.routes.ts (/api/connections)'],
+    det: ['An API key is saved only after the provider lists its models. Max 10 keys.',
+      'Codex token refresh runs under a row lock because refresh tokens are single use.',
+      'Status per connection: ok, error, untested, waiting_mfa.'] },
+  { id: 'be-canvas', r: 'c3', label: 'Canvas service', sub: 'GET only · course folders · priority', st: 'on',
+    desc: 'Read-only Canvas REST client. Courses, upcoming work, modules, pages, files, submissions and search for the agent, the Courses page, MCP and the daily summary.',
+    files: ['backend/src/modules/canvas/canvas.client.ts · canvas.service.ts · canvas.routes.ts', 'backend/src/modules/canvas/course-spaces.ts · priority.ts · canvas-search.ts'],
+    det: ['100 per page, follows Link rel=next on the same origin only, max 20 pages, 30 s timeout, retries 429/5xx.',
+      '60 s cache per student. A 401/403 marks the connection as error.',
+      'Course spaces: <Term>/<Course>/{Canvas, Work, Assignments, Notes} in the workspace, re-checked every 10 min.',
+      'Priority = 0.45 urgency + 0.25 weight + 0.20 effort + 0.10 status.',
+      'Downloads capped at 150 MB; the token is only sent to the Canvas origin.'] },
+  { id: 'be-school', r: 'c3', label: 'School account', sub: 'Microsoft + Duo · Outlook · Degree Works', st: 'on',
+    desc: 'Signs in to Outlook Web and Degree Works with the student\'s saved school account, using Chromium in their sandbox. Detects each page (email, password, Duo, "stay signed in"...) and acts on it.',
+    files: ['backend/src/modules/school/school.service.ts'],
+    det: ['Up to 40 steps per sign-in; waits up to 3 min for the Duo push (emits mfa_required).',
+      'The password goes from the database to the page and is never shown to the model.',
+      'Cookies persist in /workspace/.browser/school-outlook and school-degreeworks.',
+      'Outlook: inbox, search, read, send (checks Sent afterwards). Degree Works: audit text.'] },
+  { id: 'be-agentdata', r: 'c3', label: 'Memory, skills, schedules, files', sub: '/api/memories · skills · schedules · files · rags', st: 'on',
+    desc: 'The student-facing side of agent data: SOUL.md, USER.md, MEMORY.md, their own skills, scheduled tasks, the workspace file browser and RAG collections.',
+    files: ['backend/src/modules/agent-data/agent-data.routes.ts', 'backend/src/modules/files/files.routes.ts · image-notes.ts', 'backend/src/modules/skills/builtin.ts', 'backend/skills/*/SKILL.md (12 built-in skills)'],
+    det: ['12 built-in skills; some need Canvas, Outlook or Degree Works. Schools can switch skills off; students choose theirs.',
+      'Up to 50 user skills. Schedules are limited by the plan.',
+      'Uploads up to 100 MB (busboy).'] },
+  { id: 'be-billing', r: 'c3', label: 'Plans and Stripe', sub: 'tiers · checkout · portal · webhook', st: 'on',
+    desc: 'Plans (tiers) set every limit: daily messages, sandbox CPU/RAM/disk, compute units, background jobs, schedules, helpers, MCP quotas. Stripe Checkout and Portal change them; the webhook keeps them in sync.',
+    files: ['backend/src/modules/billing/billing.service.ts · billing.routes.ts · tiers.service.ts'],
+    det: ['Webhook: HMAC-SHA256 signature, 300 s tolerance, deduplicated in stripe_events, stale events ignored.',
+      'Failed payment starts a grace period (default 3 days); the billing-grace leader task drops the plan after it.',
+      'effective_tier(user_id) in SQL picks the plan. Limits cached 15 s per replica.',
+      'Billing is on only when both the secret key and the webhook secret are saved.'] },
+  { id: 'be-push', r: 'c3', label: 'Web push and daily summary', sub: 'own VAPID + RFC 8291 · broadcasts', st: 'on',
+    desc: 'Web Push written from scratch (aes128gcm payloads, ES256 VAPID JWT). Sends job done, approval needed, Duo needed, admin broadcasts and a morning "due today" summary.',
+    files: ['backend/src/modules/push/push.service.ts · webpush.ts · push.routes.ts · daily-summary.ts'],
+    det: ['Max 10 devices per student. 404/410 from the push service deletes the subscription.',
+      'mfa_required: TTL 300 s, high urgency. Others: TTL 24 h.',
+      'job_done and approval_required only go out when nobody watched the stream in the last 45 s.',
+      'Daily summary: at the chosen local hour, Canvas items due today or tomorrow, at most once per day.'] },
+  { id: 'be-mcp', r: 'c3', label: 'MCP server + OAuth', sub: '/mcp · /oauth/* · /.well-known', st: 'on',
+    desc: 'StudyHawk as an OAuth 2.1 authorization server and a stateless MCP server over Streamable HTTP. Runs the same engine tools through callTool.',
+    files: ['backend/src/modules/mcp/mcp.routes.ts · mcp.server.ts · oauth.service.ts'],
+    det: ['Dynamic client registration, PKCE S256 required, access token 1 h, refresh 30 days with rotation (reuse revokes the grant).',
+      'Limits: 240 requests/min per grant, 60 tool calls/min, plus daily plan quotas (mcp_daily_calls, mcp_daily_code_runs).',
+      'Exposes canvas_*, degreeworks_audit, files_*, rag_*, code_run, memory_update, skills_load, plus memory_read, skills_list, skill prompts and studyhawk://profile.',
+      'Every tool call is written to audit_log (without its arguments).'] },
+  { id: 'be-admin', r: 'c3', label: 'Admin, settings and logs', sub: '/api/admin/* · logs of every replica', st: 'on',
+    desc: 'The admin API: users, institutions, models and endpoints, sandbox limits, SMTP, web search keys, push, billing, general settings, nodes and the cluster-wide log viewer.',
+    files: ['backend/src/modules/admin/', 'backend/src/modules/logs/ (log-shipper, file-tailer, logs.routes)', 'backend/src/modules/status/status-page.ts', 'backend/src/modules/usage/usage.routes.ts'],
+    det: ['The last active admin cannot be demoted, disabled or deleted.',
+      'Every admin change goes to audit_log.',
+      'Logs: each replica ships its log buffer to app_logs every second (kept 7 days / 100k rows); the viewer streams app_logs over SSE.'] },
+  { id: 'be-misc', r: 'c3', label: 'Feedback, export, deletion', sub: 'contact form · beta bug reports · ZIP export · 30-day delete', st: 'on',
+    desc: 'Public contact form (email + Discord), the beta-test bug report button (Discord, with screenshot), the full data export as a streamed ZIP, and account deletion with a 30-day undo.',
+    files: ['backend/src/modules/contact/', 'backend/src/modules/beta-report/', 'backend/src/modules/export/ (export.service, zip-stream)', 'backend/src/modules/users/account-deletion.ts'],
+    det: ['Bug reports only work while the beta test is on and a webhook is set; 5/h and 15/day per user; screenshot ≤ 8 MB, type checked by magic bytes.',
+      'Export: profile, schedules, skills, memory docs, chats and all files; never hashes, tokens or encrypted columns. 3 per hour.',
+      'Deletion cancels Stripe, revokes sessions, OAuth grants and push, stops jobs and the sandbox; purged after 30 days unless the student signs in again.'] },
+
+  /* ---------- 4 · Jobs and coordination ---------- */
+  { id: 'job-queue', r: 'c4', label: 'jobs table', sub: 'chat · scheduled · delegate · one at a time per chat', st: 'on',
+    desc: 'The queue. A request inserts a row and NOTIFYs job_queued; the HTTP request ends right there.',
+    files: ['backend/src/db/migrations/0003_chat_agent.sql (and later)', 'backend/src/modules/jobs/worker.ts'],
+    det: ['Kinds: chat, scheduled, delegate (background helpers).',
+      'Statuses: queued → running / waiting_approval / waiting_mfa → done / failed / cancelled / interrupted.',
+      'A trigger (jobs_prefer_sandbox_node) sets preferred_node to the replica holding the student\'s sandbox.'] },
+  { id: 'job-worker', r: 'c4', label: 'JobWorker', h: 70, sub: 'JOB_WORKERS=4 loops per replica · claim → run → save', st: 'on',
+    desc: 'Claims a job with FOR UPDATE SKIP LOCKED, loads history, resolves the model, builds the run notes and calls engine.forUser().run(). Saves the turn and records usage at the end.',
+    files: ['backend/src/modules/jobs/worker.ts'],
+    det: ['Claim rules: preferred replica gets 5 s head start; never two running jobs in one chat; the student\'s running count must be under the plan\'s max_background_jobs.',
+      'Wakes on job_queued; otherwise polls every 2 s. Heartbeat every 15 s on jobs it runs.',
+      'Cancel: job_control NOTIFY aborts the local AbortController; the partial answer is kept with meta.stopped.',
+      'Background helpers: max 2 delegate jobs per chat; their reports come back as a new chat job.',
+      'Steers that arrive after the final answer become the next message.'] },
+  { id: 'job-events', r: 'c4', label: 'job_events + JobEventWriter', sub: 'every event in Postgres · resumable SSE', st: 'on',
+    desc: 'Every engine event is written to job_events with a sequence number, then NOTIFY job_events. Any replica\'s stream handler reads the new rows and sends them to the browser.',
+    files: ['backend/src/modules/jobs/event-writer.ts', 'backend/src/modules/chat/chat.routes.ts (stream)'],
+    det: ['Text deltas are merged and flushed every 100 ms; other events are written right away in batches.',
+      'usage events stay out of the stream.',
+      'Events are pruned 24 h after the job finishes.'] },
+  { id: 'job-control', r: 'c4', label: 'Steers and approvals', sub: 'job_steers · approvals · NOTIFY job_control', st: 'on',
+    desc: 'How the student reaches a running job: a steer (a correction mid-answer), a cancel, or an approve/reject decision. Each is a row plus a NOTIFY that wakes the engine wherever the job runs.',
+    files: ['backend/src/engine/stores.ts (PgRunStore)', 'backend/src/modules/chat/chat.routes.ts (jobs, approvals)'],
+    det: ['The engine takes steers at its next safe point (before a model call) and aborts the current generation.',
+      'Approvals wait up to 24 h; a 15 s poll backs up the NOTIFY.'] },
+  { id: 'scheduler', r: 'c4', label: 'Scheduler', sub: 'every minute · due schedules → scheduled jobs', st: 'on',
+    desc: 'Leader task that finds due schedules (cron_create), adds the prompt as a message to the schedule\'s chat and queues a scheduled job.',
+    files: ['backend/src/modules/jobs/scheduler.ts', 'pixlai-engine/src/cron/schedule.ts'],
+    det: ['Skips a run if the previous one is still active.', 'An answer of exactly [SILENT] is stored silently and sends no push.', 'Minimum interval 15 minutes.'] },
+  { id: 'leader', r: 'c4', label: 'Leader tasks', h: 70, sub: '8 tasks · each on one replica per cycle (advisory locks)', st: 'on',
+    desc: 'No elected leader: each periodic task takes its own pg_try_advisory_lock and whoever wins runs that cycle.',
+    files: ['backend/src/leader/leader.ts', 'backend/src/db/tx.ts (LOCKS)', 'backend/src/index.ts'],
+    det: ['job-reaper 10 s: jobs with no heartbeat for 40 s become interrupted.',
+      'scheduler 1 min · daily-summary 1 min · temp-sweep 15 min · pending-cleanup 15 min.',
+      'housekeeping 1 h: sessions, rate limits, nodes, logs, job events, OAuth rows.',
+      'billing-grace 1 h · account-purge 1 h.'] },
+  { id: 'nodes', r: 'c4', label: 'Replicas (nodes)', sub: 'NODE_ID · heartbeat 15 s · offline after 60 s', st: 'on',
+    desc: 'Each replica upserts itself into nodes and heartbeats. Used for the admin view, for job affinity and to take over sandboxes of a dead replica.',
+    files: ['backend/src/nodes/nodes.ts'], det: ['NODE_ID defaults to the container hostname.'] },
+
+  /* ---------- 5 · Engine ---------- */
+  { id: 'eng-create', r: 'c5', label: 'createEngine · forUser()', sub: 'packs depend on which ports the host gives', st: 'on',
+    desc: 'Created once per process with the ports, the base prompt and the host tools. forUser() returns run, callTool, runSubagents and the tool list for one student, with their limits.',
+    files: ['pixlai-engine/src/engine.ts', 'backend/src/engine/setup.ts'],
+    det: ['A tool pack is registered only if its ports exist (no sandbox → no code_run or browser).',
+      'StudyHawk passes lazyToolGroups: true, displays [html] and the "Hawk" base prompt.',
+      'Limits: DEFAULT_LIMITS < engine options < the student\'s plan.'] },
+  { id: 'eng-prompt', r: 'c5', label: 'buildSystemPrompt', sub: 'base → SOUL → user → USER/MEMORY → skills → rules', st: 'on',
+    desc: 'Built once per run and kept byte-stable so providers can cache it. Anything that changes mid-run travels as a message instead.',
+    files: ['pixlai-engine/src/agent/prompt.ts'],
+    det: ['Order: base prompt, SOUL.md, about the user, USER.md, MEMORY.md, memory instructions, skills list, rules, extras (workspace, sandbox, helper models, tool groups, host notes, scheduled note), date.',
+      'Steers are wrapped as [OUT-OF-BAND USER MESSAGE]; images become a note for models without vision.'] },
+  { id: 'eng-loop', r: 'c5', label: 'runLoop', sub: 'model → tools → model · max 20 steps', st: 'on',
+    desc: 'The agent loop. Each step: apply steers, check budget, compact if needed, stream the model, run the tool calls, repeat until the model answers without tools.',
+    files: ['pixlai-engine/src/agent/loop.ts'],
+    det: ['Transient errors (5xx, 429, network) retry after 1 s and 4 s.',
+      'Out of steps or tokens: one last call with no tools asks for a summary.',
+      'Empty reply: nudges the model once.',
+      'ask_user ends the run after the batch; the answers arrive as the next message.'] },
+  { id: 'eng-compact', r: 'c5', label: 'Compaction', sub: '> 75 % of the window: clear old tool output, then summarize', st: 'on',
+    desc: 'Before every model call. First clears old tool outputs (keeps the newest 6); if still too big, summarizes the middle with the same model and keeps the last 12 messages.',
+    files: ['pixlai-engine/src/agent/compact.ts'],
+    det: ['Token estimate: chars / 4 + 16 per message + 4000 chars per image.', 'Summary ≤ 400 words. The compact button uses compactHistory.'] },
+  { id: 'eng-registry', r: 'c5', label: 'ToolRegistry + gates', h: 70, sub: 'parallel batches · approvals · timeouts · untrusted wrapping', st: 'on',
+    desc: 'Runs the tool calls of a step. Consecutive parallel-safe calls run together (max 8); the rest one by one. Each call passes its gate: run, ask for approval, or refuse.',
+    files: ['pixlai-engine/src/tools/tool.ts', 'pixlai-engine/src/tools/groups.ts', 'pixlai-engine/src/agent/loop.ts (executeCall)'],
+    det: ['sideEffect external (for example email_send) always asks for approval.',
+      'Results are clipped to 20,000 chars; third-party content is wrapped in <untrusted_content>.',
+      'Timeout per tool: its own or 60 s.',
+      'Lazy groups: the model sees ungrouped tools plus tools_load; a group loads on request or when one of its tools is called.'] },
+  { id: 'eng-delegate', r: 'c5', label: 'agent_delegate (helpers)', sub: 'now (in parallel) or in the background', st: 'on',
+    desc: 'The agent splits work into up to 3 helper tasks. Helpers are child loops with read-only tools, no memory and a shared token budget. Background helpers become delegate jobs.',
+    files: ['pixlai-engine/src/agent/delegate.ts', 'pixlai-engine/src/agent/loop.ts (spawn)'],
+    det: ['Helpers only get tools with sideEffect none and not mainAgentOnly; depth up to 2.', 'Each report is cut to 8000 chars.', 'Helper events reach the UI wrapped as subagent events.'] },
+  { id: 'eng-calltool', r: 'c5', label: 'callTool()', sub: 'one tool without the loop (for MCP)', st: 'on',
+    desc: 'Runs one tool outside a conversation. Tools that would need approval are refused.',
+    files: ['pixlai-engine/src/engine.ts', 'pixlai-engine/src/agent/loop.ts (runToolOnce)'] },
+  { id: 'eng-model', r: 'c5', label: 'ModelProvider port', sub: 'stream(): text · tool_call · usage · done', st: 'on',
+    desc: 'The only way the engine talks to a model. The backend chooses and builds the provider; the engine just streams.',
+    files: ['pixlai-engine/src/types.ts', 'backend/src/modules/models/providers/'] },
+  { id: 'eng-events', r: 'c5', label: 'EngineEvent sink', sub: 'delta · tool_call · approval · plan · context · subagent', st: 'on',
+    desc: 'Every visible thing the agent does leaves as an event through the sink the host passes in. The worker writes them to job_events.',
+    files: ['pixlai-engine/src/types.ts'],
+    det: ['status, model, delta, usage, context, notice, tool_call, tool_result, approval_required, steer_applied, interrupted, questions, plan, notify, display, subagent, mfa_required (from host tools).'] },
+  { id: 'eng-ports', r: 'c5', label: 'Ports (ports.ts)', sub: 'what the engine asks the host for', st: 'on',
+    desc: 'Interfaces the host implements. Required: RunStore, MemoryStore, SkillStore, ScheduleStore. Optional, each unlocking a tool pack: Workspace, TextExtractor, Embeddings, SharedRagSource, Sandbox, Search, Fetch, Browser, BrowserPolicy.',
+    files: ['pixlai-engine/src/ports.ts', 'pixlai-engine/src/memory-stores.ts (in-memory versions for tests)'] },
+
+  /* ---------- 6 · Tools ---------- */
+  { id: 't-core', r: 'c6', label: 'Core · 10', sub: 'time_now · calc · plan_update · ask_user · notify · memory_update · skills_load · skills_note · tools_load · agent_delegate', h: 72, st: 'on',
+    desc: 'Always available. calc is a hand-written parser (no eval). memory_update edits SOUL.md, USER.md and MEMORY.md in one batch. plan_update shows a plan in the chat; ask_user shows question cards.',
+    files: ['pixlai-engine/src/tools/core.ts · builtin.ts · memory.ts · calc.ts · groups.ts', 'pixlai-engine/src/agent/delegate.ts'] },
+  { id: 't-cron', r: 'c6', label: 'Schedules · 4', sub: 'cron_create · list · update · delete', st: 'on',
+    desc: 'Lets the student say "every Monday at 8, summarize what is due". Cron, "every N", or a one-off date, in the student\'s timezone. Only chat runs can create schedules.',
+    files: ['pixlai-engine/src/cron/tools.ts · schedule.ts'], det: ['Max schedules from the plan (default 10). Minimum 15 minutes apart.'] },
+  { id: 't-files', r: 'c6', label: 'Files · 8', sub: 'files_list · read · write · mkdir · move · delete · search · usage', st: 'on',
+    desc: 'The student\'s workspace. Reads PDFs, Word, PowerPoint and HTML through the text extractor.',
+    files: ['pixlai-engine/src/tools/files.ts'], det: ['Reads 15,000 chars per call; writes ≤ 1 MB; search walks ≤ 2000 files.', '.rag is reserved; paths with .. are refused.'] },
+  { id: 't-rag', r: 'c6', label: 'RAG · 6', sub: 'rag_list · create · add · search · ask · delete', st: 'on',
+    desc: 'Collections of the student\'s documents for search with citations. No vector database: three files per collection in .rag/<id>/ and an exact dot-product search.',
+    files: ['pixlai-engine/src/rag/store.ts · tools.ts'], det: ['Chunks of 1200 chars with 200 overlap; embeddings in batches of 32.', 'Skips unchanged and near-duplicate files; resumable after 15 min.'] },
+  { id: 't-web', r: 'c6', label: 'Web · 3', sub: 'web_search · web_fetch · web_download', st: 'on',
+    desc: 'Search through a chain of providers, fetch a page as text (falls back to the sandbox browser for blocked or empty pages), download files to TEMP/web.',
+    files: ['pixlai-engine/src/web/tools.ts · search-chain.ts · html.ts'], det: ['web_fetch cap 10 MB; web_download cap 100 MB.'] },
+  { id: 't-code', r: 'c6', label: 'Code · 1', sub: 'code_run: Python (default), Node, shell', st: 'on',
+    desc: 'Runs code in the student\'s sandbox with the workspace as its working folder. Python has PDF, Word, PowerPoint, Excel, pandas and matplotlib libraries.',
+    files: ['pixlai-engine/src/tools/code.ts'], det: ['Timeout 60 s by default, max 300 s. Output 8000 chars per stream, cut from the middle.'] },
+  { id: 't-browser', r: 'c6', label: 'Browser · 9', sub: 'browser_open · snapshot · click · type · press · scroll · back · screenshot · close', h: 72, st: 'on',
+    desc: 'Drives Chromium in the sandbox. Snapshots are a text outline where each control has a ref [@eN]. click, type and press pass the browser policy.',
+    files: ['pixlai-engine/src/browser/tools.ts'], det: ['Profiles are cookie jars (default, reader, school-*).', 'Main agent only, never helpers.'] },
+  { id: 't-display', r: 'c6', label: 'Display · 1', sub: 'show_html: an HTML page in the chat', st: 'on',
+    desc: 'The agent can show up to 3 HTML pages per answer. The backend serves them with a CSP that blocks the network, inside a sandboxed iframe.',
+    files: ['pixlai-engine/src/tools/display.ts'] },
+  { id: 't-canvas', r: 'c6', label: 'Canvas (host) · 13', sub: 'canvas_courses · upcoming · briefing · assignment · announcements · find + lazy group: course · modules · files · download · save_pages · page · submissions', h: 84, st: 'on',
+    desc: 'StudyHawk tools over the Canvas service. Six everyday ones are always visible; the rest load with the canvas group.',
+    files: ['backend/src/engine/tools/canvas.ts'] },
+  { id: 't-school', r: 'c6', label: 'School (host) · 6', sub: 'email_inbox · search · read · draft · send · degreeworks_audit', st: 'on',
+    desc: 'Outlook and Degree Works through the school account. email_send always asks for approval. Hidden when the school does not offer the service.',
+    files: ['backend/src/engine/tools/school.ts'] },
+  { id: 't-chats', r: 'c6', label: 'Chats and images (host) · 5', sub: 'chats_search · chats_read · image_generate · image_view · images_search', st: 'on',
+    desc: 'Search and read past chats (full-text over messages), make images (Codex or an OpenAI key) and look at images with a vision model.',
+    files: ['backend/src/engine/tools/chats.ts · images.ts · vision.ts'] },
+
+  /* ---------- 7 · External ---------- */
+  { id: 'ext-ollama', r: 'c7', label: 'Ollama', sub: '/api/chat (NDJSON) · embeddings', st: 'on',
+    desc: 'Self-hosted models added in Admin → Models. Also the usual source of embeddings for RAG (a model tagged "embedding").', files: ['backend/src/modules/models/providers/ollama.ts'] },
+  { id: 'ext-openai', r: 'c7', label: 'OpenAI-compatible APIs', sub: '/chat/completions (SSE)', st: 'on',
+    desc: 'OpenAI, DeepSeek, OpenRouter, Google Gemini, any custom base URL, and hosted endpoints of that kind.', files: ['backend/src/modules/models/providers/openai-compat.ts'] },
+  { id: 'ext-anthropic', r: 'c7', label: 'Anthropic API', sub: '/v1/messages', st: 'on',
+    desc: 'With a student\'s own API key.', files: ['backend/src/modules/models/providers/anthropic.ts'] },
+  { id: 'ext-codex', r: 'c7', label: 'ChatGPT / Codex', sub: 'device login · Responses API', st: 'on',
+    desc: 'The student signs in with their ChatGPT account (device code on auth.openai.com). Also generates images.', files: ['backend/src/modules/models/providers/codex.ts · codex-auth.ts'] },
+  { id: 'ext-canvas', r: 'c7', label: 'Canvas LMS', sub: 'REST /api/v1 · read only', st: 'on', desc: 'The school\'s Canvas, with the student\'s token.' },
+  { id: 'ext-school', r: 'c7', label: 'School sites', sub: 'Microsoft · Duo · Outlook Web · Degree Works', st: 'on', desc: 'Reached only through Chromium in the sandbox.' },
+  { id: 'ext-web', r: 'c7', label: 'The web', sub: 'SearXNG · DuckDuckGo · Brave/Tavily · any site', st: 'on', desc: 'Search providers and any public page.' },
+  { id: 'ext-stripe', r: 'c7', label: 'Stripe', sub: 'checkout · portal · webhook', st: 'on', desc: 'API version 2024-06-20, 15 s timeout.' },
+  { id: 'ext-smtp', r: 'c7', label: 'SMTP server', sub: 'set in Admin → Email', st: 'on', desc: 'Verification, password reset, contact and test emails (nodemailer).' },
+  { id: 'ext-push', r: 'c7', label: 'Browser push services', sub: 'Google · Mozilla · Apple · Windows', st: 'on', desc: 'Only these hosts are accepted as subscription endpoints.' },
+  { id: 'ext-discord', r: 'c7', label: 'Discord webhooks', sub: 'contact form · beta bug reports', st: 'on', desc: 'Only discord.com webhook URLs are accepted; mentions are disabled.' },
+
+  /* ---------- A · Postgres ---------- */
+  { id: 'pg', r: 'b1', label: 'PostgreSQL', sub: '28 migrations · ~55 tables · must be UTF8', st: 'on',
+    desc: 'Users, chats, messages, jobs, events, settings, plans, OAuth, sandboxes, usage. The single source of truth for every replica.',
+    files: ['backend/src/db/pool.ts · migrate.ts · tx.ts', 'backend/src/db/migrations/'],
+    det: ['Migrations run at startup under an advisory lock, each in its own transaction.',
+      'SQL helpers: effective_tier(user_id), the jobs_prefer_sandbox_node trigger, a tsv column on messages for search.'] },
+  { id: 'bus', r: 'b1', label: 'Bus: LISTEN/NOTIFY', sub: 'job_queued · job_events · job_control · sandbox_control · settings_changed', h: 70, st: 'on',
+    desc: 'One dedicated connection per replica. Payloads carry ids only; receivers always re-read the database, so a lost NOTIFY is harmless (there is a poll behind each one).',
+    files: ['backend/src/bus/bus.ts'], det: ['Reconnects every 2 s and re-LISTENs.', 'Also broadcast.'] },
+  { id: 'adapter', r: 'b1', label: 'Engine stores', sub: 'PgRunStore · PgMemoryStore · PgSkillStore · PgScheduleStore', st: 'on',
+    desc: 'Postgres implementations of the engine\'s required ports.', files: ['backend/src/engine/stores.ts'],
+    det: ['RunStore: job_steers and approvals. MemoryStore: agent_docs. SkillStore: user_skills, skill_notes + built-in skills. ScheduleStore: schedules.'] },
+  { id: 'settings', r: 'b1', label: 'Settings and secrets', sub: 'app_settings · MASTER_KEY (AES-256-GCM)', st: 'on',
+    desc: 'Admin settings cached in memory on each replica, reloaded on NOTIFY and every 30 s. Secrets (SMTP, Stripe, VAPID, webhooks, tokens, API keys) are encrypted with MASTER_KEY.',
+    files: ['backend/src/db/settings.ts', 'backend/src/crypto/secrets.ts'], det: ['Startup fails if MASTER_KEY does not decrypt the master_key_check row.'] },
+  { id: 'logs', r: 'b1', label: 'app_logs', sub: 'every replica ships its logs here', st: 'on',
+    desc: 'Channels BACKEND, FRONTEND, AUTH, SYSTEM, ENTRYPOINT. Kept 7 days or 100,000 rows.', files: ['backend/src/logger.ts · log-buffer.ts', 'backend/src/modules/logs/'] },
+  { id: 'usage', r: 'b1', label: 'Usage and quotas', sub: 'usage_daily · compute_windows · tiers', st: 'on',
+    desc: 'Daily messages, tokens, MCP calls and code runs, sandbox CPU time; compute-unit windows per day and week.', files: ['backend/src/modules/billing/tiers.service.ts', 'backend/src/modules/sandbox/compute-meter.ts'] },
+
+  /* ---------- B · /data ---------- */
+  { id: 'ws', r: 'b2', label: '/data/workspaces/<user>', sub: 'files · Chats/<id> · course folders · .rag/ · .browser/', h: 70, st: 'on',
+    desc: 'The student\'s files. Mounted at /workspace in their sandbox. Default quota 5 GB (from the plan).',
+    files: ['backend/src/engine/workspace.ts (DiskWorkspace)'], det: ['Opened with O_NOFOLLOW. .browser holds sandbox browser profiles and is hidden from the file tools.'] },
+  { id: 'temp', r: 'b2', label: '/data/temp/<user>', sub: 'shown as TEMP/ · deleted 24 h after last change', st: 'on',
+    desc: 'Scratch space (downloads, screenshots). 10 GB quota. The temp-sweep leader task deletes old files.', files: ['backend/src/engine/workspace.ts (sweepTemp)'] },
+  { id: 'assets', r: 'b2', label: '/data/assets', sub: 'avatars', st: 'on', desc: 'Shared by every replica.' },
+
+  /* ---------- C · Sandbox, web, browser ---------- */
+  { id: 'sbx-tools', r: 'b3', label: 'SandboxTools', sub: 'SandboxPort + BrowserPort over HTTP', st: 'on',
+    desc: 'Implements the engine\'s sandbox and browser ports by calling the student\'s runner. Retries once with a new container if the old one is gone. Checks the disk quota around each run.',
+    files: ['backend/src/engine/sandbox.ts'] },
+  { id: 'sbx-mgr', r: 'b3', label: 'SandboxManager', sub: 'start · hand over · idle stop · max 4 per node', st: 'on',
+    desc: 'Starts, finds, moves and stops sandboxes. One replica at a time decides per student (advisory lock); it takes a sandbox over from another replica through sandbox_control.',
+    files: ['backend/src/modules/sandbox/manager.ts · docker.ts · sandbox.routes.ts'],
+    det: ['Idle stop after 15 min. When full, stops the longest-idle sandbox whose owner has no running job.', 'On boot removes this node\'s leftover containers.', 'Docker Engine API v1.43 over the socket.'] },
+  { id: 'meter', r: 'b3', label: 'Compute meter', sub: 'CPU time → compute units · throttles', st: 'on',
+    desc: 'Every 60 s reads each sandbox\'s CPU time from Docker stats. 1 CU = 1 hour of CPU. Over the plan\'s daily or weekly CU, the container is throttled to 0.25 CPU with docker update.',
+    files: ['backend/src/modules/sandbox/compute-meter.ts'] },
+  { id: 'sbx-ctr', r: 'b3', label: 'Sandbox container', sub: 'studyhawk-sbx-<user> · read-only · no caps', st: 'on',
+    desc: 'One per student. Runs as the backend\'s uid (never root), read-only root filesystem, all capabilities dropped, 1024 processes, tmpfs /tmp 256 MB. CPU and RAM from the plan (default 1 CPU, 2 GB).',
+    files: ['sandbox/Dockerfile'], det: ['Image: node 24 + Python 3 (pymupdf, pypdf, python-docx, python-pptx, openpyxl, pandas, numpy, matplotlib, reportlab, requests) + Playwright Chromium headless shell.', 'Mounts workspaces/<user> at /workspace and temp/<user> at /workspace/TEMP.'] },
+  { id: 'runner', r: 'b3', label: 'Runner :7070', sub: 'exec · Chromium · snapshot refs @eN', st: 'on',
+    desc: 'A small Node HTTP server inside the container. Bearer token (removed from the environment so user code cannot read it). /exec runs code; /browser/* drives persistent Chromium profiles.',
+    files: ['sandbox/runner/runner.mjs', 'sandbox/runner/snapshot.mjs'],
+    det: ['exec: kills the whole process group on timeout; returns changed files.', 'At most 2 browsers at once; idle ones close after 10 min. Downloads disabled.', 'Backend-only steps (goto, eval, fill, tap, wait) power the school sign-in.'] },
+  { id: 'web', r: 'b3', label: 'SafeFetch + search chain', sub: 'SSRF guard · SearXNG → DuckDuckGo → paid → browser', st: 'on',
+    desc: 'Fetches refuse private, loopback, link-local and CGNAT addresses on every redirect hop (30 s, max 5 redirects). Search tries providers in order; one that errors cools down for 5 min.',
+    files: ['backend/src/engine/web.ts', 'pixlai-engine/src/web/search-chain.ts'] },
+  { id: 'policy', r: 'b3', label: 'BrowserPolicy', sub: 'trusted sites run · Canvas blocked · rest asks', st: 'on',
+    desc: 'For click, type and press: Canvas (and *.instructure.com) is blocked, the student\'s trusted domains run, everything else asks for approval.',
+    files: ['backend/src/engine/browser-policy.ts'] },
+  { id: 'docs', r: 'b3', label: 'Text extractor + embeddings', sub: 'PDF · DOCX · PPTX · HTML · AdminEmbeddings', st: 'on',
+    desc: 'Turns documents into text for the file tools, web_fetch and RAG, and embeds chunks with the admin\'s embedding model.',
+    files: ['backend/src/engine/documents.ts'] },
+
+  /* ---------- D · Gaps and planned ---------- */
+  { id: 'p-shared', r: 'b4', label: 'Shared course RAGs', sub: 'engine supports shared:<id>; setup.ts does not pass it', st: 'off',
+    desc: 'The engine can read instructor or course RAGs through SharedRagSource, but the backend does not provide one yet.', files: ['backend/src/engine/setup.ts (sharedRags comment)'] },
+  { id: 'p-net', r: 'b4', label: 'Sandbox egress filter', sub: 'outbound proxy with an allow list', st: 'plan',
+    desc: 'Today the sandbox can reach any site. The SSRF guard only covers URLs the backend opens itself. See "Open items" in SECURITY.md.' },
+  { id: 'p-mcpc', r: 'b4', label: 'MCP client pack', sub: 'use outside MCP servers as tools', st: 'plan', desc: 'StudyHawk is an MCP server today, not a client.' },
+  { id: 'p-attach', r: 'b4', label: 'Attachments in email_send', sub: 'workspace files and photos', st: 'plan', desc: 'email_send sends text only today.' },
+];
+
+/* Arrows: [from, to, label, st]. st defaults to 'on'. */
+const EDGES = [
+  /* clients and entry */
+  ['fe-spa', 'fe-api', 'GET /api/config · /auth/me'],
+  ['fe-chat', 'fe-api', 'messages · stream · steer'],
+  ['fe-other', 'fe-api', 'settings · admin calls'],
+  ['fe-pwa', 'fe-api', 'push subscription'],
+  ['fe-api', 'balancer', 'dev: localhost:8080'],
+  ['fe-api', 'ngx', 'HTTPS /api/* + cookie + X-CSRF-Token'],
+  ['mcp-client', 'ngx', '/mcp · /oauth · /.well-known'],
+  ['balancer', 'ngx', 'round-robin'],
+  ['sup', 'ngx', 'starts and restarts'],
+  ['sup', 'be-app', 'starts and restarts'],
+  ['ngx', 'be-app', 'proxy 127.0.0.1:4000'],
+  /* backend routing */
+  ['be-app', 'be-auth', '/api/auth'],
+  ['be-app', 'be-chat', '/api/chats · jobs · approvals'],
+  ['be-app', 'be-mcp', '/mcp · /oauth (before session and CSRF)'],
+  ['be-app', 'be-billing', '/api/billing · webhook (raw body)'],
+  ['be-app', 'pg', 'sessions · rate limits'],
+  /* chat path */
+  ['be-chat', 'job-queue', 'INSERT job + NOTIFY job_queued'],
+  ['be-chat', 'job-control', 'steer · cancel · approve'],
+  ['job-events', 'be-chat', 'rows after Last-Event-ID → SSE'],
+  ['bus', 'job-worker', 'job_queued · job_control'],
+  ['job-queue', 'job-worker', 'claim: FOR UPDATE SKIP LOCKED'],
+  ['job-worker', 'be-models', 'resolve model · quota · usage'],
+  ['job-worker', 'eng-create', 'forUser().run()'],
+  ['job-worker', 'job-events', 'sink → INSERT + NOTIFY'],
+  ['job-worker', 'be-push', 'job done · approval · Duo'],
+  ['job-worker', 'pg', 'saveRun: messages'],
+  ['job-control', 'adapter', 'job_steers · approvals'],
+  ['scheduler', 'job-queue', 'scheduled job'],
+  ['leader', 'scheduler', 'every minute'],
+  ['leader', 'job-queue', 'reap orphans (40 s)'],
+  ['leader', 'temp', 'sweep TEMP (24 h)'],
+  ['leader', 'be-push', 'daily summary'],
+  ['nodes', 'pg', 'heartbeat 15 s'],
+  /* engine inside */
+  ['eng-create', 'eng-loop', 'run'],
+  ['eng-loop', 'eng-prompt', 'system prompt (once)'],
+  ['eng-loop', 'eng-compact', 'before each model call'],
+  ['eng-loop', 'eng-model', 'stream()'],
+  ['eng-loop', 'eng-registry', 'tool calls'],
+  ['eng-loop', 'eng-events', 'events'],
+  ['eng-events', 'job-worker', 'sink'],
+  ['eng-registry', 'eng-delegate', 'agent_delegate'],
+  ['eng-delegate', 'eng-loop', 'child loops (read-only)'],
+  ['eng-delegate', 'job-queue', 'background: delegate job'],
+  ['eng-calltool', 'eng-registry', 'same tool, no loop'],
+  ['eng-ports', 'adapter', 'implemented by'],
+  ['eng-loop', 'adapter', 'memory · skills · steers · approvals'],
+  ['be-models', 'eng-model', 'builds the provider'],
+  /* tools */
+  ['eng-registry', 't-core'], ['eng-registry', 't-cron'], ['eng-registry', 't-files'], ['eng-registry', 't-rag'],
+  ['eng-registry', 't-web'], ['eng-registry', 't-code'], ['eng-registry', 't-browser'], ['eng-registry', 't-display'],
+  ['eng-registry', 't-canvas'], ['eng-registry', 't-school'], ['eng-registry', 't-chats'],
+  ['eng-registry', 'p-shared', 'sharedRags (not passed)', 'off'],
+  ['t-cron', 'adapter', 'ScheduleStore'],
+  ['t-files', 'ws', 'WorkspacePort'],
+  ['t-files', 'docs', 'TextExtractor'],
+  ['t-rag', 'ws', '.rag/<id>/'],
+  ['t-rag', 'docs', 'EmbeddingPort'],
+  ['t-web', 'web', 'SearchPort · FetchPort'],
+  ['t-code', 'sbx-tools', 'SandboxPort.exec'],
+  ['t-browser', 'sbx-tools', 'BrowserPort'],
+  ['t-browser', 'policy', 'gate for click · type · press'],
+  ['t-canvas', 'be-canvas', 'ctx.host.canvas'],
+  ['t-school', 'be-school', 'ctx.host.school'],
+  ['t-chats', 'pg', 'full-text search'],
+  ['t-chats', 'ext-codex', 'image_generate'],
+  /* models */
+  ['be-models', 'ext-ollama', 'chat'],
+  ['be-models', 'ext-openai', 'chat'],
+  ['be-models', 'ext-anthropic', 'chat'],
+  ['be-models', 'ext-codex', 'chat'],
+  ['be-models', 'be-conn', 'student keys and tokens'],
+  ['docs', 'ext-ollama', 'embeddings'],
+  /* services */
+  ['be-canvas', 'ext-canvas', 'GET with Bearer token'],
+  ['be-canvas', 'ws', 'course folders · saved pages'],
+  ['be-canvas', 'be-conn', 'decrypted token'],
+  ['be-school', 'be-conn', 'decrypted SSO account'],
+  ['be-school', 'sbx-tools', 'browser steps'],
+  ['runner', 'ext-school', 'Chromium'],
+  ['web', 'ext-web', 'HTTP'],
+  ['be-billing', 'ext-stripe', 'checkout · portal · webhook'],
+  ['be-billing', 'usage', 'plan limits'],
+  ['be-auth', 'ext-smtp', 'verification · reset'],
+  ['be-push', 'ext-push', 'encrypted Web Push'],
+  ['be-push', 'be-canvas', 'due today'],
+  ['be-misc', 'ext-discord', 'contact · bug reports'],
+  ['be-misc', 'ws', 'export ZIP · purge'],
+  ['be-agentdata', 'ws', 'file browser · uploads'],
+  ['be-agentdata', 'adapter', 'memory · skills · schedules'],
+  ['be-admin', 'settings', 'settings · secrets'],
+  ['be-admin', 'logs', 'log viewer (SSE)'],
+  ['be-mcp', 'eng-calltool', 'tools/call'],
+  ['be-mcp', 'usage', 'daily MCP quotas'],
+  ['be-chat', 'ws', 'attachments → Chats/<id>'],
+  /* sandbox */
+  ['sbx-tools', 'sbx-mgr', 'ensure(user)'],
+  ['sbx-tools', 'runner', 'HTTP :7070 + Bearer'],
+  ['sbx-mgr', 'sbx-ctr', 'docker.sock: create · start · stop'],
+  ['sbx-mgr', 'bus', 'sandbox_control (hand over)'],
+  ['sbx-mgr', 'meter', 'every 60 s'],
+  ['meter', 'usage', 'compute units'],
+  ['sbx-ctr', 'ws', 'mounts /workspace'],
+  ['sbx-ctr', 'runner', 'runs'],
+  ['runner', 'ext-web', 'open internet', 'on'],
+  ['p-net', 'sbx-ctr', 'egress filter (planned)', 'plan'],
+];
+
+/* Flows: walks through the map. n = box id. */
+const FLOWS = [
+  { id: 'chat', title: 'A chat message', intro: 'From pressing Send to the answer on screen. The main path: it crosses all seven columns.', steps: [
+    { n: 'fe-chat', t: 'The student sends', x: 'Composer posts the text, attachments, model and reasoning level to POST /api/chats/:id/messages (a new chat first does POST /api/chats).', r: 'frontend/src/components/chat/Composer.tsx · frontend/src/api/chat.ts' },
+    { n: 'ngx', t: 'nginx lets it in', x: 'nginx on :80 proxies /api/ to Node on 127.0.0.1:4000 with buffering off. In dev, the balancer picks a replica first.', r: 'nginx.conf' },
+    { n: 'be-app', t: 'Middleware', x: 'Session cookie → user, CSRF check, rate limits. Then the chats router.', r: 'backend/src/app.ts · backend/src/middleware/' },
+    { n: 'be-chat', t: 'Saved and queued', x: '409 if the chat already has a job. Otherwise one transaction locks the chat row, saves the message (attachments move to Chats/<id>) and inserts a chat job. The response is 201 {job_id}.', r: 'backend/src/modules/chat/chat.routes.ts · attachments.ts' },
+    { n: 'job-queue', t: 'Waiting in the queue', x: 'NOTIFY job_queued wakes the workers. The browser opens GET /api/chats/:id/stream?job= and first gets its queue position.', r: 'backend/src/bus/bus.ts' },
+    { n: 'job-worker', t: 'A replica claims it', x: 'UPDATE … FOR UPDATE SKIP LOCKED, respecting sandbox affinity, one job per chat and the plan\'s job limit. Heartbeat every 15 s.', r: 'backend/src/modules/jobs/worker.ts' },
+    { n: 'be-models', t: 'Model and quota', x: 'Loads history with attachments, resolves the model (Auto picks a tier), checks the daily message quota for hosted models and builds the provider.', r: 'backend/src/modules/models/catalog.ts · router.ts' },
+    { n: 'eng-create', t: 'engine.forUser().run()', x: 'With the student\'s limits, the host services (canvas, school, chats, images, vision), run notes (chat folder, course folders) and a tool filter from the skills.', r: 'pixlai-engine/src/engine.ts · backend/src/engine/setup.ts' },
+    { n: 'eng-prompt', t: 'System prompt', x: 'Base prompt + SOUL.md + about the user + USER.md / MEMORY.md + skills + rules + workspace and sandbox + date. Built once per run.', r: 'pixlai-engine/src/agent/prompt.ts' },
+    { n: 'eng-compact', t: 'Does it fit?', x: 'Over 75 % of the window: clear old tool output; if still over, summarize the middle.', r: 'pixlai-engine/src/agent/compact.ts' },
+    { n: 'eng-model', t: 'Model call', x: 'provider.stream() with the visible tools. Text leaves as delta events; tool calls are collected. A steer aborts this attempt.', r: 'pixlai-engine/src/agent/loop.ts · backend/src/modules/models/providers/' },
+    { n: 'eng-registry', t: 'Tools', x: 'If the model asked for tools: batches, gates, timeouts. Results go back to the model. Repeat up to 20 steps.', r: 'pixlai-engine/src/agent/loop.ts · tools/tool.ts' },
+    { n: 'eng-events', t: 'Events', x: 'Each delta, tool call, plan or status change leaves through the sink.', r: 'pixlai-engine/src/types.ts' },
+    { n: 'job-events', t: 'Into Postgres', x: 'JobEventWriter merges deltas every 100 ms, inserts rows with a seq and NOTIFYs job_events.', r: 'backend/src/modules/jobs/event-writer.ts' },
+    { n: 'be-chat', t: 'Out to the browser', x: 'The stream handler on the browser\'s replica reads rows after the last seq and sends them as SSE. Works even if the job runs on another replica.', r: 'backend/src/modules/chat/chat.routes.ts (stream)' },
+    { n: 'fe-chat', t: 'Rendered live', x: 'delta grows the text, tool_call/tool_result fill the tool list, plan updates the plan dock, context the ring. On done the page reloads the chat.', r: 'frontend/src/pages/chat/ChatPage.tsx' },
+    { n: 'pg', t: 'Turn saved', x: 'saveRun stores the final answer with its tool views, model and tokens; usage is recorded. If nobody watched, a push goes out.', r: 'backend/src/modules/chat/chat.service.ts (saveRun)' },
+  ] },
+  { id: 'approval', title: 'An action that needs approval', intro: 'Example: the agent wants to send an email (email_send) or click on a site that is not trusted.', steps: [
+    { n: 'eng-registry', t: 'The gate says "approve"', x: 'email_send has sideEffect external, so it always asks. browser_click asks when the policy returns approve.', r: 'pixlai-engine/src/agent/loop.ts (executeCall)' },
+    { n: 'policy', t: 'Browser policy (for clicks)', x: 'Canvas is blocked, trusted domains run, the rest ask.', r: 'backend/src/engine/browser-policy.ts' },
+    { n: 'adapter', t: 'Approval row', x: 'PgRunStore.createApproval inserts the request; the engine emits approval_required and status waiting_approval.', r: 'backend/src/engine/stores.ts' },
+    { n: 'be-push', t: 'Push if away', x: 'If nobody watched the stream for 45 s, the student gets an approval_required notification.', r: 'backend/src/modules/jobs/worker.ts · push.service.ts' },
+    { n: 'fe-chat', t: 'The card', x: 'ApprovalCard shows what will happen and two buttons.', r: 'frontend/src/components/chat/ApprovalCard.tsx' },
+    { n: 'job-control', t: 'Decision', x: 'POST /api/approvals/:id/approve updates the row and NOTIFYs job_control, waking the engine on whichever replica runs the job.', r: 'backend/src/modules/chat/chat.routes.ts' },
+    { n: 'eng-loop', t: 'Continues or stops', x: 'Approved: the tool runs. Rejected or expired (24 h): the model is told not to retry.', r: 'pixlai-engine/src/agent/loop.ts' },
+  ] },
+  { id: 'steer', title: 'Steer, queue or stop while it works', intro: 'The student types while the agent is still answering.', steps: [
+    { n: 'fe-chat', t: 'Enter while busy', x: 'Depending on the busy-input setting: steer (correct now), queue (send after) or interrupt. Stop is its own button.', r: 'frontend/src/components/chat/BusyModeSwitch.tsx' },
+    { n: 'be-chat', t: 'POST /api/jobs/:id/steer', x: 'Max 2000 characters and 5 pending steers. Cancel is POST /api/jobs/:id/cancel.', r: 'backend/src/modules/chat/chat.routes.ts' },
+    { n: 'job-control', t: 'Row + NOTIFY', x: 'Insert into job_steers, NOTIFY job_control {steer}. Cancel on a queued job just marks it cancelled; on a running job it sets cancel_requested.', r: 'backend/src/engine/stores.ts' },
+    { n: 'job-worker', t: 'Cancel reaches the worker', x: 'job_control {cancel} aborts the local AbortController; the partial answer is saved with meta.stopped.', r: 'backend/src/modules/jobs/worker.ts' },
+    { n: 'eng-loop', t: 'Steer reaches the loop', x: 'watchSteers aborts the current generation, keeps the partial text as "[interrupted]", adds the steer as an out-of-band message and calls the model again.', r: 'pixlai-engine/src/agent/loop.ts' },
+    { n: 'job-events', t: 'steer_applied / interrupted', x: 'The UI shows where the correction landed. A steer that arrives after the final answer becomes the next message.', r: 'backend/src/modules/jobs/worker.ts (followUpSteers)' },
+  ] },
+  { id: 'sandbox', title: 'Code or browser in the sandbox', intro: 'What happens when the agent calls code_run or browser_open.', steps: [
+    { n: 't-code', t: 'code_run', x: 'Python by default, Node or shell. Timeout 60 s (max 300 s).', r: 'pixlai-engine/src/tools/code.ts' },
+    { n: 'sbx-tools', t: 'SandboxTools', x: 'Checks the disk quota, then asks the manager for the student\'s sandbox.', r: 'backend/src/engine/sandbox.ts' },
+    { n: 'sbx-mgr', t: 'Find or start one', x: 'Reuses a local one; else takes the per-student advisory lock, takes it over from another replica if needed (sandbox_control), waits for a free slot (max 4 per node).', r: 'backend/src/modules/sandbox/manager.ts' },
+    { n: 'sbx-ctr', t: 'Container starts', x: 'Locked down (read-only, no capabilities, non-root), CPU and RAM from the plan, throttled if over compute units. Waits for /health.', r: 'backend/src/modules/sandbox/docker.ts · sandbox/Dockerfile' },
+    { n: 'runner', t: 'Runner executes', x: 'POST /exec with a Bearer token. Kills the process group on timeout. Returns output and changed files.', r: 'sandbox/runner/runner.mjs' },
+    { n: 'ws', t: 'Files stay', x: 'The code worked in /workspace = /data/workspaces/<user>, so its outputs appear in the student\'s files.', r: 'backend/src/engine/workspace.ts' },
+    { n: 'meter', t: 'Metered', x: 'CPU time is added to usage_daily and the day and week compute windows.', r: 'backend/src/modules/sandbox/compute-meter.ts' },
+    { n: 'sbx-mgr', t: 'Idle stop', x: 'After 15 minutes without use the container is removed. Files stay on disk.', r: 'backend/src/modules/sandbox/manager.ts (reapIdle)' },
+  ] },
+  { id: 'school', title: 'Reading school email (Microsoft + Duo)', intro: 'The agent calls email_inbox; StudyHawk signs in with the student\'s school account.', steps: [
+    { n: 't-school', t: 'email_inbox', x: 'Only visible if the school offers Outlook and the skill is on.', r: 'backend/src/engine/tools/school.ts' },
+    { n: 'be-school', t: 'SchoolService.open', x: 'Uses the school-outlook browser profile; if the cookies are still valid, it lands straight in the inbox.', r: 'backend/src/modules/school/school.service.ts' },
+    { n: 'be-conn', t: 'Account', x: 'Decrypts the saved SSO account. The password never reaches the model.', r: 'backend/src/modules/connections/connections.service.ts' },
+    { n: 'sbx-tools', t: 'Browser steps', x: 'goto, eval (detect the page), fill, tap through the runner. Up to 40 steps.', r: 'backend/src/engine/sandbox.ts' },
+    { n: 'runner', t: 'Chromium signs in', x: 'Email, password, "stay signed in", Duo "Send push".', r: 'sandbox/runner/runner.mjs' },
+    { n: 'be-push', t: 'Duo needed', x: 'mfa_required: a high-urgency push and status waiting_mfa. Waits up to 3 minutes.', r: 'backend/src/modules/push/push.service.ts' },
+    { n: 'ext-school', t: 'Inbox read', x: 'Rows are read from Outlook Web and returned to the agent as untrusted content.', r: 'backend/src/modules/school/school.service.ts (inbox)' },
+  ] },
+  { id: 'background', title: 'Helpers in the background', intro: 'The agent hands long work to helpers and keeps talking.', steps: [
+    { n: 'eng-delegate', t: 'agent_delegate {background: true}', x: 'Up to 3 tasks. The tool returns at once.', r: 'pixlai-engine/src/agent/delegate.ts' },
+    { n: 'job-queue', t: 'Delegate job', x: 'queueBackground inserts a delegate job (max 2 per chat).', r: 'backend/src/modules/jobs/worker.ts' },
+    { n: 'job-worker', t: 'runSubagents', x: 'Another worker loop runs the helpers in parallel with read-only tools and a shared budget. The UI shows their progress.', r: 'pixlai-engine/src/engine.ts (runSubagents)' },
+    { n: 'job-queue', t: 'Reports come back', x: 'The reports go into the job payload and a new chat job is queued with background_job_id.', r: 'backend/src/modules/jobs/worker.ts (answerWithReports)' },
+    { n: 'eng-loop', t: 'The agent answers', x: 'The reports arrive as a user-role message and the agent writes the answer.', r: 'pixlai-engine/src/agent/delegate.ts (backgroundReportMessage)' },
+  ] },
+  { id: 'cron', title: 'A scheduled task', intro: 'Example: "every Monday at 8, summarize what is due this week".', steps: [
+    { n: 't-cron', t: 'cron_create', x: 'The agent saves the schedule in the student\'s timezone (min 15 min apart, max from the plan).', r: 'pixlai-engine/src/cron/tools.ts' },
+    { n: 'adapter', t: 'schedules table', x: 'PgScheduleStore stores it with next_run_at.', r: 'backend/src/engine/stores.ts' },
+    { n: 'leader', t: 'Every minute', x: 'One replica wins the scheduler lock.', r: 'backend/src/leader/leader.ts' },
+    { n: 'scheduler', t: 'Due → job', x: 'Adds the prompt as a message and queues a scheduled job (skipped if the last run is still going).', r: 'backend/src/modules/jobs/scheduler.ts' },
+    { n: 'job-worker', t: 'Runs like a chat', x: 'kind scheduled: no cron tools, the prompt says the answer is a report, [SILENT] means nothing to say.', r: 'backend/src/modules/jobs/worker.ts' },
+    { n: 'be-push', t: 'Notification', x: 'job_done push unless the answer was [SILENT].', r: 'backend/src/modules/push/push.service.ts' },
+  ] },
+  { id: 'mcp', title: 'ChatGPT or Claude using StudyHawk', intro: 'StudyHawk as an MCP app.', steps: [
+    { n: 'mcp-client', t: 'Register and authorize', x: 'The client registers (POST /oauth/register) and sends the student to /oauth/authorize with PKCE.', r: 'backend/src/modules/mcp/oauth.service.ts' },
+    { n: 'fe-other', t: 'Consent', x: 'The /oauth/consent page shows the app and scopes; the student approves.', r: 'frontend/src/pages/auth/ConsentPage.tsx' },
+    { n: 'be-mcp', t: 'Tokens', x: 'Code → access token (1 h) + refresh token (30 days, rotated). Stored hashed.', r: 'backend/src/modules/mcp/oauth.service.ts' },
+    { n: 'be-mcp', t: 'tools/call', x: 'Bearer check, 240 req/min, 60 calls/min, daily plan quotas, scope filter, audit_log.', r: 'backend/src/modules/mcp/mcp.server.ts' },
+    { n: 'eng-calltool', t: 'callTool', x: 'Runs the tool without the loop. Anything needing approval is refused.', r: 'pixlai-engine/src/engine.ts' },
+    { n: 't-canvas', t: 'Same tools', x: 'For example canvas_upcoming answers "what do I have this week?".', r: 'backend/src/engine/tools/canvas.ts' },
+  ] },
+  { id: 'signup', title: 'Sign-up and sign-in', intro: 'A new student creates an account.', steps: [
+    { n: 'fe-spa', t: 'Register form', x: 'Only shown when registration is open, the beta test is off and SMTP is set (from /api/config).', r: 'frontend/src/pages/auth/RegisterPage.tsx' },
+    { n: 'be-auth', t: 'Checks', x: 'Email domain must match an enabled institution; username, email and password validated; rate limits per IP.', r: 'backend/src/modules/auth/register.service.ts' },
+    { n: 'ext-smtp', t: 'Verification email', x: 'A link and a 6-digit code. If the email fails, the pending account is deleted.', r: 'backend/src/modules/mail/' },
+    { n: 'be-auth', t: 'Verify', x: 'Link or code (max 5 wrong tries) activates the account and signs the student in.', r: 'backend/src/modules/auth/auth.routes.ts' },
+    { n: 'be-app', t: 'Every request after', x: 'The session cookie is looked up by its sha256; CSRF double-submit on every write.', r: 'backend/src/modules/auth/session.middleware.ts · middleware/csrf.ts' },
+    { n: 'leader', t: 'Cleanup', x: 'pending-cleanup deletes accounts never verified.', r: 'backend/src/index.ts' },
+  ] },
+  { id: 'billing', title: 'Changing plan (Stripe)', intro: 'From Settings → Plan to new limits.', steps: [
+    { n: 'fe-other', t: 'Pick a plan', x: 'GET /api/billing/tiers lists the offered plans.', r: 'frontend/src/pages/settings/PlanSection.tsx' },
+    { n: 'be-billing', t: 'Checkout session', x: '409 if a subscription already exists (that goes through the portal). Otherwise creates the customer and a Checkout session.', r: 'backend/src/modules/billing/billing.service.ts' },
+    { n: 'ext-stripe', t: 'Payment', x: 'The student pays on Stripe and returns to /settings?section=plan.', r: '' },
+    { n: 'be-billing', t: 'Webhook', x: 'Signature checked, event deduplicated, then the plan is set (or dropped on cancel, or grace on failed payment).', r: 'backend/src/modules/billing/billing.routes.ts' },
+    { n: 'usage', t: 'New limits', x: 'effective_tier and tiers.limitsFor feed messages, sandbox CPU/RAM/CU, jobs, schedules, helpers and MCP quotas.', r: 'backend/src/modules/billing/tiers.service.ts' },
+  ] },
+  { id: 'push', title: 'Notifications and the daily summary', intro: 'How a push reaches the phone.', steps: [
+    { n: 'fe-pwa', t: 'Subscribe', x: 'The browser subscribes with the VAPID key and posts it to /api/push/subscriptions.', r: 'frontend/src/push.ts' },
+    { n: 'leader', t: 'Daily summary tick', x: 'Every minute; one replica picks students whose local hour has come and who have Canvas and a device.', r: 'backend/src/modules/push/daily-summary.ts' },
+    { n: 'be-canvas', t: 'What is due', x: 'Unsubmitted items due today or tomorrow, up to 5 lines.', r: 'backend/src/modules/canvas/canvas.service.ts' },
+    { n: 'be-push', t: 'Encrypt and sign', x: 'aes128gcm payload and a VAPID JWT, one POST per device.', r: 'backend/src/modules/push/webpush.ts' },
+    { n: 'ext-push', t: 'Push service', x: 'Google, Mozilla, Apple or Windows delivers it.', r: '' },
+    { n: 'fe-pwa', t: 'Notification', x: 'sw.js shows it; a click opens /courses.', r: 'frontend/public/sw.js' },
+  ] },
+  { id: 'export', title: 'Export data and delete the account', intro: 'The student takes their data and leaves.', steps: [
+    { n: 'fe-other', t: 'Export', x: 'Settings → Appearance → Export data: GET /api/account/export (3 per hour).', r: 'frontend/src/pages/settings/ExportDataPanel.tsx' },
+    { n: 'be-misc', t: 'Streamed ZIP', x: 'README, data.json, memory, skills, one JSON per chat, then every file. ZIP64, no secrets.', r: 'backend/src/modules/export/export.service.ts · zip-stream.ts' },
+    { n: 'be-auth', t: 'Delete request', x: 'Username and password. Status becomes deleting, delete_after = now + 30 days.', r: 'backend/src/modules/users/account-deletion.ts' },
+    { n: 'ext-stripe', t: 'Cancel billing', x: 'Cancelled first; if Stripe fails, nothing is deleted.', r: 'backend/src/modules/billing/billing.service.ts (cancelNow)' },
+    { n: 'sbx-mgr', t: 'Stop work', x: 'Running jobs cancelled, sandbox stopped (sandbox_control for other replicas).', r: 'backend/src/modules/users/account-deletion.ts (stopWork)' },
+    { n: 'leader', t: 'Purge after 30 days', x: 'account-purge removes the workspace, TEMP, avatar and the user row (cascade). Signing in earlier restores the account.', r: 'backend/src/modules/users/account-deletion.ts (purgeDue)' },
+  ] },
+  { id: 'startup', title: 'A replica starting', intro: 'What index.ts does, in order.', steps: [
+    { n: 'sup', t: 'Container starts', x: 'tini → entrypoint.sh starts nginx and node.', r: 'entrypoint.sh' },
+    { n: 'be-app', t: 'Config and database', x: 'loadEnv, pool, waits up to 60 s for Postgres, checks UTF8.', r: 'backend/src/index.ts' },
+    { n: 'pg', t: 'Migrations', x: 'Under an advisory lock, so two replicas never migrate at once. Then log shipping, MASTER_KEY check, first admin.', r: 'backend/src/db/migrate.ts' },
+    { n: 'bus', t: 'Bus and settings', x: 'LISTEN connection, settings cache, node heartbeat.', r: 'backend/src/bus/bus.ts · db/settings.ts' },
+    { n: 'sbx-mgr', t: 'Sandboxes', x: 'Pings Docker, pulls the image, creates the network, removes leftovers. On failure: "Sandboxes are off" and startup continues.', r: 'backend/src/modules/sandbox/manager.ts' },
+    { n: 'eng-create', t: 'Engine', x: 'setupEngine with every port, then the MCP server on top.', r: 'backend/src/engine/setup.ts' },
+    { n: 'job-worker', t: 'Worker and leader tasks', x: 'JOB_WORKERS loops, the eight leader tasks, then app.listen on :4000.', r: 'backend/src/index.ts' },
+  ] },
+];
+
+const OVERVIEW = {
+  intro: 'StudyHawk is an AI agent for university students. It reads Canvas, keeps a private workspace of files, searches the web, runs code and drives a browser in a per-student sandbox, and can use the student\'s school account (Outlook, Degree Works). This page is a map of how the code fits together, written so that someone new to the repo can follow a request from the browser to the model and back.',
+  howto: [
+    '<b>Columns 1-7</b> (top) follow a request from left to right: who sends it, how it gets in, which API handles it, the job queue, the engine, the tools, and the outside services. The <b>bottom band</b> (A-D) is what all of them share.',
+    '<b>Arrows</b> are square and each one has its own lane, so they never overlap. <b>Hover</b> an arrow to color it and see what travels along it; hover a box to color all of its arrows.',
+    '<b>Click a box</b> for what it does, where it lives in the code, the details that matter, its connections and the flows it is part of.',
+    '<b>Flows</b> are numbered walks over the map (arrow keys move between steps).',
+    'Solid boxes exist and are wired. Dashed: exist but not wired. Dotted: planned.',
+  ],
+  ideas: [
+    '<b>A request only queues the work.</b> The HTTP request saves the message and inserts a job; a worker on any replica runs the agent. Closing the tab, reconnecting or running several replicas loses nothing.',
+    '<b>Postgres is the only shared state</b> besides /data: data, job queue, events, LISTEN/NOTIFY bus, advisory locks, settings. Any replica can serve any request.',
+    '<b>Events go through the database.</b> The worker writes each event to job_events; the SSE handler on whichever replica the browser reached reads them back. That is why the stream is resumable.',
+    '<b>The engine knows nothing about StudyHawk.</b> pixlai-engine gets ports (stores, workspace, sandbox, search, fetch, browser) and host tools (Canvas, school). A tool pack exists only if its port is given.',
+    '<b>Untrusted content is data.</b> Web pages, emails, file contents and search results reach the model wrapped in &lt;untrusted_content&gt;; actions with outside effects need the student\'s approval.',
+    '<b>The plan sets every limit</b>: messages, CPU, RAM, disk, compute units, background jobs, schedules, helpers and MCP quotas.',
+  ],
+  glossary: [
+    ['Job', 'One unit of agent work in the jobs table: chat, scheduled or delegate.'],
+    ['Replica / node', 'One running container of the app (nginx + Node). Identified by NODE_ID.'],
+    ['SSE', 'Server-Sent Events: the one-way stream the browser reads the answer from.'],
+    ['Steer', 'A correction sent while the agent is answering; it lands at the next safe point.'],
+    ['Port', 'An interface the engine needs and the host implements (for example WorkspacePort).'],
+    ['Host tool', 'A tool StudyHawk adds to the engine (Canvas, school email, chats, images).'],
+    ['Lazy tool group', 'Tools hidden from the model until it loads the group with tools_load, to keep the prompt small.'],
+    ['Sandbox', 'A per-student Docker container with Python and Chromium, started on demand.'],
+    ['Runner', 'The HTTP server inside the sandbox (:7070) that runs code and drives the browser.'],
+    ['Compute unit (CU)', 'One hour of sandbox CPU time. Plans set daily and weekly CU limits.'],
+    ['Leader task', 'A periodic job that one replica runs per cycle, chosen by a Postgres advisory lock.'],
+    ['RAG', 'A collection of the student\'s documents, chunked and embedded, searched with citations.'],
+    ['SOUL / USER / MEMORY', 'The three memory documents the agent keeps per student: its persona, facts about the student, and notes.'],
+    ['MCP', 'Model Context Protocol: how ChatGPT or Claude use StudyHawk\'s tools.'],
+    ['MASTER_KEY', 'The AES-256-GCM key that encrypts every stored secret. Must be identical on every replica.'],
+  ],
+};
+
+const DEPLOY = {
+  intro: 'One image runs everything except Postgres and the sandboxes. In production you run one container per machine behind your own TLS proxy; all replicas share Postgres and a /data folder. Each replica creates its students\' sandboxes through its own Docker socket.',
+  setups: [
+    { title: 'Production: one image per machine', note: 'docker run of ghcr.io/pixlgalaxy/studyhawk on each machine. Postgres and /data are external.', boxes: [
+      { t: 'Your TLS proxy / load balancer', l: ['Caddy, Traefik, nginx, Cloudflare… (not in this repo)', 'Set TRUST_PROXY to it, COOKIE_SECURE=true, an https PUBLIC_URL'] },
+      { t: 'studyhawk (one per machine)', img: 'ghcr.io/pixlgalaxy/studyhawk:latest', app: true, l: ['tini → entrypoint.sh', 'nginx :80 (SPA + proxy)', 'node :4000 (API + JobWorker + engine + leader tasks)', 'VOLUME /data · /var/run/docker.sock mounted', 'HEALTHCHECK /api/health every 30 s'] },
+      { t: 'Sandboxes', img: 'ghcr.io/pixlgalaxy/studyhawk-sandbox:latest', l: ['studyhawk-sbx-<user>-<hex>, one per active student', 'created by the replica through docker.sock', 'max 4 per machine by default, stopped after 15 min idle', 'network studyhawk-sandbox (open egress today)'] },
+      { t: 'PostgreSQL 14+', l: ['DATABASE_URL, UTF8 encoding', 'data, jobs, events, NOTIFY bus, locks, sessions'] },
+      { t: 'Shared /data (NFS / SMB)', l: ['workspaces, temp, assets', 'same path on every machine', 'SANDBOX_DATA_HOST_PATH = where it is on the host'] },
+      { t: 'SearXNG (optional)', l: ['SEARXNG_URL; without it web search starts at DuckDuckGo'] },
+    ] },
+    { title: 'Development: docker-compose.dev.yml', note: 'Two replicas behind a balancer, with Postgres and SearXNG, to test multi-replica behavior. For day-to-day work, run backend and frontend with npm run dev (embedded Postgres).', boxes: [
+      { t: 'balancer', img: 'nginx:alpine', l: ['localhost:8080 → node-a:80, node-b:80 (round-robin)'] },
+      { t: 'node-a and node-b', img: 'studyhawk:dev (build .)', app: true, l: ['same image, different NODE_ID', 'admin / change-me-now', 'shared-data volume at /data, docker.sock'] },
+      { t: 'postgres', img: 'postgres:17-alpine', l: ['port 5432 published', 'volume pg-data'] },
+      { t: 'searxng', img: 'searxng/searxng:2026.9.21-df67eb6c2', l: ['internal only, json output enabled'] },
+      { t: 'npm run dev (no Docker)', l: ['backend: embedded Postgres in data/dev-postgres, generated MASTER_KEY, seed users admin/admin and user/user', 'frontend: Vite proxies /api, /mcp, /oauth to :4000', 'frontend npm run dev:mock: no backend at all'] },
+    ] },
+  ],
+  ports: [
+    ['80', 'nginx in the app container', 'The only port the container exposes.'],
+    ['4000', 'Node backend', 'Bound to 127.0.0.1 in production; nginx proxies to it.'],
+    ['7070', 'Runner in each sandbox', 'Reached over the sandbox network (or a published port when the backend runs outside Docker). Bearer token.'],
+    ['5432', 'PostgreSQL', 'External in production; published by the dev compose.'],
+    ['8080', 'Dev balancer', 'docker-compose.dev.yml only.'],
+    ['5173', 'Vite dev server', 'npm run dev in frontend/.'],
+  ],
+  env: [
+    ['DATABASE_URL', 'required', 'PostgreSQL connection string.'],
+    ['MASTER_KEY', 'required', '32 bytes base64 (openssl rand -base64 32). Same on every replica; losing it means re-entering every secret.'],
+    ['PUBLIC_URL', 'http://localhost:80', 'Public address for email links and OAuth.'],
+    ['NODE_ID', 'hostname', 'Replica name in the admin panel and in jobs, sandboxes and logs.'],
+    ['ADMIN_USERNAME / EMAIL / PASSWORD', '', 'First admin, used only when no admin exists.'],
+    ['JOB_WORKERS', '4', 'Jobs run at the same time per replica.'],
+    ['DB_POOL_MAX · DB_SSL', '10 · false', 'Pool size and TLS to Postgres.'],
+    ['COOKIE_SECURE · TRUST_PROXY', 'false · uniquelocal', 'Secure cookies; which proxies to trust (loopback always).'],
+    ['SANDBOX_ENABLED', 'true', 'false turns off code, browser and school tools.'],
+    ['SANDBOX_IMAGE', 'ghcr.io/pixlgalaxy/studyhawk-sandbox:latest', 'Per-student container image.'],
+    ['SANDBOX_DATA_HOST_PATH / SANDBOX_DATA_VOLUME', '', 'Where /data is on the host (bind) or which Docker volume holds it.'],
+    ['SEARXNG_URL', '', 'Web search without API keys; empty starts at DuckDuckGo.'],
+    ['LANGUAGE', 'en', 'Default language (en or es).'],
+    ['SESSION_TTL_HOURS · VERIFICATION_TTL_HOURS', '168 · 72', 'Session and email-verification lifetimes.'],
+  ],
+  ci: [
+    'docker-build.yml: on push to main or pixl, pull requests to main, and releases.',
+    'Builds ghcr.io/<owner>/studyhawk and ghcr.io/<owner>/studyhawk-sandbox. Tags: latest on main (else the branch name), the commit sha, and the backend version on main.',
+    'Pull requests only build; they do not log in or push.',
+    'dependabot-auto-merge.yml: minor and patch updates merge automatically (squash); majors get a comment for manual review.',
+    'The app image is three stages on node:26-alpine: build frontend, build engine + backend (argon2 needs python3, make, g++), then a slim image with nginx and tini.',
+  ],
+  commands: [
+    ['Sandbox image (once, for code, browser and school tools in dev)', 'docker build -t studyhawk-sandbox:dev sandbox'],
+    ['Backend and frontend in dev', 'cd backend && npm install && npm run dev\ncd frontend && npm install && npm run dev'],
+    ['Two replicas locally', 'MASTER_KEY=$(openssl rand -base64 32) docker compose -f docker-compose.dev.yml up --build\n# http://localhost:8080  (admin / change-me-now)'],
+    ['Production', 'docker run -d --name studyhawk --env-file .env -e NODE_ID=node-1 -p 80:80 \\\n  -v /mnt/studyhawk/data:/data \\\n  -v /var/run/docker.sock:/var/run/docker.sock \\\n  -e SANDBOX_DATA_HOST_PATH=/mnt/studyhawk/data \\\n  ghcr.io/pixlgalaxy/studyhawk:latest'],
+    ['Tests', 'cd pixlai-engine && npm test\ncd backend && npm test\ncd frontend && npm run lint && npm run build'],
+  ],
+};
+
+</script>
+<script>
+(function () {
+'use strict';
+const SVGNS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function wrap(text, max, lines) {
+  const words = String(text || '').split(/\s+/).filter(Boolean), out = [];
+  let cur = '';
+  for (const w of words) {
+    if (!cur) cur = w;
+    else if ((cur + ' ' + w).length <= max) cur += ' ' + w;
+    else { out.push(cur); cur = w; }
+  }
+  if (cur) out.push(cur);
+  if (out.length > lines) { out.length = lines; out[lines - 1] = out[lines - 1].replace(/\s*\S*$/, '') + ' …'; }
+  return out.map((l) => (l.length > max + 2 ? l.slice(0, max) + '…' : l));
+}
+let store = null;
+try { store = window.localStorage; } catch (e) { store = null; }
+function sget(k) { try { return store ? store.getItem(k) : null; } catch (e) { return null; } }
+function sset(k, v) { try { if (store) store.setItem(k, v); } catch (e) { /* private mode */ } }
+
+/* =====================================================================
+   Layout. Columns 1-7 are the path of a request (left to right); the
+   bottom band holds what everything shares. Arrows never cross a box:
+   they leave a box sideways into the gutter next to its column, take a
+   lane of their own there, and, when they must reach a column further
+   away, ride a track of their own in a horizontal corridor (above the
+   map, between the bands, or below the map).
+   ===================================================================== */
+const PAD = 12, HEAD = 70, GAP = 14, DEF_H = 58;
+const LS = 7, GP = 12, GMIN = 34;      // lane spacing, gutter padding, min gutter width
+const TS = 8, CPAD = 14;               // corridor track spacing and padding
+
+const byId = {};
+NODES.forEach((n) => { byId[n.id] = n; });
+const NC = COLS.length;
+const REG = COLS.map((c, i) => Object.assign({}, c, { band: 'top', from: i, to: i, cls: 'rc' + (i + 1) }))
+  .concat(BOTTOM.map((b, i) => Object.assign({ cls: 'rb' + (i + 1) }, b, { band: 'bot' })));
+const regionById = {};
+REG.forEach((r) => { regionById[r.id] = r; r.count = 0; });
+COLS.forEach((c) => { c.w = c.w || 250; });
+
+const stack = { top: new Array(NC).fill(HEAD), bot: new Array(NC).fill(HEAD) };
+NODES.forEach((n) => {
+  const r = regionById[n.r];
+  if (!r) throw new Error('Unknown region ' + n.r + ' on ' + n.id);
+  const span = r.to - r.from + 1;
+  n.col = n.c != null ? r.from + n.c : r.from + (r.count++ % span);
+  n.band = r.band; n.h = n.h || DEF_H;
+  n.relY = stack[n.band][n.col];
+  stack[n.band][n.col] += n.h + GAP;
+});
+const bandH = { top: Math.max(...stack.top) - GAP + PAD, bot: Math.max(...stack.bot) - GAP + PAD };
+
+const edges = [];
+EDGES.forEach(([a, b, label, st]) => {
+  const A = byId[a], B = byId[b];
+  if (!A || !B) { console.warn('Edge with an unknown box', a, b); return; }
+  const e = { a, b, label: label || '', st: st || 'on', A, B };
+  if (A.col < B.col) { e.sA = 'R'; e.gA = A.col + 1; e.sB = 'L'; e.gB = B.col; }
+  else if (A.col > B.col) { e.sA = 'L'; e.gA = A.col; e.sB = 'R'; e.gB = B.col + 1; }
+  else { e.sA = 'R'; e.sB = 'R'; e.gA = e.gB = A.col + 1; }
+  e.corr = null;
+  if (e.gA !== e.gB) {
+    if (A.band !== B.band) e.corr = 'mid';
+    else {
+      const H = bandH[A.band], ca = A.relY + A.h / 2, cb = B.relY + B.h / 2;
+      const nearTop = ca + cb < (H - ca) + (H - cb);
+      e.corr = A.band === 'top' ? (nearTop ? 'top' : 'mid') : (nearTop ? 'mid' : 'bot');
+    }
+  }
+  edges.push(e);
+});
+
+/* Corridor tracks: first fit, shortest spans first, so spans nest instead of crossing. */
+const tracks = { top: [], mid: [], bot: [] };
+['top', 'mid', 'bot'].forEach((cn) => {
+  const list = edges.filter((e) => e.corr === cn).map((e) => ({ e, lo: Math.min(e.gA, e.gB), hi: Math.max(e.gA, e.gB) }));
+  list.sort((p, q) => (p.hi - p.lo) - (q.hi - q.lo) || p.lo - q.lo);
+  list.forEach((it) => {
+    let t = 0;
+    while (tracks[cn][t] && tracks[cn][t].some((o) => !(it.hi < o.lo || it.lo > o.hi))) t++;
+    (tracks[cn][t] = tracks[cn][t] || []).push(it);
+    it.e.track = t;
+  });
+});
+const corrH = {
+  top: Math.max(26, CPAD * 2 + Math.max(0, tracks.top.length - 1) * TS),
+  mid: Math.max(44, CPAD * 2 + Math.max(0, tracks.mid.length - 1) * TS),
+  bot: Math.max(26, CPAD * 2 + Math.max(0, tracks.bot.length - 1) * TS),
+};
+const Y = {};
+Y.top = corrH.top; Y.mid = Y.top + bandH.top; Y.bot = Y.mid + corrH.mid; Y.botEnd = Y.bot + bandH.bot; Y.end = Y.botEnd + corrH.bot;
+function trackY(e) {
+  if (e.corr === 'top') return Y.top - CPAD - e.track * TS;
+  if (e.corr === 'mid') return Y.mid + CPAD + e.track * TS;
+  return Y.botEnd + CPAD + e.track * TS;
+}
+NODES.forEach((n) => { n.y = (n.band === 'top' ? Y.top : Y.bot) + n.relY; });
+const cy = (n) => n.y + n.h / 2;
+
+/* Ports: each arrow gets its own point on the box side, ordered by where it is heading. */
+const sides = {};
+edges.forEach((e) => {
+  if (e.corr) e.ty = trackY(e);
+  const towardA = e.corr ? e.ty : cy(e.B), towardB = e.corr ? e.ty : cy(e.A);
+  (sides[e.a + e.sA] = sides[e.a + e.sA] || []).push({ e, end: 'a', t: towardA });
+  (sides[e.b + e.sB] = sides[e.b + e.sB] || []).push({ e, end: 'b', t: towardB });
+});
+Object.entries(sides).forEach(([key, list]) => {
+  const n = byId[key.slice(0, -1)];
+  list.sort((p, q) => p.t - q.t);
+  list.forEach((p, k) => { p.e['y' + p.end] = n.y + (n.h * (k + 1)) / (list.length + 1); });
+});
+
+/* Gutter lanes. Segments whose both ends turn left get the left lanes, both right the right
+   lanes, mixed ones the middle; inside each group first fit, shortest nearest its side. */
+const segs = [];
+const endDir = (side) => (side === 'R' ? 'L' : 'R');   // a box exiting/entering its right side sits left of the gutter
+edges.forEach((e) => {
+  if (!e.corr) segs.push({ e, k: 0, g: e.gA, y1: e.ya, y2: e.yb, d1: endDir(e.sA), d2: endDir(e.sB) });
+  else {
+    segs.push({ e, k: 0, g: e.gA, y1: e.ya, y2: e.ty, d1: endDir(e.sA), d2: e.gB > e.gA ? 'R' : 'L' });
+    segs.push({ e, k: 1, g: e.gB, y1: e.ty, y2: e.yb, d1: e.gA < e.gB ? 'L' : 'R', d2: endDir(e.sB) });
+  }
+});
+const gutters = [];
+for (let g = 0; g <= NC; g++) gutters.push({ w: GMIN, lanes: 0 });
+for (let g = 0; g <= NC; g++) {
+  const mine = segs.filter((s) => s.g === g);
+  const groups = { LL: [], LR: [], RR: [] };
+  mine.forEach((s) => {
+    s.lo = Math.min(s.y1, s.y2); s.hi = Math.max(s.y1, s.y2);
+    const kind = s.d1 === s.d2 ? s.d1 + s.d1 : 'LR';
+    groups[kind].push(s);
+  });
+  const fit = (list, byLength) => {
+    const lanes = [];
+    list.sort(byLength ? (p, q) => (p.hi - p.lo) - (q.hi - q.lo) || p.lo - q.lo : (p, q) => p.lo - q.lo);
+    list.forEach((s) => {
+      let l = 0;
+      while (lanes[l] && lanes[l].some((o) => !(s.hi + 4 < o.lo || s.lo > o.hi + 4))) l++;
+      (lanes[l] = lanes[l] || []).push(s); s.lane = l;
+    });
+    return lanes.length;
+  };
+  const nLL = fit(groups.LL, true), nLR = fit(groups.LR, false), nRR = fit(groups.RR, true);
+  groups.LL.forEach((s) => { s.pos = s.lane; });
+  groups.LR.forEach((s) => { s.pos = nLL + s.lane; });
+  groups.RR.forEach((s) => { s.pos = nLL + nLR + (nRR - 1 - s.lane); });
+  const total = nLL + nLR + nRR;
+  gutters[g].lanes = total;
+  gutters[g].w = Math.max(GMIN, GP * 2 + Math.max(0, total - 1) * LS);
+}
+
+/* X positions now that gutter widths are known. */
+let X = 0;
+for (let g = 0; g <= NC; g++) {
+  gutters[g].x = X; X += gutters[g].w;
+  if (g < NC) { COLS[g].x = X; X += COLS[g].w; }
+}
+const FULL = { x: 0, y: 0, w: X, h: Y.end };
+NODES.forEach((n) => { n.x = COLS[n.col].x + PAD; n.w = COLS[n.col].w - PAD * 2; });
+REG.forEach((r) => {
+  r.x = COLS[r.from].x; r.w = COLS[r.to].x + COLS[r.to].w - r.x;
+  r.y = r.band === 'top' ? Y.top : Y.bot; r.h = bandH[r.band];
+});
+const laneX = (s) => { const G = gutters[s.g]; return G.x + (G.w - Math.max(0, G.lanes - 1) * LS) / 2 + s.pos * LS; };
+segs.forEach((s) => { s.e['lx' + s.k] = laneX(s); });
+
+edges.forEach((e) => {
+  const xa = e.sA === 'R' ? e.A.x + e.A.w : e.A.x;
+  const xb = e.sB === 'R' ? e.B.x + e.B.w : e.B.x;
+  e.pts = e.corr
+    ? [[xa, e.ya], [e.lx0, e.ya], [e.lx0, e.ty], [e.lx1, e.ty], [e.lx1, e.yb], [xb, e.yb]]
+    : [[xa, e.ya], [e.lx0, e.ya], [e.lx0, e.yb], [xb, e.yb]];
+});
+
+/* =====================================================================
+   Drawing
+   ===================================================================== */
+const svg = document.getElementById('svg');
+const gRegions = el('g', null, svg), gEdges = el('g', null, svg), gNodes = el('g', null, svg), gBadges = el('g', null, svg);
+
+REG.forEach((r) => {
+  el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, rx: 14, class: 'region ' + r.cls }, gRegions);
+  el('circle', { cx: r.x + 22, cy: r.y + 22, r: 12, class: 'rnum' }, gRegions);
+  el('text', { x: r.x + 22, y: r.y + 26.5, class: 'rnumt', 'text-anchor': 'middle' }, gRegions).textContent = r.n;
+  el('text', { x: r.x + 42, y: r.y + 27, class: 'rlabel' }, gRegions).textContent = wrap(r.label, Math.floor((r.w - 50) / 7.6), 1)[0];
+  el('text', { x: r.x + 14, y: r.y + 45, class: 'rpath' }, gRegions).textContent = wrap(r.path, Math.floor((r.w - 24) / 6.2), 1)[0];
+  if (r.note) el('text', { x: r.x + 14, y: r.y + 59, class: 'rnote' }, gRegions).textContent = wrap(r.note, Math.floor((r.w - 24) / 5.5), 1)[0];
+});
+
+const tip = document.getElementById('tip');
+function showTip(html, ev) { tip.innerHTML = html; tip.style.display = 'block'; moveTip(ev); }
+function moveTip(ev) {
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = ev.clientX + 14, y = ev.clientY + 14;
+  if (x + w > window.innerWidth - 8) x = ev.clientX - w - 14;
+  if (y + h > window.innerHeight - 8) y = ev.clientY - h - 14;
+  tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+}
+function hideTip() { tip.style.display = 'none'; }
+
+const nodeEls = {};
+function arrowHead(p, q) {
+  // q is the tip; the last segment is horizontal or vertical
+  const L = 8, W = 4.5, dx = Math.sign(q[0] - p[0]), dy = Math.sign(q[1] - p[1]);
+  const bx = q[0] - dx * L, by = q[1] - dy * L;
+  return `M${q[0]},${q[1]} L${bx - dy * W},${by + dx * W} L${bx + dy * W},${by - dx * W} z`;
+}
+edges.forEach((e) => {
+  const pts = e.pts.map((p) => p.slice());
+  const n = pts.length, last = pts[n - 1], prev = pts[n - 2];
+  const tipPt = last.slice();
+  last[0] -= Math.sign(last[0] - prev[0]) * 7; last[1] -= Math.sign(last[1] - prev[1]) * 7;
+  const d = 'M' + pts.map((p) => p[0] + ',' + p[1]).join(' L');
+  const g = el('g', { class: 'edge ' + (e.st === 'on' ? '' : e.st) }, gEdges);
+  el('path', { d: 'M' + e.pts.map((p) => p[0] + ',' + p[1]).join(' L'), class: 'hit' }, g);
+  el('path', { d, class: 'line' }, g);
+  el('circle', { cx: pts[0][0], cy: pts[0][1], r: 2.4, class: 'dot' }, g);
+  el('path', { d: arrowHead(prev, tipPt), class: 'head' }, g);
+  e.g = g;
+  const html = `<b>${esc(e.A.label)}</b> → <b>${esc(e.B.label)}</b>` + (e.label ? `<span class="lab">${esc(e.label)}</span>` : '') +
+    (e.st !== 'on' ? `<span class="lab">${e.st === 'off' ? 'Exists, not wired' : 'Planned'}</span>` : '');
+  // A class, not :hover: moving the group to the front (so it draws over its neighbours) drops :hover in Chrome.
+  g.addEventListener('pointerenter', (ev) => {
+    if (drag && dragMoved) return;
+    g.classList.add('hot'); gEdges.appendChild(g);
+    nodeEls[e.a].classList.add('ends'); nodeEls[e.b].classList.add('ends');
+    showTip(html, ev);
+  });
+  g.addEventListener('pointermove', moveTip);
+  g.addEventListener('pointerleave', () => { g.classList.remove('hot'); nodeEls[e.a].classList.remove('ends'); nodeEls[e.b].classList.remove('ends'); hideTip(); });
+  g.addEventListener('click', (ev) => { ev.stopPropagation(); if (!dragMoved) openPanel(e.a); });
+});
+
+NODES.forEach((n) => {
+  const g = el('g', { class: 'node ' + n.st, 'data-id': n.id, tabindex: 0, role: 'button', 'aria-label': n.label }, gNodes);
+  el('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 9, class: 'nbox' }, g);
+  el('text', { x: n.x + 11, y: n.y + 19, class: 'nlabel' }, g).textContent = wrap(n.label, Math.floor((n.w - 22) / 7.3), 1)[0];
+  wrap(n.sub, Math.floor((n.w - 22) / 5.7), Math.max(2, Math.floor((n.h - 30) / 13))).forEach((ln, i) => {
+    el('text', { x: n.x + 11, y: n.y + 34 + i * 13, class: 'nsub' }, g).textContent = ln;
+  });
+  const mine = edges.filter((e) => e.a === n.id || e.b === n.id);
+  g.addEventListener('pointerenter', (ev) => {
+    mine.forEach((e) => { e.g.classList.add('hot'); gEdges.appendChild(e.g); });
+    showTip(`<b>${esc(n.label)}</b><span class="lab">${esc(n.sub)}</span><span class="lab">${mine.length} connection${mine.length === 1 ? '' : 's'} · click for details</span>`, ev);
+  });
+  g.addEventListener('pointermove', moveTip);
+  g.addEventListener('pointerleave', () => { mine.forEach((e) => e.g.classList.remove('hot')); hideTip(); });
+  const open = () => { stopTour(); openPanel(n.id); };
+  g.addEventListener('click', (ev) => { ev.stopPropagation(); if (!dragMoved) open(); });
+  g.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); open(); } });
+  nodeEls[n.id] = g;
+});
+
+(function () {
+  const c = { on: 0, off: 0, plan: 0 };
+  NODES.forEach((n) => c[n.st]++);
+  document.getElementById('summary').textContent =
+    `${NODES.length} components · ${edges.length} connections · ${FLOWS.length} flows` + (c.off ? ` · ${c.off} not wired` : '') + (c.plan ? ` · ${c.plan} planned` : '') + ` · checked against the code ${REVIEWED}`;
+})();
+
+/* =====================================================================
+   Pan and zoom
+   ===================================================================== */
+let vb = Object.assign({}, FULL);
+function applyVB() { svg.setAttribute('viewBox', `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); }
+applyVB();
+function toSvg(clientX, clientY) {
+  const r = svg.getBoundingClientRect();
+  const s = Math.min(r.width / vb.w, r.height / vb.h);
+  const offX = (r.width - vb.w * s) / 2, offY = (r.height - vb.h * s) / 2;
+  return { x: vb.x + (clientX - r.left - offX) / s, y: vb.y + (clientY - r.top - offY) / s, scale: s };
+}
+function zoomAt(x, y, factor) {
+  const nw = Math.min(FULL.w * 1.4, Math.max(FULL.w / 10, vb.w * factor));
+  const f = nw / vb.w;
+  vb = { x: x - (x - vb.x) * f, y: y - (y - vb.y) * f, w: nw, h: vb.h * f };
+  applyVB();
+}
+function focusOn(n) {
+  const w = Math.min(vb.w, FULL.w / 2.4), h = w * FULL.h / FULL.w;
+  vb = { x: n.x + n.w / 2 - w / 2, y: cy(n) - h * 0.6, w, h };
+  applyVB();
+}
+svg.addEventListener('wheel', (ev) => { ev.preventDefault(); const p = toSvg(ev.clientX, ev.clientY); zoomAt(p.x, p.y, ev.deltaY > 0 ? 1.12 : 0.89); }, { passive: false });
+let drag = null, dragMoved = false;
+const pointers = new Map();
+let pinch = null;
+svg.addEventListener('pointerdown', (ev) => {
+  pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (pointers.size === 2) {
+    const [p, q] = [...pointers.values()];
+    pinch = { d: Math.hypot(p.x - q.x, p.y - q.y), w: vb.w };
+    drag = null;
+  } else { drag = { x: ev.clientX, y: ev.clientY, vx: vb.x, vy: vb.y }; dragMoved = false; }
+});
+window.addEventListener('pointermove', (ev) => {
+  if (pointers.has(ev.pointerId)) pointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (pinch && pointers.size === 2) {
+    const [p, q] = [...pointers.values()];
+    const d = Math.hypot(p.x - q.x, p.y - q.y);
+    const c = toSvg((p.x + q.x) / 2, (p.y + q.y) / 2);
+    zoomAt(c.x, c.y, (pinch.w * pinch.d / d) / vb.w);
+    dragMoved = true;
+    return;
+  }
+  if (!drag) return;
+  const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y;
+  if (!dragMoved && Math.hypot(dx, dy) < 4) return;
+  dragMoved = true; svg.classList.add('drag'); hideTip();
+  const s = toSvg(ev.clientX, ev.clientY).scale;
+  vb.x = drag.vx - dx / s; vb.y = drag.vy - dy / s; applyVB();
+});
+const endPointer = (ev) => { pointers.delete(ev.pointerId); if (pointers.size < 2) pinch = null; drag = null; svg.classList.remove('drag'); };
+window.addEventListener('pointerup', endPointer);
+window.addEventListener('pointercancel', endPointer);
+svg.addEventListener('click', () => { if (!dragMoved) closePanel(); });
+document.getElementById('zIn').onclick = () => zoomAt(vb.x + vb.w / 2, vb.y + vb.h / 2, 0.8);
+document.getElementById('zOut').onclick = () => zoomAt(vb.x + vb.w / 2, vb.y + vb.h / 2, 1.25);
+document.getElementById('zFit').onclick = () => { vb = Object.assign({}, FULL); applyVB(); };
+
+/* =====================================================================
+   Highlight and detail panel
+   ===================================================================== */
+function highlight(ids) {
+  const set = ids ? new Set(ids) : null;
+  Object.entries(nodeEls).forEach(([id, g]) => { g.classList.toggle('dim', !!set && !set.has(id)); g.classList.remove('sel'); });
+  edges.forEach((e) => {
+    const hit = !!set && set.has(e.a) && set.has(e.b);
+    e.g.classList.toggle('hl', hit);
+    e.g.classList.toggle('dim', !!set && !hit);
+    if (hit) gEdges.appendChild(e.g);
+  });
+}
+function clearHighlight() {
+  highlight(null);
+  Object.values(nodeEls).forEach((g) => g.classList.remove('sel', 'dim', 'inflow'));
+  gBadges.textContent = '';
+}
+const panel = document.getElementById('panel'), panelBody = document.getElementById('panelBody');
+const BADGE = { on: ['on', 'Exists and is wired'], off: ['off', 'Exists, not wired'], plan: ['plan', 'Planned, does not exist yet'] };
+function openPanel(id) {
+  const n = byId[id]; if (!n) return;
+  const r = regionById[n.r], b = BADGE[n.st];
+  let html = `<h2>${esc(n.label)}</h2><span class="badge ${b[0]}">${b[1]}</span> <span class="muted">· ${esc(r.n + ' · ' + r.label)}</span>`;
+  html += `<p>${esc(n.desc || n.sub || '')}</p>`;
+  if (n.files && n.files.length) html += '<h3>Where it lives</h3>' + n.files.map((f) => `<code class="file">${esc(f)}</code>`).join('');
+  if (n.det && n.det.length) html += '<h3>Details</h3><ul>' + n.det.map((d) => `<li>${esc(d)}</li>`).join('') + '</ul>';
+  const conns = edges.filter((e) => e.a === id || e.b === id);
+  if (conns.length) {
+    html += '<h3>Connections</h3><ul>' + conns.map((e) => {
+      const out = e.a === id, other = out ? e.B : e.A;
+      return `<li>${out ? '→' : '←'} <button class="lnk" data-go="${esc(other.id)}">${esc(other.label)}</button>${e.label ? ` <span class="muted">· ${esc(e.label)}</span>` : ''}</li>`;
+    }).join('') + '</ul>';
+  }
+  const inFlows = FLOWS.filter((f) => f.steps.some((s) => s.n === id));
+  if (inFlows.length) html += '<h3>Part of these flows</h3><ul>' + inFlows.map((f) => `<li><button class="lnk" data-flow="${f.id}">${esc(f.title)}</button></li>`).join('') + '</ul>';
+  panelBody.innerHTML = html;
+  panelBody.querySelectorAll('[data-go]').forEach((bt) => { bt.onclick = () => openPanel(bt.dataset.go); });
+  panelBody.querySelectorAll('[data-flow]').forEach((bt) => { bt.onclick = () => startTour(bt.dataset.flow); });
+  panel.classList.add('open'); panel.scrollTop = 0;
+  highlight([id].concat(conns.map((e) => (e.a === id ? e.b : e.a))));
+  nodeEls[id].classList.add('sel');
+}
+function closePanel() { panel.classList.remove('open'); if (!tour) clearHighlight(); }
+document.getElementById('closePanel').onclick = closePanel;
+
+/* =====================================================================
+   Flow tours on the map
+   ===================================================================== */
+const tourEl = document.getElementById('tour');
+let tour = null;
+function startTour(flowId, i) {
+  const f = FLOWS.find((x) => x.id === flowId); if (!f) return;
+  panel.classList.remove('open');
+  showTab('map');
+  tour = { f, i: i || 0 };
+  renderTour();
+}
+function stopTour() { if (!tour) return; tour = null; tourEl.classList.remove('on'); clearHighlight(); }
+function tourGo(d) { if (!tour) return; tour.i = Math.max(0, Math.min(tour.f.steps.length - 1, tour.i + d)); renderTour(); }
+function renderTour() {
+  const { f, i } = tour, s = f.steps[i];
+  const ids = f.steps.map((x) => x.n);
+  highlight(ids);
+  Object.values(nodeEls).forEach((g) => g.classList.remove('inflow'));
+  ids.forEach((id) => nodeEls[id].classList.add('inflow'));
+  nodeEls[s.n].classList.add('sel');
+  gBadges.textContent = '';
+  const perNode = {};
+  f.steps.forEach((st, k) => { (perNode[st.n] = perNode[st.n] || []).push(k + 1); });
+  Object.entries(perNode).forEach(([id, nums]) => {
+    const n = byId[id];
+    nums.forEach((num, j) => {
+      const x = n.x + n.w - 12 - j * 24, y = n.y - 1;
+      el('circle', { cx: x, cy: y, r: 11, class: 'badge-c', opacity: num === i + 1 ? 1 : 0.5 }, gBadges);
+      el('text', { x, y: y + 4, class: 'badge-t', 'text-anchor': 'middle' }, gBadges).textContent = num;
+    });
+  });
+  tourEl.innerHTML = `<div class="row"><span class="num">${i + 1}/${f.steps.length}</span><h4>${esc(f.title)}: ${esc(s.t)}</h4><span class="sp"></span>
+    <button id="tPrev" ${i === 0 ? 'disabled' : ''}>←</button><button id="tNext" ${i === f.steps.length - 1 ? 'disabled' : ''}>→</button><button id="tClose" aria-label="Close">✕</button></div>
+    <p>${esc(s.x)}</p>${s.r ? `<div class="ref mono">${esc(s.r)}</div>` : ''}`;
+  tourEl.classList.add('on');
+  document.getElementById('tPrev').onclick = () => tourGo(-1);
+  document.getElementById('tNext').onclick = () => tourGo(1);
+  document.getElementById('tClose').onclick = stopTour;
+  focusOn(byId[s.n]);
+}
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') { stopTour(); closePanel(); }
+  if (tour && ev.key === 'ArrowRight') tourGo(1);
+  if (tour && ev.key === 'ArrowLeft') tourGo(-1);
+});
+
+/* =====================================================================
+   Tabs and theme
+   ===================================================================== */
+function showTab(name) {
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === name + 'View'));
+  document.querySelectorAll('.tools button:not(#themeBtn)').forEach((b) => { b.style.display = name === 'map' ? '' : 'none'; });
+  hideTip();
+  sset('shw.tab', name);
+}
+document.querySelectorAll('#tabs button').forEach((b) => { b.onclick = () => showTab(b.dataset.tab); });
+const themeBtn = document.getElementById('themeBtn');
+const THEMES = ['auto', 'light', 'dark'];
+function applyTheme(t) {
+  if (t === 'auto') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t);
+  themeBtn.textContent = 'Theme: ' + t;
+  sset('shw.theme', t);
+}
+themeBtn.onclick = () => applyTheme(THEMES[(THEMES.indexOf(themeBtn.textContent.replace('Theme: ', '')) + 1) % 3]);
+applyTheme(THEMES.includes(sget('shw.theme')) ? sget('shw.theme') : 'auto');
+
+/* =====================================================================
+   Overview tab
+   ===================================================================== */
+(function () {
+  let h = `<h2>StudyHawk in 5 minutes</h2><p>${OVERVIEW.intro}</p>`;
+  h += '<p><button class="lnk" data-tab-go="map">Open the map</button> · <button class="lnk" data-tab-go="flows">See the flows</button> · <button class="lnk" data-tour="chat">Play "A chat message" on the map</button></p>';
+  h += '<h3>The path of a request: 7 columns, left to right</h3><div class="layers">';
+  REG.filter((r) => r.band === 'top').forEach((r) => {
+    h += `<div class="layer" style="background:var(--c${r.from + 1})"><h4><span class="num">${esc(r.n)}</span>${esc(r.label)}</h4><code>${esc(r.path)}</code><p>${esc(r.about || r.note)}</p></div>`;
+  });
+  h += '</div><h3>Underneath: what everything shares</h3><div class="layers">';
+  REG.filter((r) => r.band === 'bot').forEach((r, i) => {
+    h += `<div class="layer" style="background:var(--b${i + 1})"><h4><span class="num">${esc(r.n)}</span>${esc(r.label)}</h4><code>${esc(r.path)}</code><p>${esc(r.about || r.note)}</p></div>`;
+  });
+  h += '</div><h3>How to read the map</h3><ul>' + OVERVIEW.howto.map((x) => `<li>${x}</li>`).join('') + '</ul>';
+  h += '<h3>Key ideas</h3><ul>' + OVERVIEW.ideas.map((x) => `<li>${x}</li>`).join('') + '</ul>';
+  h += '<h3>Glossary</h3><div class="card"><dl class="gloss">' + OVERVIEW.glossary.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${d}</dd>`).join('') + '</dl></div>';
+  const v = document.getElementById('overview');
+  v.innerHTML = h;
+  v.querySelectorAll('[data-tab-go]').forEach((b) => { b.onclick = () => showTab(b.dataset.tabGo); });
+  v.querySelectorAll('[data-tour]').forEach((b) => { b.onclick = () => startTour(b.dataset.tour); });
+})();
+
+/* =====================================================================
+   Flows tab
+   ===================================================================== */
+(function () {
+  let h = '<h2>Flows: how each thing travels</h2><p class="muted">Each flow is a numbered walk through the map. "Play" shows it on the map step by step (arrow keys work too).</p><p>';
+  h += FLOWS.map((f) => `<span class="pill"><button class="lnk" data-jump="${f.id}">${esc(f.title)}</button></span>`).join('') + '</p>';
+  FLOWS.forEach((f) => {
+    h += `<h3 id="flow-${f.id}" style="margin-top:30px">${esc(f.title)} <button data-tour="${f.id}">▶ Play on the map</button></h3><p class="muted">${esc(f.intro)}</p><div class="card">`;
+    f.steps.forEach((s, k) => {
+      h += `<div class="step"><span class="num">${k + 1}</span><div class="body"><b>${esc(s.t)}</b> <button class="lnk" data-tour="${f.id}" data-i="${k}">(${esc(byId[s.n] ? byId[s.n].label : s.n)})</button><p>${esc(s.x)}</p>${s.r ? `<div class="ref mono">${esc(s.r)}</div>` : ''}</div></div>`;
+    });
+    h += '</div>';
+  });
+  const v = document.getElementById('flows');
+  v.innerHTML = h;
+  v.querySelectorAll('[data-tour]').forEach((b) => { b.onclick = () => startTour(b.dataset.tour, Number(b.dataset.i || 0)); });
+  v.querySelectorAll('[data-jump]').forEach((b) => { b.onclick = () => document.getElementById('flow-' + b.dataset.jump).scrollIntoView({ behavior: 'smooth' }); });
+})();
+
+/* =====================================================================
+   Deployment tab
+   ===================================================================== */
+(function () {
+  let h = `<h2>Deployment</h2><p>${DEPLOY.intro}</p>`;
+  DEPLOY.setups.forEach((s) => {
+    h += `<h3>${esc(s.title)}</h3><p class="muted">${esc(s.note)}</p><div class="grid">`;
+    s.boxes.forEach((b) => {
+      h += `<div class="box ${b.app ? 'app' : ''}"><h4>${esc(b.t)}</h4>${b.img ? `<span class="img">${esc(b.img)}</span>` : ''}<ul>${b.l.map((x) => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+    });
+    h += '</div>';
+  });
+  h += '<h3>Ports</h3><div class="tablewrap"><table><tr><th>Port</th><th>Who listens</th><th>Notes</th></tr>' +
+    DEPLOY.ports.map((p) => `<tr><td><code>${esc(p[0])}</code></td><td>${esc(p[1])}</td><td>${esc(p[2])}</td></tr>`).join('') + '</table></div>';
+  h += '<h3>Environment variables you usually touch</h3><div class="tablewrap"><table><tr><th>Variable</th><th>Default</th><th>Purpose</th></tr>' +
+    DEPLOY.env.map((p) => `<tr><td><code>${esc(p[0])}</code></td><td>${esc(p[1])}</td><td>${esc(p[2])}</td></tr>`).join('') + '</table></div>';
+  h += '<h3>CI</h3><ul>' + DEPLOY.ci.map((x) => `<li>${esc(x)}</li>`).join('') + '</ul>';
+  h += '<h3>Commands</h3>' + DEPLOY.commands.map(([t, c]) => `<p><b>${esc(t)}</b></p><pre><code>${esc(c)}</code></pre>`).join('');
+  document.getElementById('deploy').innerHTML = h;
+})();
+
+showTab(['overview', 'map', 'flows', 'deploy'].includes(sget('shw.tab')) ? sget('shw.tab') : 'map');
+})();
+</script>
+</body>
+</html>

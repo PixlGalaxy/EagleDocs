@@ -17,7 +17,7 @@ explains and guides; it does not hand in graded work as if it were the student's
 | `pixlai-engine/` | The agent engine, a separate package with no StudyHawk code in it. See [pixlai-engine/README.md](pixlai-engine/README.md). |
 | `sandbox/` | Image of the per-user container: Python with document and data libraries, Chromium, and the runner. |
 | `locales/` | Translations shared by the frontend and the backend. |
-| `plans/` | Design notes, status log, TODO and an interactive map (`plans/eagledocs-map.html`). |
+| `StudyHawkWorkflow.html` | Interactive map of the whole system: every component, how they connect, and step-by-step flows. Open it in a browser. |
 
 ## How it works
 
@@ -38,6 +38,10 @@ the browser reads them live over SSE. Closing the tab, reconnecting or running s
 
 Everything the replicas share lives in PostgreSQL (data, job queue, `LISTEN/NOTIFY` bus, leader locks) and in a shared
 `/data` folder (workspaces, TEMP, avatars).
+
+For the full picture, open [StudyHawkWorkflow.html](StudyHawkWorkflow.html) in a browser. It maps every component and
+connection, with file paths, and walks through flows such as a chat message, approvals, the sandbox, school sign-in,
+scheduled tasks, MCP apps and billing.
 
 ## Requirements
 
