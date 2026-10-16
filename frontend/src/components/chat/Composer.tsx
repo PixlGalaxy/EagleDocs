@@ -7,6 +7,7 @@ import { AttachmentTray } from './AttachmentViews';
 import { MAX_ATTACHMENTS, type DraftAttachment } from './attachments';
 import { toolbarButton } from './toolbar';
 import { useDictation, type DictationError } from './useDictation';
+import { useEnterAddsLine } from './touch';
 
 interface Props {
   value: string;
@@ -41,7 +42,7 @@ const MAX_HEIGHT = 220;
 /**
  * One rounded box: the auto-growing textarea on top and a toolbar under it
  * (attach, dictate, the pickers, then the context ring and send/stop on the
- * right). Enter sends, Shift+Enter adds a line. While the agent works it stays
+ * right). Enter sends, Shift+Enter adds a line (on a phone Enter adds a line and the button sends). While the agent works it stays
  * active: Enter sends a correction (steer) and Stop sits next to it. Photos and
  * files come in through the paperclip, a drop or a paste.
  */
@@ -58,6 +59,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busyMode = 'stee
   const [dragging, setDragging] = useState(false);
   const [overLimit, setOverLimit] = useState(false);
   const steering = busy && !!onSteer;
+  const enterAddsLine = useEnterAddsLine();
   const mode = BUSY[busyMode];
   const ModeIcon = mode.icon;
   const uploading = attachments.some((a) => !a.path && !a.error);
@@ -89,7 +91,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busyMode = 'stee
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !enterAddsLine) {
       e.preventDefault();
       submit();
     }
@@ -173,6 +175,7 @@ const Composer = ({ value, onChange, onSubmit, onStop, onSteer, busyMode = 'stee
             onChange(e.target.value);
           }}
           onKeyDown={onKeyDown}
+          enterKeyHint={enterAddsLine ? 'enter' : 'send'}
           onPaste={onPaste}
           disabled={disabled}
           maxLength={steering ? 2000 : 20000}

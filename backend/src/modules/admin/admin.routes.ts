@@ -17,6 +17,7 @@ import { normalizeEmail } from '../users/users.service.js';
 import { SETTINGS_KEYS as K } from './settings-keys.js';
 import type { BuiltinSkills } from '../skills/builtin.js';
 import type { UsersAdminService } from './users-admin.service.js';
+import { checkCanvas } from '../institutions/canvas-check.js';
 
 const activePause = (until: string | null) => (until && new Date(until).getTime() > Date.now() ? until : null);
 
@@ -185,11 +186,12 @@ export function createAdminRoutes(deps: {
     res.json(await institutions.list());
   });
 
+  // The saved school, plus whether its Canvas address answers like Canvas (a warning; it saves either way).
   router.post('/institutions', async (req: AppRequest, res) => {
     const saved = await institutions.save(null, parseInstitutionInput((req.body ?? {}) as Record<string, unknown>));
     logger.system.info(`"${req.user!.username}" created institution "${saved.name}"`);
     await audit(req, 'institution.create', saved.id, { name: saved.name });
-    res.status(201).json(saved);
+    res.status(201).json({ ...saved, canvas_check: await checkCanvas(saved.canvas_base_url) });
   });
 
   router.put('/institutions/:id', async (req: AppRequest, res) => {
@@ -197,7 +199,7 @@ export function createAdminRoutes(deps: {
     const saved = await institutions.save(id, parseInstitutionInput((req.body ?? {}) as Record<string, unknown>));
     logger.system.info(`"${req.user!.username}" updated institution "${saved.name}"`);
     await audit(req, 'institution.update', id, { name: saved.name });
-    res.json(saved);
+    res.json({ ...saved, canvas_check: await checkCanvas(saved.canvas_base_url) });
   });
 
   router.delete('/institutions/:id', async (req: AppRequest, res) => {

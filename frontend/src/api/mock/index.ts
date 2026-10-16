@@ -167,6 +167,18 @@ const routes: [string, RegExp, Handler][] = [
     return { course, items: db.upcoming.filter((i) => i.course_id === course.id), announcements: db.announcements.filter((a) => a.course_id === course.id) };
   }],
   ['GET', /^\/files$/, ({ query }) => ({ entries: db.files[query.get('path') ?? ''] ?? [], usage: { used_mb: 214, limit_mb: 5120 }, temp: { used_mb: 38, limit_mb: 10240, ttl_hours: 24 } })],
+  ['POST', /^\/files\/upload$/, ({ query, body }) => {
+    const file = body.file;
+    if (!(file instanceof File)) throw new HttpError(400, 'No file');
+    const dir = query.get('path') ?? '';
+    const entry = { name: file.name, path: dir ? `${dir}/${file.name}` : file.name, type: 'file' as const, size: file.size, modified_at: iso() };
+    // Same name in the same folder: the new one replaces it, like the real workspace.
+    const list = (db.files[dir] ??= []);
+    const i = list.findIndex((e) => e.path === entry.path);
+    if (i >= 0) list.splice(i, 1);
+    list.push(entry);
+    return entry;
+  }],
   ['POST', /^\/files\/mkdir$/, ({ body }) => {
     const path = String(body.path);
     const parent = path.split('/').slice(0, -1).join('/');
@@ -356,11 +368,23 @@ function script(chatId: string, jobId: string, prompt: string): { delay: number;
     out.push({ delay: 100, event: { type: 'approval_required', approval } });
     out.push({ delay: 200, event: { type: 'delta', text: "I drafted the email below. It won't be sent unless you approve it." } });
   } else {
+    // The plan above the message box: it rises, then moves step by step.
+    const steps = ['Read Canvas', 'Rank the work', 'Estimate the hours', 'Write the plan'];
+    const plan = (current: number): StreamEvent => ({
+      type: 'plan',
+      title: 'Your week',
+      steps: steps.map((title, i) => ({ title, status: i < current ? 'done' : i === current ? 'in_progress' : 'pending' })),
+    });
+    out.push({ delay: 300, event: plan(0) });
     const up = call('canvas.upcoming', { days: 7 });
     out.push({ delay: 300, event: { type: 'tool_call', call: up } });
     out.push({ delay: 900, event: { type: 'tool_result', call: { ...up, status: 'done', result_preview: '3 items' } } });
+    out.push({ delay: 700, event: plan(1) });
+    out.push({ delay: 900, event: plan(2) });
+    out.push({ delay: 900, event: plan(3) });
     const answer = 'Here is your week, ordered by priority:\n\n1. **Guided Practice 6** (ACG 2021), due Wednesday. About 1.5 h.\n2. **Draft 2** (ENC 1102), due Saturday. About 3 h; the rubric changed.\n3. **Connect Quiz 4** (MAN 3025), due Thursday. About 1 h.\n\nWant me to block time for these around your library shifts?';
     for (const word of answer.split(/(?<= )/)) out.push({ delay: 35, event: { type: 'delta', text: word } });
+    out.push({ delay: 100, event: plan(4) });
   }
 
   const final = (content: string): Message => ({
@@ -423,6 +447,50 @@ class MockEventSource {
   removeEventListener() {}
 }
 
+/**
+ * The chat's attachment chips upload with XHR (for progress). Requests to /api/
+ * go to the mock routes and report the whole file sent; anything else is a real XHR.
+ */
+function mockXhr(Real: typeof XMLHttpRequest): typeof XMLHttpRequest {
+  return class MockXhr extends Real {
+    private mock: { method: string; url: URL } | null = null;
+    private result = { status: 0, text: '' };
+    private aborted = false;
+
+    open(method: string, url: string | URL, ...rest: [boolean?, string?, string?]) {
+      const u = new URL(String(url), location.origin);
+      if (u.pathname.startsWith('/api/')) this.mock = { method: method.toUpperCase(), url: u };
+      else super.open(method, url, ...(rest as [boolean, string?, string?]));
+    }
+    setRequestHeader(name: string, value: string) {
+      if (!this.mock) super.setRequestHeader(name, value);
+    }
+    get status() {
+      return this.mock ? this.result.status : super.status;
+    }
+    get responseText() {
+      return this.mock ? this.result.text : super.responseText;
+    }
+    abort() {
+      if (!this.mock) return super.abort();
+      this.aborted = true;
+      this.onabort?.(new ProgressEvent('abort'));
+    }
+    send(body?: Document | XMLHttpRequestBodyInit | null) {
+      if (!this.mock) return super.send(body);
+      const { method, url } = this.mock;
+      const fields = body instanceof FormData ? Object.fromEntries(body) : typeof body === 'string' ? JSON.parse(body) : {};
+      const size = Object.values(fields).reduce<number>((n, v) => n + (v instanceof File ? v.size : 0), 0);
+      void handle(method, url.pathname.slice(4), url.searchParams, fields).then(async (res) => {
+        if (this.aborted) return;
+        this.upload.onprogress?.call(this, new ProgressEvent('progress', { lengthComputable: true, loaded: size, total: size }));
+        this.result = { status: res.status, text: await res.text() };
+        this.onload?.(new ProgressEvent('load'));
+      });
+    }
+  };
+}
+
 export function installMockApi() {
   const realFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -431,8 +499,11 @@ export function installMockApi() {
     const method = (init?.method ?? 'GET').toUpperCase();
     let body: Record<string, unknown> = {};
     if (typeof init?.body === 'string') body = JSON.parse(init.body);
+    // Uploads send a form: its fields (the File included) become the body.
+    if (init?.body instanceof FormData) body = Object.fromEntries(init.body);
     return handle(method, url.pathname.slice(4), url.searchParams, body);
   };
   (window as unknown as { EventSource: unknown }).EventSource = MockEventSource;
+  (window as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest = mockXhr(window.XMLHttpRequest);
   console.info('[mock] StudyHawk mock API installed. Sign in with any password; use "admin" for the admin role, or code 123456 to verify.');
 }

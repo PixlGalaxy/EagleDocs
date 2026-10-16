@@ -11,12 +11,12 @@ import type { ChatService } from '../chat/chat.service.js';
 import type { ModelCatalog } from '../models/catalog.js';
 import { JobEventWriter } from './event-writer.js';
 import type { CanvasService } from '../canvas/canvas.service.js';
+import { courseSpacesNote, type CourseSpaces } from '../canvas/course-spaces.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import type { AdminEmbeddings } from '../../engine/documents.js';
 import type { SchoolService } from '../school/school.service.js';
 import type { PushService } from '../push/push.service.js';
 import type { BuiltinSkills } from '../skills/builtin.js';
-import type { CourseFolders } from '../canvas/course-folders.js';
 import type { TiersService } from '../billing/tiers.service.js';
 import { withAttachments } from '../chat/attachments.js';
 
@@ -85,12 +85,12 @@ export interface WorkerDeps {
   chats: ChatService;
   catalog: ModelCatalog;
   canvas: CanvasService;
+  courseSpaces: CourseSpaces;
   workspace: DiskWorkspace;
   embeddings: AdminEmbeddings;
   school: SchoolService;
   push: PushService;
   builtinSkills: BuiltinSkills;
-  courseFolders: CourseFolders;
   tiers: TiersService;
   t: Translate;
   concurrency: number;
@@ -101,7 +101,8 @@ function chatFolderNote(folder: string): string {
   return [
     "## This chat's files",
     `This chat's folder in the workspace is "${folder}/". Save the files you create for this chat there (for example`,
-    `"${folder}/summary.md"), unless the user asks for another place. Files the user attaches in this chat are there too.`,
+    `"${folder}/summary.md"), unless they belong to a course (see the course folders) or the user asks for another place.`,
+    'Files the user attaches in this chat are there too.',
   ].join('\n');
 }
 
@@ -238,6 +239,18 @@ export class JobWorker {
     const fail = async (message: string) => {
       events.emit({ type: 'error', error: message });
       await events.flush();
+      // Failed before answering (no model, a lost connection...): an empty answer keeps the reason in the chat,
+      // so it still shows after a reload or when the chat opens later.
+      if (job.chat_id && job.kind !== 'delegate') {
+        await db
+          .query(
+            `INSERT INTO messages (chat_id, role, content, meta)
+             SELECT $1, 'assistant', '', $2
+             WHERE (SELECT role FROM messages WHERE chat_id = $1 ORDER BY seq DESC LIMIT 1) = 'user'`,
+            [job.chat_id, { failed: message }],
+          )
+          .catch((err: Error) => logger.warn(`Could not save the failure note of job ${job.id}: ${err.message}`));
+      }
       await this.finish(job.id, 'failed', message);
     };
 
@@ -272,8 +285,9 @@ export class JobWorker {
       if (resolution.notice) events.emit({ type: 'notice', message: resolution.notice });
 
       const timezone = user.timezone || 'America/New_York';
-      // Where this chat keeps its files: the agent and its helpers save there.
-      const notes = chatId ? chatFolderNote(await chats.folderOf(user.id, chatId)) : undefined;
+      // Where files go: this chat's folder, and each course's folder for course work (laid out here when missing).
+      const courseNote = courseSpacesNote(await this.deps.courseSpaces.ensure(user.id).catch(() => []));
+      const notes = [chatId ? chatFolderNote(await chats.folderOf(user.id, chatId)) : '', courseNote].filter(Boolean).join('\n\n') || undefined;
       const agent = engine.forUser({
         id: user.id,
         name: user.display_name || user.username,
@@ -287,7 +301,7 @@ export class JobWorker {
         // The plan decides how many helpers, how deep, and how many schedules.
         limits: await this.planLimits(user.id),
         host: {
-          canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace, folders: this.deps.courseFolders },
+          canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace, spaces: this.deps.courseSpaces },
           school: { service: this.deps.school, userId: user.id, workspace: this.deps.workspace },
         },
       });

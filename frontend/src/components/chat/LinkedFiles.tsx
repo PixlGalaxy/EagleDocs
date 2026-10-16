@@ -5,49 +5,26 @@ import type { WorkspaceEntry } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import { FileGlance, FilePreviewPanel } from '../files/FilePreview';
 import { hasHoverPreview, previewKindOf } from '../files/preview';
-import { fileUrl, formatSize, workspaceLinkPath } from './attachments';
+import { formatSize } from './attachments';
 
-/** Cards after one paragraph or list item, at most this many. */
-const MAX_CARDS = 3;
-const DOWNLOAD = fileUrl('').split('?')[0]!;
-
-/** The workspace path a rendered link points to (a download link, or a workspace: link as written), or null. */
-function filePathOf(href: unknown): string | null {
-  if (typeof href !== 'string' || !href) return null;
-  if (href.startsWith(`${DOWNLOAD}?`)) return new URLSearchParams(href.slice(DOWNLOAD.length + 1)).get('path');
-  return workspaceLinkPath(href);
-}
-
-/** The parts of a markdown node these helpers read (hast elements and text). */
-interface MdNode {
-  type: string;
-  tagName?: string;
-  properties?: Record<string, unknown>;
-  children?: MdNode[];
-}
-
-/**
- * The workspace files a paragraph or list item links to, in order and once
- * each. Lists inside it are left to their own items; pictures already show inline.
- */
-export function linkedFilesIn(node: MdNode | undefined): string[] {
-  const out: string[] = [];
-  const walk = (n: MdNode) => {
-    if (n.type !== 'element') return;
-    if (n.tagName === 'ul' || n.tagName === 'ol') return;
-    if (n.tagName === 'a') {
-      const path = filePathOf(n.properties?.href);
-      if (path && !out.includes(path)) out.push(path);
-      return;
-    }
-    n.children?.forEach(walk);
-  };
-  node?.children?.forEach(walk);
-  return out.slice(0, MAX_CARDS);
-}
-
-const ICONS = { image: FileImage, spreadsheet: FileSpreadsheet, document: FileText, pdf: FileText, markdown: FileText, html: FileText, text: FileText } as const;
-const iconFor = (name: string) => (/\.(pptx?|key|odp)$/i.test(name) ? Presentation : (ICONS[previewKindOf(name) as keyof typeof ICONS] ?? File));
+/** The icon for a file's kind (slides, picture, sheet, document...). */
+const FileIcon = ({ name, size, className }: { name: string; size: number; className: string }) => {
+  if (/\.(pptx?|key|odp)$/i.test(name)) return <Presentation size={size} className={className} aria-hidden="true" />;
+  switch (previewKindOf(name)) {
+    case 'image':
+      return <FileImage size={size} className={className} aria-hidden="true" />;
+    case 'spreadsheet':
+      return <FileSpreadsheet size={size} className={className} aria-hidden="true" />;
+    case 'document':
+    case 'pdf':
+    case 'markdown':
+    case 'html':
+    case 'text':
+      return <FileText size={size} className={className} aria-hidden="true" />;
+    default:
+      return <File size={size} className={className} aria-hidden="true" />;
+  }
+};
 
 /** One linked file: a small live glance (PDF, Word, Excel, picture, text...) or its icon; click to open it whole. */
 export const FileCard = ({ path }: { path: string }) => {
@@ -69,7 +46,6 @@ export const FileCard = ({ path }: { path: string }) => {
   // A file that is gone (deleted, moved) gets no card; the link in the text stays.
   if (entry === 'missing') return null;
   const name = entry?.name ?? path.split('/').pop() ?? path;
-  const Icon = iconFor(name);
   return (
     <>
       <button
@@ -84,12 +60,12 @@ export const FileCard = ({ path }: { path: string }) => {
             <FileGlance entry={entry} />
           ) : (
             <span className="flex h-full items-center justify-center">
-              <Icon size={34} className="text-slate-300 dark:text-slate-600" />
+              <FileIcon name={name} size={34} className="text-slate-300 dark:text-slate-600" />
             </span>
           )}
         </span>
         <span className="flex items-center gap-2 border-t border-slate-200 px-3 py-2 dark:border-slate-700">
-          <Icon size={15} className="shrink-0 text-[var(--accent-500)]" aria-hidden="true" />
+          <FileIcon name={name} size={15} className="shrink-0 text-[var(--accent-500)]" />
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700 dark:text-slate-200">{name}</span>
           {entry && <span className="shrink-0 text-[11px] text-slate-400">{formatSize(entry.size)}</span>}
         </span>

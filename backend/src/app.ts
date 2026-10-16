@@ -16,6 +16,7 @@ import type { RegisterService } from './modules/auth/register.service.js';
 import { createSessionMiddleware } from './modules/auth/session.middleware.js';
 import { createAvatarsRoutes } from './modules/avatars/avatars.routes.js';
 import { createLogsRoutes } from './modules/logs/logs.routes.js';
+import type { CourseSpaces } from './modules/canvas/course-spaces.js';
 import type { InstitutionsService } from './modules/institutions/institutions.service.js';
 import type { MailService } from './modules/mail/mail.service.js';
 import type { Bus } from './bus/bus.js';
@@ -39,7 +40,6 @@ import type { AppRequest } from './types/index.js';
 import { createPushRoutes, latestBroadcast } from './modules/push/push.routes.js';
 import type { PushService } from './modules/push/push.service.js';
 import type { BuiltinSkills } from './modules/skills/builtin.js';
-import type { CourseFolders } from './modules/canvas/course-folders.js';
 import { createBillingRoutes } from './modules/billing/billing.routes.js';
 import type { BillingService } from './modules/billing/billing.service.js';
 import type { TiersService } from './modules/billing/tiers.service.js';
@@ -70,7 +70,7 @@ export interface AppDeps {
   school: SchoolService;
   push: PushService;
   builtinSkills: BuiltinSkills;
-  courseFolders: CourseFolders;
+  courseSpaces: CourseSpaces;
   tiers: TiersService;
   billing: BillingService;
   oauth: OAuthService;
@@ -78,7 +78,7 @@ export interface AppDeps {
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseFolders, tiers, billing, oauth, mcp } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseSpaces, tiers, billing, oauth, mcp } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -133,7 +133,7 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/jobs', jobsRouter);
   app.use('/api/approvals', approvalsRouter);
   const { models, conns } = createModelRoutes(db, catalog, connections, school);
-  const { canvasRouter, connectionRouter } = createCanvasRoutes(canvas, connections, courseFolders);
+  const { canvasRouter, connectionRouter } = createCanvasRoutes(canvas, connections, courseSpaces);
   app.use('/api/models', models);
   app.use('/api/canvas', canvasRouter);
   const { files, rags } = createFilesRoutes(workspace, chats);

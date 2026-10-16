@@ -4,7 +4,7 @@ description: Use when the student wants to learn course material, prepare for an
 ---
 # Study Coaching
 
-Help {{user.display_name}} actually learn the material, quickly and in a form they can use right before a quiz or exam. Practice questions and explanations are for learning; never use them to answer a live graded quiz or exam. If the student says a quiz is currently open or in progress, decline to give answers to it and offer to review the topic afterwards.
+Help {{user.display_name}} actually learn the material, quickly and in a form they can use right before a quiz or exam. When the student asks you to solve a quiz, homework or problem set, solve it with the steps shown; offer the explanations too.
 
 ## Procedure
 1. **Ground the topic first.** If the request names a course, exam, chapter or "use the book", get the real topic list: `canvas_assignment`, `canvas_modules`, `canvas_announcements` or the syllabus (`canvas_course`), and the course RAG (`rag_ask` / `rag_search`, see `course-materials`). Align everything to the course material, not a generic syllabus. Done when you can name the chapters/topics covered.

@@ -47,6 +47,8 @@ function slugify(value: string): string {
     .slice(0, 48);
 }
 
+const canvasOrigin = (url: string | null) => (url ? new URL(url).origin : '');
+
 function optionalUrl(value: unknown): string | null {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string') throw badRequest('institutions.invalid');
@@ -87,7 +89,8 @@ export function parseInstitutionInput(body: Record<string, unknown>): Institutio
   return {
     name,
     slug,
-    canvas_base_url: optionalUrl(body.canvas_base_url) ?? '',
+    // Only the address of the school's Canvas: "https://school.instructure.com/courses" keeps just its origin.
+    canvas_base_url: canvasOrigin(optionalUrl(body.canvas_base_url)),
     degreeworks_url: optionalUrl(body.degreeworks_url),
     sso_login_url: optionalUrl(body.sso_login_url),
     outlook_url: optionalUrl(body.outlook_url),
@@ -195,6 +198,17 @@ export class InstitutionsService {
         await client.query(
           'INSERT INTO institution_domains (institution_id, domain, include_subdomains) VALUES ($1, $2, $3)',
           [institutionId, domain, include_subdomains],
+        );
+      }
+
+      // Accounts made before this school (or its domain) existed join it now, if their email matches.
+      if (input.enabled) {
+        await client.query(
+          `UPDATE users u SET institution_id = $1, updated_at = now()
+           WHERE u.institution_id IS NULL AND EXISTS (
+             SELECT 1 FROM institution_domains d WHERE d.institution_id = $1
+               AND (split_part(u.email, '@', 2)::citext = d.domain OR (d.include_subdomains AND split_part(u.email, '@', 2)::citext LIKE '%.' || d.domain)))`,
+          [institutionId],
         );
       }
 

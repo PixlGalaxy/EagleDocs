@@ -4,17 +4,17 @@ description: Use when a Canvas assignment requires a Word (.docx) deliverable, s
 ---
 # Word Template and Report Assignments
 
-Workflow for assignments whose deliverable is a Word `.docx`: a template to complete, or a report to write. You prepare and format; the student authors and submits. Canvas is read-only for you: never submit.
+Workflow for assignments whose deliverable is a Word `.docx`: a template to complete, or a report to write. You write and format the finished document; the student reviews and submits it. Canvas is read-only for you: never submit.
 
-## Academic integrity (check first)
-1. Read the assignment text for any academic integrity or AI-use language BEFORE writing substantive content.
-2. If AI-generated ideas or text are prohibited, or the task needs the student's own observation, experience or wording: do NOT write submission-ready prose. Prepare the template, fill only objective administrative fields the student gave you, insert clearly labeled placeholders, and create a separate checklist/outline telling the student what they must personally write, observe or draw. Label the file a working template, not a ready-to-submit draft.
-3. If AI help is allowed, work from the student's own material (their outline, notes, prior draft, answers to your questions) and expand it; never invent personal stories, team contributions, dates, locations, photos or results. Mark unknowns `PENDING VALIDATION`.
+## Ground rules
+1. If the assignment's own text or syllabus forbids AI help, mention it once in a short line; then do what the student decides.
+2. Write the complete document. Use the student's own material when they have it (outline, notes, prior draft, answers to your questions).
+3. Never invent personal stories, team contributions, dates, locations, photos or results: ask with `ask_user` or mark the gap `PENDING VALIDATION`.
 
 ## Workflow
 1. **Inspect Canvas.** `canvas_assignment` for description, rubric, points, due date, submission type. Note links to files in the description.
 2. **Find the template.** Look in `canvas_modules` and `canvas_files`, then `canvas_download` it. If the course file list is restricted, files linked from the assignment may still be reachable; say what you could not access.
-3. **Preserve the original.** Keep the downloaded template unchanged. Work on a copy named clearly, e.g. `<Student Name> <Assignment> - DRAFT FOR VALIDATION.docx`, in `<term>/<course>/assignments/<slug>/`.
+3. **Preserve the original.** Keep the downloaded template unchanged. Work on a copy named clearly, e.g. `<Student Name> <Assignment> - DRAFT FOR VALIDATION.docx`, in the course's `Work/<assignment>/` folder; the finished file goes in its `Assignments/` folder.
 4. **Collect grading sources before writing a report:** assignment, rubric, handout, the student's earlier outline/draft, and course notes (`rag_ask` / `rag_search` if the course has a RAG). Align every required heading with the rubric.
 5. **Fill the document with `code_run` and python-docx.** Prefer editing existing paragraphs/tables so the template formatting survives:
 ```python
@@ -35,7 +35,7 @@ doc.save("<Student Name> <Assignment> - DRAFT FOR VALIDATION.docx")
 9. **Report.** Give the file path and list only what remains before submission: items to write, replace or confirm. State that submission is for the student to do in Canvas.
 
 ## Checklist
-- [ ] Policy on AI/integrity checked; output matches it.
+- [ ] If the assignment has an AI-use policy, the student was told once.
 - [ ] Original template untouched; output copy has a distinct name.
 - [ ] Unknown personal facts marked, not invented.
 - [ ] Required image present or a labeled placeholder.

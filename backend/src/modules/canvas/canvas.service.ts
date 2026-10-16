@@ -5,6 +5,7 @@ import { AppError, withDetail } from '../../errors.js';
 import type { ConnectionsService } from '../connections/connections.service.js';
 import { CanvasClient, CanvasError, type CanvasAssignmentRaw, type CanvasCourseRaw } from './canvas.client.js';
 import { estimateHours, priorityScore, stripHtml } from './priority.js';
+import { linksIn, rank, type CanvasThing } from './canvas-search.js';
 import { Readable } from 'stream';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 
@@ -48,10 +49,15 @@ export interface AnnouncementView {
   html_url: string;
 }
 
-/** Each replica keeps its own short cache: enough to spare Canvas from page refreshes and agent loops. */
-const CACHE_TTL_MS = 5 * 60 * 1000;
+/**
+ * Each replica keeps its own short cache: enough to spare Canvas from page refreshes and one answer's repeated
+ * calls, short enough that a change a teacher makes shows up on the next message.
+ */
+const CACHE_TTL_MS = 60 * 1000;
 const MAX_COURSES = 20;
 const PARALLEL = 4;
+/** Pages read per course when searching, for the files they link to. */
+const PAGES_TO_SCAN = 30;
 
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out: R[] = new Array(items.length);
@@ -335,35 +341,6 @@ export class CanvasService {
     };
   }
 
-  /** Everything the course folders need in two calls: assignments with their instructions, and recent announcements. */
-  async courseSnapshot(userId: string, courseId: number) {
-    return this.cached(userId, `snapshot:${courseId}`, async (client) => {
-      const [assignments, announcements] = await Promise.all([
-        client.assignments(courseId),
-        client.announcements([courseId], new Date(Date.now() - 30 * 86_400_000)).catch(() => []),
-      ]);
-      return {
-        assignments: assignments.map((a) => ({
-          id: a.id,
-          title: a.name ?? 'Assignment',
-          due_at: a.due_at ?? null,
-          points: a.points_possible ?? null,
-          submitted: Boolean(a.submission?.submitted_at),
-          missing: Boolean(a.submission?.missing),
-          score: a.submission?.score ?? null,
-          submission_types: (a.submission_types ?? []).filter((t) => t !== 'none'),
-          url: a.html_url ?? '',
-          description: stripHtml(a.description).slice(0, 20_000),
-        })),
-        announcements: announcements
-          .map((a) => ({ title: a.title ?? 'Announcement', posted_at: a.posted_at ?? null, html_url: a.html_url ?? '', text: stripHtml(a.message).slice(0, 4000) }))
-          .sort((a, b) => (b.posted_at ?? '').localeCompare(a.posted_at ?? '')),
-      };
-    });
-  }
-
-  // ---------------------------------------------------------------- for the agent
-
   async announcements(userId: string, courseId: number | null, days: number) {
     const courses = await this.courses(userId);
     const ids = courseId ? [courseId] : courses.map((c) => c.id);
@@ -378,12 +355,23 @@ export class CanvasService {
     });
   }
 
+  /** Modules and their items, each with the id that opens it: file_id (canvas_download), page_url (canvas_page), assignment or quiz ids. */
   modules(userId: string, courseId: number) {
     return this.cached(userId, `modules:${courseId}`, async (client) =>
       (await client.modules(courseId)).map((m) => ({
         name: m.name,
         state: m.state ?? null,
-        items: (m.items ?? []).map((i) => ({ title: i.title, type: i.type, completed: i.completion_requirement?.completed ?? null, url: i.html_url })),
+        items: (m.items ?? []).map((i) => ({
+          title: i.title,
+          type: i.type,
+          completed: i.completion_requirement?.completed ?? null,
+          url: i.html_url,
+          ...(i.type === 'File' && i.content_id && { file_id: i.content_id }),
+          ...(i.type === 'Page' && i.page_url && { page_url: i.page_url }),
+          ...(i.type === 'Assignment' && i.content_id && { assignment_id: i.content_id }),
+          ...(i.type === 'Quiz' && i.content_id && { quiz_id: i.content_id }),
+          ...(i.type === 'ExternalUrl' && i.external_url && { external_url: i.external_url }),
+        })),
       })),
     );
   }
@@ -392,17 +380,147 @@ export class CanvasService {
     return this.cached(userId, `assignment:${courseId}:${assignmentId}`, async (client) => {
       const a = await client.assignment(courseId, assignmentId);
       const { hours, reason } = estimateHours({ name: a.name ?? '', description: a.description, points_possible: a.points_possible, submission_types: a.submission_types, submitted: false });
+      // Where it sits in the modules: its material is usually in the same module or one named for the files.
+      const modules = await client.modules(courseId).catch(() => []);
+      const ids = new Set([assignmentId, a.quiz_id].filter(Boolean));
       return {
         title: a.name,
         due_at: a.due_at ?? null,
         points: a.points_possible ?? null,
         submission_types: a.submission_types ?? [],
+        is_quiz: Boolean(a.is_quiz_assignment || a.submission_types?.includes('online_quiz')),
         submitted: Boolean(a.submission?.submitted_at),
         score: a.submission?.score ?? null,
         estimate: { hours, reason },
         description: stripHtml(a.description).slice(0, 8000),
+        // What the instructions link to: open them with canvas_download (files) and canvas_page (pages).
+        links: linksIn(a.description),
+        in_modules: modules.filter((m) => (m.items ?? []).some((i) => i.content_id && ids.has(i.content_id))).map((m) => m.name),
         rubric: (a.rubric ?? []).map((r) => ({ criterion: r.description, points: r.points })),
         url: a.html_url,
+      };
+    });
+  }
+
+  /** One Canvas page as text, with the files, pages and assignments it links to. */
+  page(userId: string, courseId: number, pageUrl: string) {
+    return this.cached(userId, `page:${courseId}:${pageUrl}`, async (client) => {
+      const p = await client.page(courseId, pageUrl);
+      if (p.locked_for_user) return { title: p.title ?? pageUrl, locked: true, text: '', links: linksIn(null) };
+      return { title: p.title ?? pageUrl, text: stripHtml(p.body).slice(0, 12000), links: linksIn(p.body), url: p.html_url ?? null, updated: p.updated_at ?? null };
+    });
+  }
+
+  /** Everything in a course that can be opened (module items, files, pages, assignments), once each, for canvas_find. */
+  private things(userId: string, course: CourseView) {
+    return this.cached(userId, `things:${course.id}`, async (client) => {
+      const id = course.id;
+      const [modules, files, pages, assignments] = await Promise.all([
+        client.modules(id).catch(() => []),
+        client.courseFiles(id).catch(() => []),
+        client.pages(id).catch(() => []),
+        client.assignments(id).catch(() => []),
+      ]);
+      const out = new Map<string, CanvasThing>();
+      const add = (key: string, thing: CanvasThing) => {
+        // A module item knows its module: it wins over the same thing found in a plain list.
+        if (!out.has(key) || (thing.module && !out.get(key)!.module)) out.set(key, thing);
+      };
+      const base = { course_id: id, course: course.name };
+      for (const m of modules) {
+        for (const i of m.items ?? []) {
+          const title = i.title ?? '';
+          const where = { ...base, module: m.name ?? undefined, title, url: i.html_url };
+          if (i.type === 'File' && i.content_id) add(`f${i.content_id}`, { ...where, kind: 'file', file_id: i.content_id });
+          else if (i.type === 'Page' && i.page_url) add(`p${i.page_url}`, { ...where, kind: 'page', page_url: i.page_url });
+          else if (i.type === 'Assignment' && i.content_id) add(`a${i.content_id}`, { ...where, kind: 'assignment', assignment_id: i.content_id });
+          else if (i.type === 'Quiz') add(`m${i.id}`, { ...where, kind: 'quiz' });
+          else if (i.type === 'Discussion') add(`m${i.id}`, { ...where, kind: 'discussion' });
+          else if (i.type === 'ExternalUrl') add(`m${i.id}`, { ...where, kind: 'link', url: i.external_url ?? i.html_url });
+        }
+        if (m.name) add(`mod${m.id}`, { ...base, kind: 'module', title: m.name });
+      }
+      for (const f of files) add(`f${f.id}`, { ...base, kind: 'file', title: f.display_name ?? f.filename ?? `file-${f.id}`, file_id: f.id });
+      for (const p of pages) add(`p${p.url}`, { ...base, kind: 'page', title: p.title, page_url: p.url });
+      // Many courses hide the Files tab and list their material on a page ("Files for the Semester"):
+      // the files those pages link to are found by the words of each link.
+      await mapLimit(pages.slice(0, PAGES_TO_SCAN), PARALLEL, async (p) => {
+        const body = await client.page(id, p.url).then((page) => (page.locked_for_user ? '' : (page.body ?? '')), () => '');
+        for (const f of linksIn(body).files) {
+          if (f.text) add(`f${f.file_id}`, { ...base, kind: 'file', title: f.text, file_id: f.file_id, module: `page: ${p.title}` });
+        }
+      });
+      for (const a of assignments) {
+        const quiz = a.is_quiz_assignment || a.submission_types?.includes('online_quiz');
+        add(`a${a.id}`, { ...base, kind: quiz ? 'quiz' : 'assignment', title: a.name ?? '', assignment_id: a.id, url: a.html_url });
+      }
+      return [...out.values()];
+    });
+  }
+
+  /**
+   * Finds course material by a (half-remembered) name across this term's courses,
+   * or one course: module items, files, pages and assignments, best match first.
+   */
+  async find(userId: string, query: string, courseId?: number) {
+    const courses = await this.courses(userId);
+    const current = courses.filter((c) => c.current);
+    const searched = courseId ? courses.filter((c) => c.id === courseId) : current.length ? current : courses;
+    if (courseId && searched.length === 0) searched.push({ id: courseId, name: `Course ${courseId}`, course_code: '', term: null, current_score: null, current_grade: null, current: true });
+    const lists = await mapLimit(searched, PARALLEL, (c) => this.things(userId, c).catch(() => [] as CanvasThing[]));
+    return { query, searched_courses: searched.map((c) => ({ id: c.id, name: c.name })), results: rank(query, lists.flat()) };
+  }
+
+  /** The student's submissions in a course: what they turned in, when, and the grade (newest due first). */
+  submissions(userId: string, courseId: number) {
+    return this.cached(userId, `submissions:${courseId}`, async (client) =>
+      (await client.mySubmissions(courseId))
+        .map((s) => ({
+          assignment_id: s.assignment_id,
+          title: s.assignment?.name ?? `Assignment ${s.assignment_id}`,
+          due_at: s.assignment?.due_at ?? null,
+          submitted_at: s.submitted_at ?? null,
+          score: s.score ?? null,
+          points: s.assignment?.points_possible ?? null,
+          grade: s.grade ?? null,
+          state: s.workflow_state ?? null,
+          late: Boolean(s.late),
+          missing: Boolean(s.missing),
+          excused: Boolean(s.excused),
+        }))
+        .sort((a, b) => (b.due_at ?? '').localeCompare(a.due_at ?? ''))
+        .slice(0, 150),
+    );
+  }
+
+  /** One submission in full: the text or files turned in, the grade, the teacher's comments and the rubric marks. */
+  submission(userId: string, courseId: number, assignmentId: number) {
+    return this.cached(userId, `submission:${courseId}:${assignmentId}`, async (client) => {
+      const s = await client.mySubmission(courseId, assignmentId);
+      const criteria = new Map((s.assignment?.rubric ?? []).map((r) => [r.id ?? '', r]));
+      return {
+        title: s.assignment?.name ?? null,
+        due_at: s.assignment?.due_at ?? null,
+        submitted_at: s.submitted_at ?? null,
+        attempt: s.attempt ?? null,
+        state: s.workflow_state ?? null,
+        score: s.score ?? null,
+        points: s.assignment?.points_possible ?? null,
+        grade: s.grade ?? null,
+        late: Boolean(s.late),
+        missing: Boolean(s.missing),
+        type: s.submission_type ?? null,
+        text: stripHtml(s.body).slice(0, 8000) || null,
+        submitted_url: s.url ?? null,
+        // Files the student turned in: canvas_download fetches them by file_id.
+        attachments: (s.attachments ?? []).map((f) => ({ file_id: f.id, name: f.display_name ?? f.filename ?? `file-${f.id}`, size_mb: Math.round(((f.size ?? 0) / 1048576) * 100) / 100 })),
+        comments: (s.submission_comments ?? []).map((c) => ({ author: c.author_name ?? null, text: c.comment ?? '', at: c.created_at ?? null })),
+        rubric: Object.entries(s.rubric_assessment ?? {}).map(([id, mark]) => ({
+          criterion: criteria.get(id)?.description ?? id,
+          points: mark.points ?? null,
+          max: criteria.get(id)?.points ?? null,
+          comment: mark.comments || null,
+        })),
       };
     });
   }

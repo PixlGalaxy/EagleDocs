@@ -40,7 +40,7 @@ export interface CanvasAssignmentRaw {
   quiz_id?: number;
   discussion_topic?: unknown;
   submission?: { submitted_at?: string | null; missing?: boolean; workflow_state?: string; score?: number | null; grade?: string | null } | null;
-  rubric?: { description?: string; points?: number }[];
+  rubric?: { id?: string; description?: string; points?: number }[];
 }
 
 export interface CanvasEventRaw {
@@ -98,11 +98,41 @@ export interface CanvasPageRaw {
   locked_for_user?: boolean;
 }
 
+export interface CanvasSubmissionRaw {
+  assignment_id: number;
+  assignment?: CanvasAssignmentRaw;
+  submitted_at?: string | null;
+  graded_at?: string | null;
+  score?: number | null;
+  grade?: string | null;
+  attempt?: number | null;
+  late?: boolean;
+  missing?: boolean;
+  excused?: boolean | null;
+  workflow_state?: string;
+  submission_type?: string | null;
+  body?: string | null;
+  url?: string | null;
+  preview_url?: string;
+  attachments?: { id: number; display_name?: string; filename?: string; size?: number; 'content-type'?: string }[];
+  submission_comments?: { author_name?: string; comment?: string; created_at?: string }[];
+  rubric_assessment?: Record<string, { points?: number | null; comments?: string | null }> | null;
+}
+
 export interface CanvasModuleRaw {
   id: number;
   name?: string;
   state?: string;
-  items?: { id: number; title?: string; type?: string; html_url?: string; content_id?: number; page_url?: string; completion_requirement?: { completed?: boolean } }[];
+  items?: {
+    id: number;
+    title?: string;
+    type?: string;
+    html_url?: string;
+    content_id?: number;
+    page_url?: string;
+    external_url?: string;
+    completion_requirement?: { completed?: boolean };
+  }[];
 }
 
 const TIMEOUT_MS = 30_000;
@@ -312,5 +342,17 @@ export class CanvasClient {
 
   modules(courseId: number) {
     return this.get<CanvasModuleRaw[]>(`courses/${courseId}/modules`, { 'include[]': ['items'] });
+  }
+
+  /** The student's own submissions in a course, each with its assignment. */
+  mySubmissions(courseId: number) {
+    return this.get<CanvasSubmissionRaw[]>(`courses/${courseId}/students/submissions`, { 'student_ids[]': ['self'], 'include[]': ['assignment'] });
+  }
+
+  /** The student's submission to one assignment: what they turned in, the grade, the teacher's comments and rubric marks. */
+  mySubmission(courseId: number, assignmentId: number) {
+    return this.get<CanvasSubmissionRaw>(`courses/${courseId}/assignments/${assignmentId}/submissions/self`, {
+      'include[]': ['submission_comments', 'rubric_assessment', 'assignment'],
+    });
   }
 }

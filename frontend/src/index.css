@@ -20,6 +20,50 @@ html.dark {
   color-scheme: dark;
 }
 
+/* The agent's plan (PlanDock): slides up from the message box, and back down when it goes. */
+@keyframes plan-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes plan-out {
+  to {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+}
+/* The step in progress breathes a little. */
+@keyframes plan-pulse {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent-500) 25%, transparent);
+  }
+}
+.plan-in {
+  animation: plan-in 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.plan-out {
+  animation: plan-out 0.3s ease-in both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-in,
+  .plan-out {
+    animation-duration: 1ms;
+  }
+}
+
+/* Inside the signed-in app the page never scrolls: each part (chat, lists, panels) scrolls by itself. */
+html.app-locked,
+html.app-locked body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   font-family: var(--font-sans);
   touch-action: manipulation;

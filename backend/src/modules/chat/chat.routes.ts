@@ -199,6 +199,8 @@ export function createChatRoutes(db: Db, bus: Bus, chats: ChatService, workspace
       ? await intoChatFolder(workspace, userId, picked, await chats.folderOf(userId, chat.id))
       : picked;
     const modelRef = modelRefOf(body.model_ref);
+    // No model could answer (Auto with nothing to pick): ask for a default model now, before anything is saved.
+    if (await catalog.needsDefault(userId, modelRef)) throw conflict('models.chooseDefault');
     // A new chat gets its first words as a title now, and a better one from a quick model right after.
     const provisional = titleFrom(content || attachments.map((a) => a.name).join(', '));
 

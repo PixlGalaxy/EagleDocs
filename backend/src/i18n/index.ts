@@ -76,6 +76,7 @@ const BACKEND_KEYS = [
   'models.codexFailed',
   'models.codexOff',
   'models.noModel',
+  'models.chooseDefault',
   'models.unknown',
   'models.quotaReached',
   'models.discoverFailed',

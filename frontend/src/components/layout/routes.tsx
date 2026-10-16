@@ -1,4 +1,4 @@
-import { Suspense, useState, type ReactNode } from 'react';
+import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Loader2, Megaphone, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -64,11 +64,23 @@ export function ProtectedRoute() {
 
   if (isLoading) return <FullPageSpinner />;
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  return <AppShell skipLabel={t('common.skip')} />;
+}
+
+/**
+ * The app fills the window and each part scrolls by itself (chat, lists, panels). The page itself never
+ * scrolls here: a panel or a stray element taller than the window would otherwise let the whole app slide up.
+ */
+function AppShell({ skipLabel }: { skipLabel: string }) {
+  useEffect(() => {
+    document.documentElement.classList.add('app-locked');
+    return () => document.documentElement.classList.remove('app-locked');
+  }, []);
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="relative flex h-[100dvh] flex-col overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow-lg dark:focus:bg-slate-900">
-        {t('common.skip')}
+        {skipLabel}
       </a>
       <AppNavbar />
       <BroadcastBanner />

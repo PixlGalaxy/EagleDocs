@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ArrowDown, BookOpen, CalendarClock, Folder, FolderOpen, GraduationCap, Map as MapIcon, Menu, PanelLeftClose, PanelLeftOpen, X, Smartphone, Loader2, Plug, CircleAlert } from 'lucide-react';
 import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError, apiUrl } from '../../api/client';
-import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, ReasoningLevel, StreamEvent, ToolCall, WorkspaceEntry } from '../../api/types';
+import type { Approval, BackgroundJob, Chat, ContextUsage, Message, ModelOption, PlanStep, ReasoningLevel, StreamEvent, ToolCall, UserModelPrefs, WorkspaceEntry } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
@@ -12,6 +12,7 @@ import MessageView from '../../components/chat/MessageView';
 import ApprovalCard from '../../components/chat/ApprovalCard';
 import BackgroundReport from '../../components/chat/BackgroundReport';
 import BackgroundTasks from '../../components/chat/BackgroundTasks';
+import PlanDock from '../../components/chat/PlanDock';
 import { applySubagentEvent, mergeCall } from '../../components/chat/subagents';
 import Composer from '../../components/chat/Composer';
 import ModelPicker from '../../components/chat/ModelPicker';
@@ -24,10 +25,12 @@ import { MAX_ATTACHMENTS } from '../../components/chat/attachments';
 import WorkspacePanel from './WorkspacePanel';
 import ResizableDock from './ResizableDock';
 import ChatInfoDialog from './ChatInfoDialog';
+import ChooseModelDialog from './ChooseModelDialog';
 import { CHAT_COLUMN } from '../../components/chat/layout';
 import Modal from '../../components/ui/Modal';
 import Toast from '../../components/ui/Toast';
 import { useConfirm } from '../../components/ui/confirm';
+import { useMediaQuery } from '../../components/useMediaQuery';
 import { Notice, Skeleton } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
 
@@ -52,6 +55,8 @@ const withMessage = (list: Message[], message: Message) => (list.some((m) => m.i
 /** The workspace panel's open state on wide screens, kept per browser. */
 const FILES_PANEL_KEY = 'studyhawk.chat.filesPanel';
 const WIDE = '(min-width: 1024px)';
+/** How long a finished plan stays above the message box before it slides away. */
+const PLAN_STAYS_MS = 6000;
 
 /** The thinking effort, kept per browser. */
 const REASONING_KEY = 'studyhawk.chat.reasoning';
@@ -104,13 +109,36 @@ const ChatPage = () => {
   const [background, setBackground] = useState<BackgroundJob[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(!!chatId);
   const [live, setLive] = useState<LiveAnswer | null>(null);
+  /** The agent's plan for the answer in progress: shown above the message box, and a few seconds after it ends. */
+  const [plan, setPlan] = useState<{ title?: string; steps: PlanStep[]; leaving: boolean } | null>(null);
+  useEffect(() => {
+    if (!plan || live) return;
+    // The answer ended: the plan stays a moment (all filled in), then slides away.
+    const stay = window.setTimeout(() => setPlan((p) => (p ? { ...p, leaving: true } : p)), PLAN_STAYS_MS);
+    const gone = window.setTimeout(() => setPlan(null), PLAN_STAYS_MS + 320);
+    return () => {
+      window.clearTimeout(stay);
+      window.clearTimeout(gone);
+    };
+    // Only the answer ending (or a new plan) restarts the countdown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live === null, plan?.steps]);
+  // Screen readers hear one line when an answer finishes, not every piece of it as it streams.
+  const [answered, setAnswered] = useState(false);
+  if (live && !answered) setAnswered(true);
+  const announcement = answered && !live ? t('chat.answerReady') : '';
   const [options, setOptions] = useState<ModelOption[] | null>(null);
   const [modelRef, setModelRef] = useState('auto');
+  const [prefs, setPrefs] = useState<UserModelPrefs | null>(null);
+  /** A message that found no model to answer it (Auto with nothing to pick): waits for a default model. */
+  const [needsModel, setNeedsModel] = useState<string | null>(null);
   const [reasoning, setReasoning] = useState<ReasoningLevel>(storedReasoning);
   const location = useLocation();
   const [draft, setDraft] = useState<string>(() => (location.state as { prompt?: string } | null)?.prompt ?? '');
   const [error, setError] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // The docked chat list exists only on md screens and up; phones use the drawer (one list at a time).
+  const docked = useMediaQuery('(min-width: 768px)');
   const [renaming, setRenaming] = useState<Chat | null>(null);
   const [deleting, setDeleting] = useState<Chat | null>(null);
   const [infoFor, setInfoFor] = useState<Chat | null>(null);
@@ -179,6 +207,7 @@ const ChatPage = () => {
     Promise.all([modelsApi.options(), modelsApi.prefs()])
       .then(([opts, prefs]) => {
         setOptions(opts);
+        setPrefs(prefs);
         setModelRef(prefs.mode === 'auto' || !prefs.default_model_ref ? 'auto' : prefs.default_model_ref);
       })
       .catch(() => setOptions([]));
@@ -259,6 +288,8 @@ const ChatPage = () => {
 
       if (event.type === 'context') {
         setContext({ used: event.used, window: event.window });
+      } else if (event.type === 'plan') {
+        setPlan({ title: event.title, steps: event.steps, leaving: false });
       } else if (event.type === 'steer_applied') {
         steeredJobs.current.add(jobId);
       } else if (event.type === 'approval_required') {
@@ -330,6 +361,7 @@ const ChatPage = () => {
   if (shownChatId !== chatId) {
     setShownChatId(chatId);
     setLive(null);
+    setPlan(null);
     setError('');
     setApprovals([]);
     setBackground([]);
@@ -432,8 +464,9 @@ const ChatPage = () => {
   const showReasoning = modelRef === 'auto' || !!selectedModel?.reasoning;
   const effort = showReasoning && reasoning !== 'default' ? reasoning : undefined;
 
-  const send = async (text = draft) => {
+  const send = async (text = draft, withModel = modelRef) => {
     const content = text.trim();
+    let created: string | null = null;
     const files = attachments.paths;
     // `sending` blocks a second send (a double-clicked suggestion) before the job exists.
     if ((!content && !files.length) || attachments.uploading || live || sending.current) return;
@@ -443,8 +476,9 @@ const ChatPage = () => {
     scrollToBottom();
     try {
       if (!chatId) {
-        const chat = await chatApi.create({ model_ref: modelRef });
-        await chatApi.send(chat.id, { content, model_ref: modelRef, ...(files.length ? { attachments: files } : {}), ...(effort ? { reasoning: effort } : {}) });
+        const chat = await chatApi.create({ model_ref: withModel });
+        created = chat.id;
+        await chatApi.send(chat.id, { content, model_ref: withModel, ...(files.length ? { attachments: files } : {}), ...(effort ? { reasoning: effort } : {}) });
         attachments.clear();
         // The loader effect picks up the running job from the new chat.
         navigate(`/chat/${chat.id}`);
@@ -453,7 +487,7 @@ const ChatPage = () => {
       }
       const { job_id, message } = await chatApi.send(chatId, {
         content,
-        model_ref: modelRef,
+        model_ref: withModel,
         ...(files.length ? { attachments: files } : {}),
         ...(effort ? { reasoning: effort } : {}),
       });
@@ -462,10 +496,30 @@ const ChatPage = () => {
       attach(chatId, job_id);
     } catch (err) {
       setDraft(content);
+      if (err instanceof ApiError && err.code === 'models.chooseDefault') {
+        // Nothing was saved in it: the empty chat made for this message goes, and the student picks a model.
+        if (created) void chatApi.remove(created).catch(() => undefined);
+        setNeedsModel(content);
+        return;
+      }
       setError(err instanceof ApiError ? err.message : t('common.networkError'));
     } finally {
       sending.current = false;
     }
+  };
+
+  /** The default model picked in the popup: saved for every new chat, used for this chat, and the message goes. */
+  const pickDefaultModel = async (ref: string) => {
+    try {
+      setPrefs(await modelsApi.savePrefs({ mode: 'manual', default_model_ref: ref, auto_map: prefs?.auto_map ?? {} }));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t('common.networkError'));
+      return;
+    }
+    setModelRef(ref);
+    const text = needsModel ?? draft;
+    setNeedsModel(null);
+    await send(text, ref);
   };
 
   /** A message written while the agent worked (queue or interrupt mode), sent as soon as the answer ends. */
@@ -681,9 +735,12 @@ const ChatPage = () => {
   return (
     <div className="flex min-h-0 flex-1">
       <title>{activeChat ? `${activeChat.title} - StudyHawk` : `${t('nav.chat')} - StudyHawk`}</title>
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
 
       {/* Desktop sidebar, unless hidden for a wider chat */}
-      {!listHidden && (
+      {docked && !listHidden && (
         <ResizableDock
           side="left"
           storageKey="studyhawk.chatListWidth"
@@ -698,7 +755,7 @@ const ChatPage = () => {
       )}
 
       {/* Mobile drawer */}
-      {sidebarOpen && (
+      {sidebarOpen && !docked && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-slate-900/50" onClick={() => setSidebarOpen(false)} aria-hidden="true" />
           <aside className="absolute inset-y-0 left-0 w-[85vw] max-w-xs overscroll-contain bg-white shadow-xl dark:bg-slate-900">
@@ -805,6 +862,7 @@ const ChatPage = () => {
                     attachments={m.attachments}
                     sentAt={m.created_at}
                     questions={m.questions}
+                    failed={m.failed}
                     // Only the newest question card can be answered, and not while the agent works.
                     questionsAnswered={i < messages.length - 1 || !!live}
                     onAnswer={(answer) => void send(answer)}
@@ -835,7 +893,8 @@ const ChatPage = () => {
               )}
 
               {live && (
-                <div aria-live="polite">
+                // Still being written: not announced piece by piece (the status line above says when it is ready).
+                <div aria-busy="true">
                   {live.status === 'queued' && (
                     <p className="mb-3 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                       <Loader2 size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
@@ -915,6 +974,12 @@ const ChatPage = () => {
         </div>
 
         <div className="shrink-0 px-4 pb-4 pt-2">
+          {/* The agent's plan rises from the message box while it works. */}
+          {plan && (
+            <div className={`mx-auto mb-2 w-full ${CHAT_COLUMN}`}>
+              <PlanDock title={plan.title} steps={plan.steps} leaving={plan.leaving} />
+            </div>
+          )}
           {chatId && <BackgroundTasks chatId={chatId} jobs={background} onFinished={onBackgroundFinished} />}
           {/* Corrections the agent has not read yet wait here, next to where they were written. */}
           {/* The message that goes out when the answer ends (queue or interrupt mode); it can still be taken back. */}
@@ -1043,6 +1108,7 @@ const ChatPage = () => {
         </div>
       )}
       {infoFor && <ChatInfoDialog chat={infoFor} onClose={() => setInfoFor(null)} />}
+      {needsModel !== null && <ChooseModelDialog options={options ?? []} onPick={pickDefaultModel} onClose={() => setNeedsModel(null)} />}
       {deleting && (
         <Modal title={t('chat.deleteTitle')} onClose={() => setDeleting(null)}>
           <p className="text-sm text-slate-600 dark:text-slate-300">{t('chat.deleteBody', { title: deleting.title })}</p>

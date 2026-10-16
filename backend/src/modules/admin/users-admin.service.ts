@@ -122,6 +122,11 @@ export class UsersAdminService {
         const email = normalizeEmail(body.email);
         await assertUniqueUser(client, 'email', email, id);
         set('email', email);
+        // A new school email moves the account to that school (and its Canvas), unless the admin picks one too.
+        if (body.institution_id === undefined) {
+          const school = await this.institutions.matchEmail(client, email);
+          if (school) set('institution_id', school.id);
+        }
       }
       if (body.username !== undefined) {
         const username = validateUsername(body.username);

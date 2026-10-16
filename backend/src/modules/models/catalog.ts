@@ -250,6 +250,22 @@ export class ModelCatalog {
   }
 
   /** Picks and builds the model for a run. `auto` routes by heuristics. */
+  /**
+   * Whether a message sent with `requested` would find no model to answer it:
+   * Auto (or nothing chosen) with no hosted model, no Auto choice and no default
+   * the student can use. Checked before the message is saved, so the app can ask
+   * for a default model instead of failing in the background.
+   */
+  async needsDefault(userId: string, requested: string | null): Promise<boolean> {
+    const prefs = await this.prefs(userId);
+    const ref = requested || (prefs.mode === 'manual' ? prefs.default_model_ref : null) || 'auto';
+    if (ref !== 'auto') return false;
+    const available = new Set((await this.options(userId)).map((o) => o.ref));
+    if (Object.values(prefs.auto_map).some((r) => r && available.has(r))) return false;
+    if ((await this.hawkDefault('smart')) || (await this.hawkDefault('fast'))) return false;
+    return !(prefs.default_model_ref && available.has(prefs.default_model_ref));
+  }
+
   async resolve(userId: string, requested: string | null, route: RouteInput): Promise<Resolution> {
     const prefs = await this.prefs(userId);
     let ref = requested || (prefs.mode === 'manual' ? prefs.default_model_ref : null) || 'auto';
@@ -260,7 +276,11 @@ export class ModelCatalog {
       const decision = routeTier(route);
       const available = new Set((await this.options(userId)).map((o) => o.ref));
       const candidates = [decision.tier, ...TIER_FALLBACK[decision.tier]].map((tier) => prefs.auto_map[tier]).filter(Boolean) as string[];
-      const picked = candidates.find((r) => available.has(r)) ?? (await this.hawkDefault(decision.tier));
+      const picked =
+        candidates.find((r) => available.has(r)) ??
+        (await this.hawkDefault(decision.tier)) ??
+        // Nothing hosted and nothing mapped: the student's own default model (e.g. their ChatGPT).
+        (prefs.default_model_ref && available.has(prefs.default_model_ref) ? prefs.default_model_ref : null);
       if (!picked) throw badRequest('models.noModel');
       ref = picked;
       label = 'Auto';

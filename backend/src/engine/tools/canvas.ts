@@ -1,7 +1,7 @@
 import { defineTool, type Tool, type ToolContext } from 'pixlai-engine';
 import { AppError } from '../../errors.js';
 import type { CanvasService } from '../../modules/canvas/canvas.service.js';
-import type { CourseFolders } from '../../modules/canvas/course-folders.js';
+import type { CourseSpaces } from '../../modules/canvas/course-spaces.js';
 import type { DiskWorkspace } from '../workspace.js';
 
 /** What the worker puts in `host.canvas` for each run. */
@@ -9,7 +9,8 @@ export interface CanvasHost {
   service: CanvasService;
   userId: string;
   workspace: DiskWorkspace;
-  folders: CourseFolders;
+  /** Each current course's workspace folder. */
+  spaces: CourseSpaces;
 }
 
 function canvasOf(ctx: ToolContext): CanvasHost {
@@ -64,13 +65,16 @@ export const canvasCourses = defineTool({
   name: 'canvas_courses',
   description:
     "The student's active Canvas courses with term and current grade. `current: true` marks this term's classes; " +
-    'the others are past terms or organization pages. Use the ids with the other canvas_ tools.',
+    'the others are past terms or organization pages. Use the ids with the other canvas_ tools. ' +
+    "This term's courses also carry `folder`: the course's workspace folder (Canvas/, Work/, Assignments/, Notes/).",
   parameters: { type: 'object', properties: {} },
   sideEffect: 'none',
   parallelSafe: true,
   async run(_args, ctx) {
-    const { service, userId } = canvasOf(ctx);
-    return call(() => service.courses(userId));
+    const { service, userId, spaces } = canvasOf(ctx);
+    const courses = await call(() => service.courses(userId));
+    const folders = new Map((await spaces.ensure(userId).catch(() => [])).map((s) => [s.id, s.folder]));
+    return courses.map((c) => (folders.has(c.id) ? { ...c, folder: folders.get(c.id) } : c));
   },
 });
 
@@ -95,7 +99,9 @@ export const canvasUpcoming = defineTool<{ days?: number }>({
 
 export const canvasCourse = defineTool<{ course_id: number }>({
   name: 'canvas_course',
-  description: 'One course in detail: all its assignments (upcoming first, then past with scores) and the last 30 days of announcements.',
+  description:
+    'One course in detail: all its assignments (upcoming first, then past with scores) and the last 30 days of announcements. ' +
+    "For what the student turned in and the teacher's feedback, use canvas_submissions.",
   parameters: { type: 'object', properties: { course_id: courseId }, required: ['course_id'] },
   sideEffect: 'none',
   untrusted: true,
@@ -108,7 +114,12 @@ export const canvasCourse = defineTool<{ course_id: number }>({
 
 export const canvasAssignment = defineTool<{ course_id: number; assignment_id: number }>({
   name: 'canvas_assignment',
-  description: 'Full instructions of one assignment: description as text, rubric, points, submission types and an effort estimate.',
+  description:
+    'Full instructions of one assignment or quiz: description as text, rubric, points, submission types, an effort estimate, ' +
+    '`links` (the files with their link text and file_id, the pages and assignment_ids the instructions point to) and ' +
+    '`in_modules` (where it sits). ' +
+    'When the instructions say the questions or material are elsewhere (a packet, "see Files", "in Modules"), open the links ' +
+    '(canvas_download for files, canvas_page for pages) or search with canvas_find before asking the student.',
   parameters: {
     type: 'object',
     properties: { course_id: courseId, assignment_id: { type: 'integer', description: 'Assignment id (the number in "assignment-123")' } },
@@ -142,7 +153,9 @@ export const canvasAnnouncements = defineTool<{ course_id?: number; days?: numbe
 
 export const canvasModules = defineTool<{ course_id: number }>({
   name: 'canvas_modules',
-  description: "A course's modules and their items (pages, files, assignments), with completion when Canvas tracks it.",
+  description:
+    "A course's modules and their items, with completion when Canvas tracks it. Each item carries what opens it: " +
+    '`file_id` (canvas_download), `page_url` (canvas_page), `assignment_id` (canvas_assignment), `quiz_id`, `external_url`.',
   parameters: { type: 'object', properties: { course_id: courseId }, required: ['course_id'] },
   sideEffect: 'none',
   untrusted: true,
@@ -218,27 +231,35 @@ export const canvasFiles = defineTool<{ course_id: number }>({
   },
 });
 
-export const canvasDownload = defineTool<{ file_ids: number[]; folder?: string }>({
+export const canvasDownload = defineTool<{ file_ids: number[]; course_id?: number; folder?: string }>({
   name: 'canvas_download',
   timeoutMs: 10 * 60_000,
   description:
-    "Download course files from Canvas into the user's files, by default TEMP/<folder>/ (deleted after 24 h). " +
-    'Typical use: download the material, build a RAG with rag_add, then let TEMP expire or delete it. Max 150 MB per file.',
+    "Download course files from Canvas into the user's files. With course_id they go to that course's Canvas/ folder " +
+    '(kept for later in the course; a new download replaces the old copy). Without it, to TEMP/canvas/ (deleted after ' +
+    '24 h): use that for something you only need to read once. Then read them with files_read (PDF, Word and PowerPoint ' +
+    'come back as text by page). For a big course, build a RAG with rag_add instead. Max 150 MB per file.',
   parameters: {
     type: 'object',
     properties: {
-      file_ids: { type: 'array', items: { type: 'integer' }, description: 'Ids from canvas_files (max 20)' },
-      folder: { type: 'string', description: 'Destination folder, default "TEMP/canvas"' },
+      file_ids: {
+        type: 'array',
+        items: { type: 'integer' },
+        description: "File ids from canvas_find, canvas_modules, canvas_files, an assignment's or page's links, or a submission's attachments (max 20)",
+      },
+      course_id: { ...courseId, description: "The files' course: they go to its Canvas/ folder (recommended)" },
+      folder: { type: 'string', description: 'Another destination folder (overrides course_id); default "TEMP/canvas"' },
     },
     required: ['file_ids'],
   },
   sideEffect: 'none',
   mainAgentOnly: true,
   async run(args, ctx) {
-    const { service, userId, workspace } = canvasOf(ctx);
+    const { service, userId, workspace, spaces } = canvasOf(ctx);
     const ids = (Array.isArray(args.file_ids) ? args.file_ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
     if (ids.length === 0 || ids.length > 20) throw new Error('Give between 1 and 20 file ids');
-    const folder = String(args.folder ?? 'TEMP/canvas').replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || 'TEMP/canvas';
+    const fallback = args.course_id ? `${await call(() => spaces.folderFor(userId, Number(args.course_id)))}/Canvas` : 'TEMP/canvas';
+    const folder = String(args.folder ?? fallback).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '') || fallback;
     const results: { file_id: number; path?: string; size_mb?: number; error?: string }[] = [];
     for (const id of ids) {
       if (ctx.signal.aborted) break;
@@ -281,30 +302,91 @@ export const canvasSavePages = defineTool<{ course_id: number; folder?: string; 
   },
 });
 
-export const canvasSyncFolders = defineTool({
-  name: 'canvas_sync_folders',
+
+export const canvasFind = defineTool<{ query: string; course_id?: number }>({
+  name: 'canvas_find',
   description:
-    "Refresh the student's \"<Term>/<Course>/\" folders from Canvas now (Assignments.md, one file per assignment with its " +
-    'instructions, Announcements.md). They also refresh by themselves every few hours; use this when the student asks or ' +
-    'right after they say something changed in Canvas.',
-  parameters: { type: 'object', properties: {} },
+    'Find course material by name, even half-remembered ("the homework packet", "ch 7 slides", "H7", "the essay rubric"): ' +
+    "searches this term's courses (or one) across module items, files, pages, assignments and quizzes, best match first, " +
+    'with the module each sits in and what opens it (file_id for canvas_download, page_url for canvas_page, assignment_id for ' +
+    'canvas_assignment). Use it whenever the student or an assignment mentions material you do not have yet; try other ' +
+    'wordings (the chapter number, the topic, a shorter name) before saying it is not there.',
+  parameters: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', description: 'Words of the name, e.g. "chapter 7 homework packet"' },
+      course_id: { ...courseId, description: "Only this course (optional; default: all of this term's courses)" },
+    },
+    required: ['query'],
+  },
   sideEffect: 'none',
-  timeoutMs: 3 * 60_000,
-  async run(_args, ctx) {
-    const { folders, service, userId } = canvasOf(ctx);
-    service.forget(userId);
-    return call(() => folders.sync(userId));
+  untrusted: true,
+  parallelSafe: true,
+  async run(args, ctx) {
+    const { service, userId } = canvasOf(ctx);
+    const query = String(args.query ?? '').trim().slice(0, 200);
+    if (!query) throw new Error('Give the words to search for');
+    const found = await call(() => service.find(userId, query, args.course_id ? Number(args.course_id) : undefined));
+    return found.results.length
+      ? found
+      : { ...found, tip: 'Nothing matched. Try fewer or other words (a chapter number, the topic), or browse canvas_modules.' };
+  },
+});
+
+export const canvasPage = defineTool<{ course_id: number; page_url: string }>({
+  name: 'canvas_page',
+  description:
+    'Read one Canvas page (a lesson, the syllabus, a "Files for the Semester" list) as text, with `links`: each linked file ' +
+    '(file_id and its link text, so open only the one you need), the pages and the ' +
+    "assignment_ids it points to. Page urls come from canvas_find, canvas_modules or another page's links.",
+  parameters: {
+    type: 'object',
+    properties: { course_id: courseId, page_url: { type: 'string', description: 'The page url slug, e.g. "week-7-notes"' } },
+    required: ['course_id', 'page_url'],
+  },
+  sideEffect: 'none',
+  untrusted: true,
+  parallelSafe: true,
+  async run(args, ctx) {
+    const { service, userId } = canvasOf(ctx);
+    return call(() => service.page(userId, Number(args.course_id), String(args.page_url)));
+  },
+});
+
+export const canvasSubmissions = defineTool<{ course_id: number; assignment_id?: number }>({
+  name: 'canvas_submissions',
+  description:
+    "The student's past work in a course. Without assignment_id: every submission with when it was turned in, the score and " +
+    'grade, late/missing. With assignment_id: that submission in full: the text or files turned in (attachments with file_id ' +
+    "for canvas_download), the grade, the teacher's comments and the rubric marks. Use it to review feedback, see how past " +
+    'work was graded, or build on what the student already wrote.',
+  parameters: {
+    type: 'object',
+    properties: { course_id: courseId, assignment_id: { type: 'integer', description: 'One assignment (optional)' } },
+    required: ['course_id'],
+  },
+  sideEffect: 'none',
+  untrusted: true,
+  parallelSafe: true,
+  async run(args, ctx) {
+    const { service, userId } = canvasOf(ctx);
+    const course = Number(args.course_id);
+    if (args.assignment_id) return call(() => service.submission(userId, course, Number(args.assignment_id)));
+    const list = await call(() => service.submissions(userId, course));
+    return list.map((s) => ({ ...s, ...when(s.due_at, ctx) }));
   },
 });
 
 export const CANVAS_TOOLS: Tool[] = [
-  canvasSyncFolders,
   canvasCourses,
   canvasUpcoming,
   canvasCourse,
   canvasAssignment,
   canvasAnnouncements,
   canvasModules,
+  canvasFind,
+  canvasPage,
+  canvasSubmissions,
   canvasBriefing,
   canvasFiles,
   canvasDownload,

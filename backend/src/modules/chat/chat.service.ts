@@ -63,6 +63,8 @@ export interface MessageView {
   questions?: UserQuestion[];
   /** Pages the agent showed, by title; each loads from its own URL (the HTML is never inlined here). */
   displays?: { kind: Display['kind']; title: string }[];
+  /** The answer stopped on an error: why (shown under it, so a reload still tells the student). */
+  failed?: string;
   /** An edited message of the student: this is version `version` of `versions` (the route fills `versions`). */
   version_group?: string;
   version?: number;
@@ -89,6 +91,7 @@ export function toMessageView(row: MessageRow): MessageView {
     ...(row.meta.background && { background: row.meta.background }),
     ...(row.meta.attachments?.length && { attachments: row.meta.attachments }),
     ...(row.meta.questions?.length && { questions: row.meta.questions }),
+    ...(row.meta.failed && { failed: row.meta.failed }),
     ...(row.meta.displays?.length && { displays: row.meta.displays.map((d) => ({ kind: d.kind, title: d.title })) }),
     ...(row.meta.version_group && { version_group: row.meta.version_group, version: row.meta.version ?? 1 }),
     created_at: row.created_at,

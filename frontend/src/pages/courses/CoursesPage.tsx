@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { BookOpen, CircleAlert, ExternalLink, Plug, RefreshCw, Sparkles } from 'lucide-react';
+import { BookOpen, CircleAlert, ExternalLink, FolderOpen, Plug, RefreshCw, Sparkles } from 'lucide-react';
 import { canvasApi } from '../../api/account';
 import { ApiError } from '../../api/client';
 import type { CanvasCourse, CanvasItem } from '../../api/types';
@@ -10,7 +10,6 @@ import { Badge, EmptyState, Notice, Skeleton } from '../../components/ui/kit';
 import { btn, card } from '../../components/ui/styles';
 import { dayKey, formatDay, formatTime, priorityTone } from './format';
 import type { TranslationKey } from '../../i18n/translations';
-import CourseFoldersBar from './CourseFoldersBar';
 
 /** 412 from /api/canvas/* means the user has not saved a Canvas token yet. */
 const NOT_CONNECTED = 412;
@@ -68,7 +67,9 @@ export function UpcomingList({ items }: { items: CanvasItem[] }) {
                   {item.priority !== null && !item.submitted && (
                     <Badge tone={priorityTone(item.priority)}>{t('courses.priority', { value: Math.round(item.priority) })}</Badge>
                   )}
-                  {item.points !== null && <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{t('courses.points', { points: item.points })}</span>}
+                  {item.points !== null && (
+                    <span className="font-mono text-xs text-slate-500 dark:text-slate-400">{t('courses.points', { points: item.points })}</span>
+                  )}
                 </div>
               </li>
             ))}
@@ -132,10 +133,14 @@ const CoursesPage = () => {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('nav.courses')}</h1>
         <div className="flex gap-2">
-          <button type="button" onClick={() => {
+          <button
+            type="button"
+            onClick={() => {
               setError('');
               setReload((n) => n + 1);
-            }} className={btn.secondary}>
+            }}
+            className={btn.secondary}
+          >
             <RefreshCw size={16} aria-hidden="true" />
             {t('common.refresh')}
           </button>
@@ -145,7 +150,6 @@ const CoursesPage = () => {
           </button>
         </div>
       </div>
-      <CourseFoldersBar />
 
       {error && (
         <div className="mt-4">
@@ -194,30 +198,42 @@ const CoursesPage = () => {
   );
 };
 
-
-
-const CourseCard = ({ course }: { course: CanvasCourse }) => (
-  <li>
-    <Link
-      to={`/courses/${course.id}`}
-      className={`${card} flex items-center gap-3 p-4 transition hover:border-[var(--accent-300)] dark:hover:border-[var(--accent-500)]/50`}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-slate-900 dark:text-slate-100">{course.name}</p>
-        <p className="truncate text-sm text-slate-500 dark:text-slate-400">
-          {course.course_code}
-          {course.term && ` · ${course.term}`}
-        </p>
-      </div>
-      {course.current_score !== null && (
-        <div className="text-right">
-          <p className="text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{course.current_score.toFixed(1)}%</p>
-          {course.current_grade && <p className="text-xs text-slate-500 dark:text-slate-400">{course.current_grade}</p>}
+const CourseCard = ({ course }: { course: CanvasCourse }) => {
+  const { t } = useI18n();
+  return (
+    <li className="flex gap-2">
+      <Link
+        to={`/courses/${course.id}`}
+        className={`${card} flex min-w-0 flex-1 items-center gap-3 p-4 transition hover:border-[var(--accent-300)] dark:hover:border-[var(--accent-500)]/50`}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium text-slate-900 dark:text-slate-100">{course.name}</p>
+          <p className="truncate text-sm text-slate-500 dark:text-slate-400">
+            {course.course_code}
+            {course.term && ` · ${course.term}`}
+          </p>
         </div>
+        {course.current_score !== null && (
+          <div className="text-right">
+            <p className="text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{course.current_score.toFixed(1)}%</p>
+            {course.current_grade && <p className="text-xs text-slate-500 dark:text-slate-400">{course.current_grade}</p>}
+          </div>
+        )}
+      </Link>
+      {/* The course's workspace: what the agent downloads and works on for this course. */}
+      {course.folder && (
+        <Link
+          to={`/files?path=${encodeURIComponent(course.folder)}`}
+          title={t('courses.openFolder')}
+          aria-label={`${t('courses.openFolder')}: ${course.name}`}
+          className={`${card} flex w-12 shrink-0 items-center justify-center text-slate-500 transition hover:border-[var(--accent-300)] hover:text-[var(--accent-700)] dark:text-slate-400 dark:hover:border-[var(--accent-500)]/50 dark:hover:text-[var(--accent-300)]`}
+        >
+          <FolderOpen size={18} aria-hidden="true" />
+        </Link>
       )}
-    </Link>
-  </li>
-);
+    </li>
+  );
+};
 
 /** This term's courses first; past terms and organization pages fold under "Other courses". */
 const CourseGroups = ({ courses }: { courses: CanvasCourse[] }) => {

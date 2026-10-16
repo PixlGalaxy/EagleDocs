@@ -16,6 +16,7 @@ const CRON_PRESETS = [
   { cron: '0 8 * * 1', key: 'schedules.presetMonday' },
   { cron: '0 20 * * *', key: 'schedules.presetNightly' },
   { cron: '0 9 * * 1-5', key: 'schedules.presetWeekdays' },
+  { cron: 'every 2h', key: 'schedules.presetEvery2h' },
 ] as const;
 
 export const SchedulesSection = () => {

@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import Markdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { CornerDownRight, GitBranch, RotateCcw, Shuffle, Sparkles } from 'lucide-react';
+import { CircleAlert, CornerDownRight, GitBranch, RotateCcw, Shuffle, Sparkles } from 'lucide-react';
 import ModelPicker from './ModelPicker';
 import { useI18n } from '../../i18n/I18nContext';
 import type { MessageAttachment, ModelOption, ToolCall } from '../../api/types';
@@ -11,7 +11,8 @@ import { BrandIcon } from '../BrandLogo';
 import { useSmoothText } from './useSmoothText';
 import QuestionCard from './QuestionCard';
 import HtmlDisplay from './HtmlDisplay';
-import { FileCards, linkedFilesIn } from './LinkedFiles';
+import { linkedFilesIn } from './fileLinks';
+import { FileCards } from './LinkedFiles';
 import UserBubble from './UserBubble';
 import type { UserQuestion } from '../../api/types';
 import { fileUrl, workspaceLinkPath } from './attachments';
@@ -35,6 +36,8 @@ interface Props {
   attachments?: MessageAttachment[];
   /** The agent asked these with options: shown as a card instead of their text version. */
   questions?: UserQuestion[];
+  /** The answer stopped on an error: shown under it. */
+  failed?: string;
   /** A later message exists or the agent is working: the questions are read-only. */
   questionsAnswered?: boolean;
   onAnswer?: (text: string) => void;
@@ -135,6 +138,7 @@ const MessageView = ({
   onRetry,
   retryOptions,
   onFork,
+  failed,
   onEdit,
   version,
 }: Props) => {
@@ -166,7 +170,7 @@ const MessageView = ({
   }
 
   // Nothing to show yet (queued, or a part that only marks where a correction landed): no lone avatar.
-  if (!shown && !toolCalls?.length && !typing && !modelLabel) return null;
+  if (!shown && !toolCalls?.length && !typing && !modelLabel && !failed) return null;
 
   return (
     <div className="flex gap-3">
@@ -194,6 +198,12 @@ const MessageView = ({
               <MarkdownBody text={shown} fileCards={!streaming} />
             </div>
           )
+        )}
+        {failed && !streaming && (
+          <p className="mt-2 flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-200" role="alert">
+            <CircleAlert size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
+            {failed}
+          </p>
         )}
         {(onRetry || onFork) && !streaming && (
           <div className="mt-2 flex items-center gap-1 text-slate-500 dark:text-slate-400">

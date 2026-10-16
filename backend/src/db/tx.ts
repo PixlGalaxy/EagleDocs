@@ -33,7 +33,6 @@ export const LOCKS = {
   sandboxUser: 7_301_008,
   /** One replica creates the VAPID keys on first start. */
   pushKeys: 7_301_009,
-  canvasFolders: 7_301_010,
   billingGrace: 7_301_011,
   /** Moving chats' title-named folders to Chats/<id>, once. */
   chatFolders: 7_301_012,

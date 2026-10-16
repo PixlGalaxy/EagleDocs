@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, Pencil } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
+import { useEnterAddsLine } from './touch';
 
 interface Props {
   content: string;
@@ -20,6 +21,7 @@ interface Props {
 const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
   const { t, language } = useI18n();
   const [editing, setEditing] = useState(false);
+  const enterAddsLine = useEnterAddsLine();
   const [draft, setDraft] = useState(content);
   const box = useRef<HTMLTextAreaElement>(null);
 
@@ -57,7 +59,7 @@ const UserBubble = ({ content, sentAt, onEdit, version }: Props) => {
           }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') setEditing(false);
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !enterAddsLine) {
               e.preventDefault();
               save();
             }

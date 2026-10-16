@@ -2,10 +2,13 @@ const BASE = '/api';
 
 export class ApiError extends Error {
   status: number;
+  /** The server's message key (e.g. `models.chooseDefault`), to react to one error in particular. */
+  code?: string;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -26,7 +29,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? 'Unknown error');
+    throw new ApiError(res.status, body.error ?? 'Unknown error', typeof body.code === 'string' ? body.code : undefined);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }

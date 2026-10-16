@@ -21,7 +21,8 @@ export function createErrorHandler(t: Translate) {
       if (err.headers) {
         for (const [name, value] of Object.entries(err.headers)) res.setHeader(name, value);
       }
-      return res.status(err.status).json({ error: err.detail ? `${t(err.key, lang)} (${err.detail})` : t(err.key, lang) });
+      // `code` (the message key) lets the app react to a specific error, e.g. ask for a default model.
+      return res.status(err.status).json({ error: err.detail ? `${t(err.key, lang)} (${err.detail})` : t(err.key, lang), code: err.key });
     }
 
     // express.json() rejections (malformed or oversized body) are the client's

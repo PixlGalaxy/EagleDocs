@@ -74,7 +74,7 @@ class Client {
 
 const admin = new Client();
 let r = await admin.req(A, 'GET', '/config');
-check('config loads', r.status === 200 && r.json.appName === 'StudyHawk', JSON.stringify(r.json).slice(0, 120));
+check('config loads', r.status === 200 && typeof r.json.registrationEnabled === 'boolean' && typeof r.json.betaTest === 'boolean' && Array.isArray(r.json.institutions), JSON.stringify(r.json).slice(0, 120));
 check('csrf cookie set', !!admin.jar.csrf);
 
 r = await admin.req(A, 'POST', '/auth/login', { usernameOrEmail: ADMIN, password: 'change-me-now' }, { csrf: false });
@@ -85,7 +85,9 @@ r = await admin.req(B, 'GET', '/auth/me');
 check('session works on B', r.status === 200 && r.json.user.username === ADMIN);
 
 r = await admin.req(B, 'GET', '/admin/overview');
-check('overview', r.status === 200 && r.json.nodes_online === 2 && r.json.alerts.length === 2, JSON.stringify(r.json));
+// A fresh install: no email, no university, no model yet.
+const alertSections = (r.json.alerts ?? []).map((a) => a.section).sort().join(',');
+check('overview', r.status === 200 && r.json.nodes_online === 2 && alertSections === 'email,institutions,models', JSON.stringify(r.json));
 
 // --- institution + smtp
 r = await admin.req(B, 'POST', '/admin/institutions', {

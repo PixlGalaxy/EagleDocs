@@ -29,7 +29,6 @@ import { SandboxTools } from './engine/sandbox.js';
 import { SchoolService } from './modules/school/school.service.js';
 import { PushService } from './modules/push/push.service.js';
 import { BuiltinSkills, loadBuiltinSkills } from './modules/skills/builtin.js';
-import { CourseFolders, syncDueCourseFolders } from './modules/canvas/course-folders.js';
 import { TiersService } from './modules/billing/tiers.service.js';
 import { BillingService } from './modules/billing/billing.service.js';
 import { OAuthService } from './modules/mcp/oauth.service.js';
@@ -42,6 +41,7 @@ import { pruneJobEvents, reapOrphanJobs, JobWorker } from './modules/jobs/worker
 import { runDueSchedules } from './modules/jobs/scheduler.js';
 import { ModelCatalog } from './modules/models/catalog.js';
 import { CanvasService } from './modules/canvas/canvas.service.js';
+import { CourseSpaces } from './modules/canvas/course-spaces.js';
 
 /** Postgres may still be starting (or failing over) when the container boots. */
 async function waitForDatabase(db: Db, timeoutMs = 60_000): Promise<void> {
@@ -113,7 +113,8 @@ async function main() {
   const billing = new BillingService(db, settings, tiers, config);
   workspace.setQuotaSource(async (userId) => (await tiers.limitsFor(userId)).diskMb);
   catalog.setDailyLimitSource(async (userId) => (await tiers.limitsFor(userId)).dailyMessages);
-  const courseFolders = new CourseFolders(db, canvas, workspace);
+  // Each current course's workspace folder (Canvas/, Work/, Assignments/, Notes/): laid out here, filled by the agent.
+  const courseSpaces = new CourseSpaces(canvas, workspace);
   const embeddings = new AdminEmbeddings(db, secrets);
   // Before the engine: code and browser tools are offered only when sandboxes work.
   const sandboxes = new SandboxManager(db, bus, settings, config);
@@ -139,11 +140,11 @@ async function main() {
     tiers,
     version: config.BACKEND_VERSION,
     hostFor: (userId) => ({
-      canvas: { service: canvas, userId, workspace, folders: courseFolders },
+      canvas: { service: canvas, userId, workspace, spaces: courseSpaces },
       school: { service: school, userId, workspace },
     }),
   });
-  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, workspace, embeddings, school, push, builtinSkills, courseFolders, tiers, t, concurrency: config.JOB_WORKERS });
+  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, courseSpaces, workspace, embeddings, school, push, builtinSkills, tiers, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
   // Leader tasks: whichever replica gets the advisory lock runs each cycle.
@@ -163,8 +164,6 @@ async function main() {
   scheduleExclusive(db, 'scheduler', LOCKS.scheduler, 60 * 1000, () => runDueSchedules(db, bus));
   scheduleExclusive(db, 'job-reaper', LOCKS.jobReaper, 10 * 1000, () => reapOrphanJobs(db, bus));
   // TEMP files expire 24 h after their last change.
-  // "<Term>/<Course>/" folders follow Canvas: assignments, instructions, announcements.
-  scheduleExclusive(db, 'canvas-folders', LOCKS.canvasFolders, 15 * 60 * 1000, () => syncDueCourseFolders(db, courseFolders));
   // A failed payment keeps the plan for the grace period, then the student goes back to the default plan.
   scheduleExclusive(db, 'billing-grace', LOCKS.billingGrace, 60 * 60 * 1000, () => billing.expireGrace());
   scheduleExclusive(db, 'temp-sweep', LOCKS.tempSweep, 15 * 60 * 1000, async () => {
@@ -194,7 +193,7 @@ async function main() {
     school,
     push,
     builtinSkills,
-    courseFolders,
+    courseSpaces,
     tiers,
     billing,
     oauth,

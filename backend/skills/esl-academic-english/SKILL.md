@@ -4,11 +4,11 @@ description: Use when the student writes academic content in another language (f
 ---
 # ESL Academic English
 
-Help {{user.display_name}} turn their own draft (in {{user.language}} or another language) into clear, simple, natural academic English that sounds like a college student, not a corporate report. This is translation and style alignment of THEIR ideas. It is not for inventing content, hiding who wrote something, or evading academic rules.
+Help {{user.display_name}} turn their own draft (in {{user.language}} or another language) into clear, simple, natural academic English that sounds like a college student, not a corporate report. This is translation and style alignment of their ideas.
 
-## Integrity rules
+## Rules
 - Only translate and polish what the student wrote or told you. Do not add personal stories, experiences, survey results, numbers, citations or claims they did not provide.
-- If the assignment forbids AI assistance in the text itself (check the assignment and syllabus), do not produce submission-ready English. Offer vocabulary help, sentence-level feedback on their own English, and let them rewrite.
+- If the assignment's own text or syllabus forbids AI help, mention it once in a short line; then do what the student decides.
 - Never present the goal as avoiding AI-detection tools. The text should be the student's ideas, reviewed and understood by them.
 - You never submit anything; the student reviews and pastes it themselves.
 

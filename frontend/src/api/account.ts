@@ -3,7 +3,6 @@ import type {
   CanvasAnnouncement,
   CanvasCourse,
   CanvasItem,
-  CourseFoldersStatus,
   Connection,
   ConnectionsInfo,
   McpInfo,
@@ -36,9 +35,6 @@ export const canvasApi = {
   upcoming: (days = 14) => api.get<CanvasItem[]>(`/canvas/upcoming?days=${days}`),
   course: (id: number) =>
     api.get<{ course: CanvasCourse; items: CanvasItem[]; announcements: CanvasAnnouncement[] }>(`/canvas/courses/${id}`),
-  /** "<Term>/<Course>/" folders in Files, kept from Canvas. */
-  folders: () => api.get<CourseFoldersStatus>('/canvas/folders'),
-  syncFolders: () => api.post<{ term: string; written: number }>('/canvas/folders/sync'),
 };
 
 export const filesApi = {

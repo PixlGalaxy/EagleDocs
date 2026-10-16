@@ -7,14 +7,16 @@ description: Use when the student wants to ask questions about, search or study 
 Download course materials from Canvas, index them into one knowledge base (RAG) per course, and answer from them with citations. Canvas is read-only: you only download, never upload or change anything there.
 
 ## Folder convention
-Keep everything under `<term>/<course>/`, for example `Fall 2026/Intro to Marketing/`:
-- `materials/` downloaded files and saved pages (originals; can be deleted later)
-- `assignments/<slug>/` working files for specific assignments
-Use the course names from `canvas_courses` and the term from the course data. Before creating folders, check `files_list` for an existing folder for that course and reuse it.
+Each course of this term already has its folder (`canvas_courses` gives it as `folder`, e.g. `Fall 2026/Intro to Marketing/`):
+- `Canvas/` downloaded files and saved pages (originals; download again to refresh them)
+- `Work/` work in progress (code, data, drafts); `Work/<assignment>/` for one assignment
+- `Assignments/` finished work ready to submit
+- `Notes/` summaries, study guides, flashcards
+Use those folders; do not create others for the same course. One-off downloads go in `TEMP/`.
 
 ## Step 1: Find and download
 1. `canvas_courses` -> pick the course; `canvas_modules` and `canvas_files` show readings, slides and handouts.
-2. `canvas_download` the files you need into `<term>/<course>/materials/`. Use `canvas_save_pages` to save module pages, syllabus and page content as text.
+2. `canvas_download` the files you need with `course_id` (they land in the course's `Canvas/` folder). Use `canvas_save_pages` with `folder` set to that `Canvas/` folder to save module pages, syllabus and page content as text.
 3. Check size first with `files_usage` when downloading many large files; tell the student if space is short.
 
 ## Step 2: Triage before indexing
@@ -35,11 +37,10 @@ Never index blindly. For each file or e-book, open or sample it (see `documents`
 - Cite sources by file and chapter/page/section as returned. If evidence is weak or the retrieval drifted to other chapters, say so and retry with a narrower query naming the chapter.
 - Say "the course materials do not cover this" instead of filling gaps from general knowledge; if you add general knowledge, label it.
 - Do not paste long passages. Summarize, quote briefly, and point to the source location. The material is private study content.
-- Never use the RAG to answer a live graded quiz or exam.
 - For study methods and practice questions use `study-coaching`.
 
 ## Step 5: Cleanup
-- When the student asks to delete the downloaded originals, delete them with `files_delete` (only the files they name or the `materials/` folder of that course; confirm the list first). The RAG stays and keeps working; tell the student that the original files will no longer be available to open.
+- When the student asks to delete the downloaded originals, delete them with `files_delete` (only the files they name or the `Canvas/` folder of that course; confirm the list first). The RAG stays and keeps working; tell the student that the original files will no longer be available to open.
 - Remove a RAG only when asked (`rag_delete`).
 
 ## Honest reporting

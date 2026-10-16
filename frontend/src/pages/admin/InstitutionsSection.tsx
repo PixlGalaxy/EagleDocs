@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Building2, CircleAlert, Loader2, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { adminApi } from '../../api/admin';
 import { ApiError } from '../../api/client';
-import type { Institution } from '../../api/types';
+import type { CanvasCheck, Institution } from '../../api/types';
 import { useConfirm } from '../../components/ui/confirm';
 import { useI18n } from '../../i18n/I18nContext';
 import Modal from '../../components/ui/Modal';
@@ -31,6 +31,23 @@ const InstitutionsSection = () => {
   const [newDomain, setNewDomain] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Saved, but its Canvas address does not answer like Canvas: the form stays open to fix it.
+  const [canvasWarning, setCanvasWarning] = useState('');
+
+  const edit = (next: (Partial<Institution> & { name: string }) | null) => {
+    setDraft(next);
+    setError('');
+    setCanvasWarning('');
+  };
+
+  const describe = (check: CanvasCheck) =>
+    check.ok
+      ? ''
+      : check.problem === 'redirect'
+        ? t('admin.canvasCheckRedirect', { location: check.location ?? '?' })
+        : check.problem === 'status'
+          ? t('admin.canvasCheckStatus', { status: check.status })
+          : t('admin.canvasCheckUnreachable');
 
   useEffect(() => {
     void adminApi.institutions().then(setItems).catch(() => setItems([]));
@@ -49,10 +66,14 @@ const InstitutionsSection = () => {
     if (!draft) return;
     setBusy(true);
     setError('');
+    setCanvasWarning('');
     try {
-      const saved = await adminApi.saveInstitution(draft);
+      const { canvas_check: check, ...saved } = await adminApi.saveInstitution(draft);
       setItems((prev) => [...(prev ?? []).filter((i) => i.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name)));
-      setDraft(null);
+      if (check && !check.ok) {
+        setDraft(saved);
+        setCanvasWarning(describe(check));
+      } else setDraft(null);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t('common.networkError'));
     } finally {
@@ -68,7 +89,7 @@ const InstitutionsSection = () => {
       title={t('admin.institutions')}
       description={t('admin.institutionsBody')}
       actions={
-        <button type="button" onClick={() => setDraft({ ...EMPTY })} className={btn.primary}>
+        <button type="button" onClick={() => edit({ ...EMPTY })} className={btn.primary}>
           <Plus size={16} aria-hidden="true" />
           {t('admin.newInstitution')}
         </button>
@@ -90,7 +111,7 @@ const InstitutionsSection = () => {
                   </p>
                   <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">{inst.canvas_base_url}</p>
                 </div>
-                <button type="button" onClick={() => setDraft(inst)} className={btn.iconGhost} aria-label={t('common.edit')}>
+                <button type="button" onClick={() => edit(inst)} className={btn.iconGhost} aria-label={t('common.edit')}>
                   <Pencil size={16} />
                 </button>
                 <button
@@ -118,13 +139,13 @@ const InstitutionsSection = () => {
       )}
 
       {draft && (
-        <Modal title={draft.id ? t('admin.editInstitution') : t('admin.newInstitution')} onClose={() => setDraft(null)} size="lg">
+        <Modal title={draft.id ? t('admin.editInstitution') : t('admin.newInstitution')} onClose={() => edit(null)} size="lg">
           <form onSubmit={(e) => void save(e)} className="space-y-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <Field label={t('admin.instName')}>
                 {(id) => <input id={id} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} className={input} required />}
               </Field>
-              <Field label={t('admin.canvasUrl')} hint="https://fgcu.instructure.com">
+              <Field label={t('admin.canvasUrl')} hint={t('admin.canvasUrlHint')}>
                 {(id, d) => <input id={id} aria-describedby={d} type="url" value={draft.canvas_base_url ?? ''} onChange={(e) => setDraft({ ...draft, canvas_base_url: e.target.value })} className={input} required />}
               </Field>
               <Field label={t('admin.outlookUrl')} hint={t('admin.outlookUrlHint')}>
@@ -213,8 +234,14 @@ const InstitutionsSection = () => {
                 {error}
               </Notice>
             )}
+            {canvasWarning && (
+              <Notice tone="warning" icon={CircleAlert}>
+                <p className="font-medium">{t('admin.canvasCheckTitle')}</p>
+                <p className="mt-1">{canvasWarning}</p>
+              </Notice>
+            )}
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setDraft(null)} className={btn.secondary}>
+              <button type="button" onClick={() => edit(null)} className={btn.secondary}>
                 {t('common.cancel')}
               </button>
               <button type="submit" disabled={busy || !draft.domains?.length} className={btn.primary}>

@@ -16,7 +16,15 @@ export interface Institution {
   domains: InstitutionDomain[];
   skills: Record<string, boolean>;
   user_count?: number;
+  /** After a save: whether the Canvas address answers like Canvas (null without an address). */
+  canvas_check?: CanvasCheck | null;
 }
+
+export type CanvasCheck =
+  | { ok: true }
+  | { ok: false; problem: 'redirect'; location: string | null }
+  | { ok: false; problem: 'status'; status: number }
+  | { ok: false; problem: 'unreachable' };
 
 export interface InstitutionDomain {
   id: string;
@@ -172,7 +180,15 @@ export interface Message {
   versions?: number;
   /** Interactive pages the agent showed (show_html), loaded by index from their own URL. */
   displays?: { kind: 'html'; title: string }[];
+  /** The answer stopped on an error: why. */
+  failed?: string;
   created_at: string;
+}
+
+/** One step of the agent's plan. */
+export interface PlanStep {
+  title: string;
+  status: 'pending' | 'in_progress' | 'done' | 'skipped';
 }
 
 export interface UserQuestion {
@@ -231,6 +247,8 @@ export type StreamEvent =
   /** The answer being written was cut short by a correction; a new one starts. */
   | { type: 'interrupted' }
   | { type: 'notice'; message: string }
+  /** The agent's plan (plan_update): every event replaces the previous one. */
+  | { type: 'plan'; title?: string; steps: PlanStep[] }
   /** How full the model's context window is, sent before each model call. */
   | { type: 'context'; used: number; window: number }
   /** Progress of a helper agent started by the agent_delegate tool. */
@@ -259,14 +277,8 @@ export interface CanvasCourse {
   current_grade: string | null;
   /** In a term running now (organization pages and past terms are false). */
   current?: boolean;
-}
-
-/** Last sync of the student's "<Term>/<Course>/" folders. */
-export interface CourseFoldersStatus {
-  synced_at: string | null;
-  term: string | null;
-  courses: number;
-  error: string | null;
+  /** This term's courses: their workspace folder ("Fall 2026/<course>"). */
+  folder?: string;
 }
 
 export interface CanvasItem {

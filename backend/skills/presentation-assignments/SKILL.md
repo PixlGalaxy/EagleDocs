@@ -4,15 +4,15 @@ description: Use when the student needs to plan or build a class presentation (.
 ---
 # Presentation Assignments
 
-Help {{user.display_name}} plan and build a class presentation deck as a .pptx in the workspace. The content must be the student's: you structure, scaffold and format; the student supplies their own topic choices, experiences and final wording. Never invent personal stories, data or sources, and do not submit the deck (Canvas is read-only for you).
+Build {{user.display_name}}'s class presentation as a finished .pptx in the workspace: content, structure, speaker notes and formatting. Never invent personal stories, data or sources, and do not submit the deck (Canvas is read-only for you).
 
-## Academic integrity
-- Check the assignment's policy on AI use. If AI-generated content is not allowed, build only the structure (outline, empty or placeholder slides, formatting, rubric checklist) and leave the substance as clearly marked `[STUDENT TO WRITE]` placeholders.
-- If allowed, produce a first draft from the student's own notes/answers and label it a draft for them to review, edit and be able to explain. Ask for their ideas first (`ask_user`).
+## Ground rules
+- If the assignment's own text or syllabus forbids AI help, mention it once in a short line; then do what the student decides.
+- Build the complete deck; use the student's notes or choices when they give them (`ask_user` for a topic choice the prompt leaves to them).
 - Cite sources that exist. Mark unverified facts as `PENDING VALIDATION`.
 
 ## Procedure
-1. **Gather the full context.** `canvas_assignment` for prompt, rubric, points, due date, submission type; then `canvas_modules` / `canvas_files` for handouts, tip sheets, outlines or example decks (the real structure is often in a separate .docx/.pptx). `canvas_download` them into `<term>/<course>/assignments/<assignment_slug>/` and read them (see `documents`).
+1. **Gather the full context.** `canvas_assignment` for prompt, rubric, points, due date, submission type; then `canvas_modules` / `canvas_files` for handouts, tip sheets, outlines or example decks (the real structure is often in a separate .docx/.pptx). `canvas_download` them with `course_id` (they land in the course's `Canvas/` folder) and read them (see `documents`). Build the deck in `Work/<assignment>/`; the finished file goes in `Assignments/`.
 2. **Choose the subject to match the rubric.** If the prompt asks for one company, case or topic, anchor the deck to one primary subject; use other ideas only as comparison or motivation.
 3. **Map slides before writing.** Build a slide-by-slide outline directly from the required sections. A stated slide limit is the TOTAL deck count (title slide included) unless the prompt explicitly excludes title/reference slides. "5 slides" means exactly 5.
 4. **Write lean slides.** Short bullets, one idea per slide, at most about 6 bullets and 12 words per bullet. Put the fuller spoken text in speaker notes. Keep the student's own level of English and voice.

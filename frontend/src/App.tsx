@@ -7,18 +7,20 @@ import { I18nProvider } from './i18n/I18nContext';
 import { ConfirmProvider } from './components/ui/confirm';
 import { AdminRoute, GuestRoute, ProtectedRoute } from './components/layout/routes';
 import ScrollToTop from './components/layout/ScrollToTop';
-import HomePage from './pages/landing/HomePage';
-import DevelopersPage from './pages/landing/DevelopersPage';
-import GitHubPage from './pages/landing/GitHubPage';
-import ContactPage from './pages/landing/ContactPage';
-import { PrivacyPolicy, TermsOfService } from './pages/landing/LegalPages';
 import NotFound from './pages/landing/NotFound';
 import LoginPage from './pages/auth/LoginPage';
 import RegisterPage from './pages/auth/RegisterPage';
 import { CheckEmailPage, ForgotPasswordPage, ResetPasswordPage, VerifyPage } from './pages/auth/VerifyPages';
-import ConsentPage from './pages/auth/ConsentPage';
-import ChatPage from './pages/chat/ChatPage';
 
+// Each page loads when it is opened: the landing's animations and the chat's markdown stay out of the first download.
+const HomePage = lazy(() => import('./pages/landing/HomePage'));
+const DevelopersPage = lazy(() => import('./pages/landing/DevelopersPage'));
+const GitHubPage = lazy(() => import('./pages/landing/GitHubPage'));
+const ContactPage = lazy(() => import('./pages/landing/ContactPage'));
+const PrivacyPolicy = lazy(() => import('./pages/landing/LegalPages').then((m) => ({ default: m.PrivacyPolicy })));
+const TermsOfService = lazy(() => import('./pages/landing/LegalPages').then((m) => ({ default: m.TermsOfService })));
+const ConsentPage = lazy(() => import('./pages/auth/ConsentPage'));
+const ChatPage = lazy(() => import('./pages/chat/ChatPage'));
 const AboutPage = lazy(() => import('./pages/landing/AboutPage'));
 const CourseDetailPage = lazy(() => import('./pages/courses/CourseDetailPage'));
 const FilesPage = lazy(() => import('./pages/files/FilesPage'));
