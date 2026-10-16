@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Bug, CheckCircle2, CircleAlert, ImagePlus, Loader2, Send, TriangleAlert, X } from 'lucide-react';
+import { CheckCircle2, CircleAlert, ImagePlus, Loader2, MessageSquareWarning, Send, TriangleAlert, X } from 'lucide-react';
 import { betaReportApi, BETA_REPORT_LIMITS } from '../api/betaReport';
 import { ApiError } from '../api/client';
 import { useAppConfig } from '../context/AppConfigContext';
@@ -33,7 +33,7 @@ const BetaReportButton = () => {
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75 motion-reduce:animate-none" />
           <span className="relative inline-flex h-3 w-3 rounded-full bg-rose-500" />
         </span>
-        <Bug size={18} aria-hidden="true" />
+        <MessageSquareWarning size={18} aria-hidden="true" />
         <span className="hidden whitespace-nowrap lg:inline">{t('betaReport.button')}</span>
         <span className="sr-only lg:hidden">{t('betaReport.button')}</span>
       </button>
@@ -63,14 +63,21 @@ const ReportDialog = ({ onClose }: { onClose: () => void }) => {
     setShot({ file: candidate, url: URL.createObjectURL(candidate) });
   };
 
-  // A screenshot pasted anywhere in the dialog becomes the attachment.
-  const onPaste = (e: ClipboardEvent) => {
-    const image = Array.from(e.clipboardData.files).find((f) => f.type.startsWith('image/'));
-    if (image) {
+  // Ctrl+V anywhere while the dialog is open attaches a copied screenshot; pasted text still goes in the box.
+  const pickRef = useRef(pick);
+  useEffect(() => {
+    pickRef.current = pick;
+  });
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const image = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));
+      if (!image) return;
       e.preventDefault();
-      pick(image);
-    }
-  };
+      pickRef.current(image);
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -101,7 +108,7 @@ const ReportDialog = ({ onClose }: { onClose: () => void }) => {
           </button>
         </div>
       ) : (
-        <form onSubmit={(e) => void submit(e)} onPaste={onPaste} className="space-y-4">
+        <form onSubmit={(e) => void submit(e)} className="space-y-4">
           <p className="text-sm text-slate-600 dark:text-slate-300">{t('betaReport.body')}</p>
           <Notice tone="warning" icon={TriangleAlert}>
             {t('betaReport.warning')}
