@@ -384,6 +384,25 @@ export class ModelCatalog {
     return null;
   }
 
+  /**
+   * A model that can look at pictures for this student: the chat's own when it
+   * can, else their ChatGPT, a StudyHawk model with vision, then their keys'.
+   * null when none can.
+   */
+  async visionModel(userId: string, chatRef?: string): Promise<Resolution | null> {
+    const chat = chatRef ? parseRef(chatRef) : null;
+    if (chatRef && chat && !(chat.provider === 'codex' && !this.codexAvailable())) {
+      const own = await this.build(userId, chatRef, null).catch(() => null);
+      if (own?.model.supportsVision) return own;
+    }
+    const options = await this.options(userId);
+    const pick =
+      options.find((o) => o.provider === 'codex') ??
+      options.find((o) => o.provider === 'studyhawk' && o.supports_vision) ??
+      options.find((o) => o.supports_vision);
+    return pick ? this.build(userId, pick.ref, null) : null;
+  }
+
   /** The student's daily StudyHawk-model turns (their plan); the admin default when unset. */
   private dailyLimit?: (userId: string) => Promise<number>;
 

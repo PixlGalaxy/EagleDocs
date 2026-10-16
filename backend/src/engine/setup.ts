@@ -5,6 +5,8 @@ import { logger } from '../logger.js';
 import { PgMemoryStore, PgRunStore, PgScheduleStore, PgSkillStore } from './stores.js';
 import { CANVAS_TOOLS } from './tools/canvas.js';
 import { IMAGE_TOOLS } from './tools/images.js';
+import { CHAT_TOOLS } from './tools/chats.js';
+import { VISION_TOOLS } from './tools/vision.js';
 import { AdminEmbeddings, documentExtractor } from './documents.js';
 import type { DiskWorkspace } from './workspace.js';
 import type { SandboxTools } from './sandbox.js';
@@ -24,6 +26,8 @@ Do the work the student asks for, the way a capable assistant would: solve homew
 Canvas is the source of truth: read assignments, instructions, files, announcements and grades from the canvas_ tools every time, never from a copy saved earlier (teachers change things). Where files go: course work in that course's folder (the course folders note says which folder is which and what each subfolder is for), one-off and scratch files in TEMP/, anything else in the chat's folder, unless the student asks for another place.
 
 Find it yourself: when the student or an assignment mentions material you do not have (a homework packet, slides, "it's in Modules", "a document called something like..."), look for it in Canvas before asking the student to paste or upload it: canvas_assignment shows what the instructions link to and where they sit, canvas_find searches every course by a half-remembered name (try a few wordings), then open it with canvas_download + files_read or canvas_page and keep going. Ask the student only when it really is not in Canvas. Past work, grades and teacher feedback: canvas_submissions.
+Past chats: you only see this conversation, but the student may mean something from another one ("like I told you", "the essay from last week", "what you said about..."). Look it up with chats_search (try a few key words) and open the right one with chats_read before asking them to repeat it; chats_search without a query lists recent chats.
+Pictures: you cannot see images in the workspace (ones you generated, Canvas downloads, screenshots, photos from earlier chats). Before saying what one shows, look with image_view (ask your exact question); find one by its content with images_search. Never guess an image's content from its file name or a prompt.
 Course material: to study or answer from a whole course's content, download it (canvas_download with course_id keeps it in the course's Canvas/ folder; canvas_save_pages when the material lives in pages), index it with rag_add into one RAG per course, then answer with rag_ask or rag_search and cite the sources.
 Numbers matter (grades, accounting, finance): compute them with calc or code_run instead of in your head, check that totals add up, and in spreadsheets use real numbers or formulas so the student can follow and change them.`;
 
@@ -46,7 +50,7 @@ export async function setupEngine(
   return createEngine({
     stores: { runs, memory: new PgMemoryStore(db), skills: new PgSkillStore(db, host.builtinSkills), schedules: new PgScheduleStore(db) },
     basePrompt: STUDYHAWK_PROMPT,
-    tools: [...CANVAS_TOOLS, ...IMAGE_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
+    tools: [...CANVAS_TOOLS, ...IMAGE_TOOLS, ...VISION_TOOLS, ...CHAT_TOOLS, ...(sandbox ? SCHOOL_TOOLS : [])],
     workspace: host.workspace,
     extractor: documentExtractor,
     embeddings: host.embeddings,

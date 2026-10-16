@@ -12,6 +12,10 @@ import type { ModelCatalog } from '../models/catalog.js';
 import { JobEventWriter } from './event-writer.js';
 import type { CanvasService } from '../canvas/canvas.service.js';
 import { courseSpacesNote, type CourseSpaces } from '../canvas/course-spaces.js';
+import { ChatSearch } from '../chat/chat-search.js';
+import { ImageNotes } from '../files/image-notes.js';
+import { describeImage } from '../models/vision.js';
+import type { VisionHost } from '../../engine/tools/vision.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import type { AdminEmbeddings } from '../../engine/documents.js';
 import type { SchoolService } from '../school/school.service.js';
@@ -298,6 +302,7 @@ export class JobWorker {
       const chatFolder = chatId ? await chats.folderOf(user.id, chatId) : null;
       // Pictures with the student's own ChatGPT or OpenAI key, whatever model this chat runs on.
       const imageGenerator = await catalog.imageGenerator(user.id, resolution.model.ref).catch(() => null);
+      const imageNotes = new ImageNotes(db);
       const notes = [chatFolder ? chatFolderNote(chatFolder) : '', courseNote, imageGenerator ? IMAGES_NOTE : ''].filter(Boolean).join('\n\n') || undefined;
       const agent = engine.forUser({
         id: user.id,
@@ -314,7 +319,22 @@ export class JobWorker {
         host: {
           canvas: { service: this.deps.canvas, userId: user.id, workspace: this.deps.workspace, spaces: this.deps.courseSpaces },
           school: { service: this.deps.school, userId: user.id, workspace: this.deps.workspace },
-          ...(imageGenerator && { images: { generator: imageGenerator, userId: user.id, workspace: this.deps.workspace, folder: chatFolder ?? 'TEMP' } }),
+          chats: { search: new ChatSearch(db), userId: user.id, currentChatId: chatId ?? null },
+          ...(imageGenerator && { images: { generator: imageGenerator, userId: user.id, workspace: this.deps.workspace, folder: chatFolder ?? 'TEMP', notes: imageNotes } }),
+          vision: {
+            userId: user.id,
+            workspace: this.deps.workspace,
+            notes: imageNotes,
+            // Picked only when a picture is looked at: this chat's model if it sees, else another the student has.
+            see: async (image, question, signal) => {
+              const seer = await catalog.visionModel(user.id, resolution.model.ref);
+              if (!seer) return null;
+              if (seer.isStudyHawk) await catalog.assertQuota(user.id);
+              const seen = await describeImage(seer.model, image, question, signal);
+              await catalog.recordUsage(user.id, seer.isStudyHawk, seen.tokensIn, seen.tokensOut);
+              return { ...seen, by: seer.model.label };
+            },
+          } satisfies VisionHost,
         },
       });
       // RAG tools compare this with each collection's model.
