@@ -1,0 +1,61 @@
+/* BrandLoader animations, chosen by the owner from testingelems/sh-loaders.html. */
+
+.brand-loader {
+  --bl-dur: 2.4s;
+  overflow: visible;
+}
+.brand-loader .bl-outline {
+  fill: #000;
+  stroke: #000;
+  stroke-width: 12;
+  stroke-linejoin: round;
+}
+.brand-loader .bl-both,
+.brand-loader .bl-s,
+.brand-loader .bl-h {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* Ensamble: S and H come in from opposite sides and lock together with a bump. */
+.bl-assemble .bl-s { animation: bl-as-s var(--bl-dur) cubic-bezier(.2, .9, .3, 1.2) infinite; }
+.bl-assemble .bl-h { animation: bl-as-h var(--bl-dur) cubic-bezier(.2, .9, .3, 1.2) infinite; }
+.bl-assemble .bl-both { animation: bl-as-bump var(--bl-dur) ease-out infinite; }
+@keyframes bl-as-s { 0% { transform: translate(-70%, 30%); opacity: 0; } 30%, 78% { transform: none; opacity: 1; } 100% { transform: translate(-70%, 30%); opacity: 0; } }
+@keyframes bl-as-h { 0% { transform: translate(70%, -30%); opacity: 0; } 30%, 78% { transform: none; opacity: 1; } 100% { transform: translate(70%, -30%); opacity: 0; } }
+@keyframes bl-as-bump { 0%, 28% { transform: scale(1); } 34% { transform: scale(1.08); } 42%, 100% { transform: scale(1); } }
+
+/* Salto: the H hops over the S and lands squashed. */
+.bl-hop .bl-h { animation: bl-hop-h var(--bl-dur) cubic-bezier(.4, 0, .2, 1) infinite; transform-origin: center bottom; }
+.bl-hop .bl-s { animation: bl-hop-s var(--bl-dur) ease-in-out infinite; transform-origin: center bottom; }
+@keyframes bl-hop-h {
+  0% { transform: none; } 12% { transform: scale(1.08, .86); }
+  40% { transform: translateY(-46%) rotate(-10deg); } 55% { transform: translateY(-50%) rotate(6deg); }
+  72% { transform: none; } 78% { transform: scale(1.1, .84); } 88%, 100% { transform: none; }
+}
+@keyframes bl-hop-s { 0%, 70% { transform: none; } 76% { transform: scale(1.03, .94); } 86%, 100% { transform: none; } }
+
+/* Trazo: each letter's outline is drawn, then filled. */
+.bl-draw .bl-line { fill: none; stroke-width: 16; stroke-linejoin: round; stroke-dasharray: 1; animation: bl-draw var(--bl-dur) ease-in-out infinite; }
+.bl-draw .bl-line-s { stroke: currentColor; }
+.bl-draw .bl-line-h { stroke: #22d3ee; animation-delay: calc(var(--bl-dur) * .08); }
+.bl-draw .bl-both { animation: bl-draw-fill var(--bl-dur) ease-in-out infinite; }
+@keyframes bl-draw { 0% { stroke-dashoffset: 1; opacity: 1; } 45% { stroke-dashoffset: 0; } 80% { stroke-dashoffset: 0; opacity: 1; } 100% { stroke-dashoffset: 0; opacity: 0; } }
+@keyframes bl-draw-fill { 0%, 42% { opacity: 0; } 58%, 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Ola: each letter grows in turn. */
+.bl-wave .bl-s { animation: bl-wave var(--bl-dur) ease-in-out infinite; }
+.bl-wave .bl-h { animation: bl-wave var(--bl-dur) ease-in-out infinite; animation-delay: calc(var(--bl-dur) * .18); }
+@keyframes bl-wave { 0%, 50%, 100% { transform: none; } 18% { transform: translateY(-14%) scale(1.12); } 32% { transform: none; } }
+
+/* Imán: S and H pull apart and snap back. */
+.bl-magnet .bl-h { animation: bl-magnet-h var(--bl-dur) cubic-bezier(.5, -.4, .3, 1.6) infinite; }
+.bl-magnet .bl-s { animation: bl-magnet-s var(--bl-dur) cubic-bezier(.5, -.4, .3, 1.6) infinite; }
+@keyframes bl-magnet-h { 0%, 15%, 85%, 100% { transform: none; } 45%, 55% { transform: translate(28%, -18%) rotate(8deg); } }
+@keyframes bl-magnet-s { 0%, 15%, 85%, 100% { transform: none; } 45%, 55% { transform: translate(-16%, 10%) rotate(-5deg); } }
+
+/* Reduced motion: the logo stays still and fully drawn. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-loader *, .brand-loader { animation: none !important; }
+  .bl-draw .bl-line { display: none; }
+}

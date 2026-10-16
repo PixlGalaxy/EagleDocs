@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { Field, Notice } from '../../components/ui/kit';
 import { AuthShell, PasswordInput, authInput, authLink, authSubmit } from './AuthShell';
+import BrandLoader from '../../components/ui/BrandLoader';
 
 const RESEND_COOLDOWN = 60;
 
@@ -161,7 +162,7 @@ export const VerifyPage = () => {
         </div>
       ) : (
         <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-          <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+          <BrandLoader size={24} />
           {t('auth.verifying')}
         </p>
       )}

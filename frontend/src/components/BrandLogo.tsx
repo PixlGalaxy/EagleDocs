@@ -1,6 +1,10 @@
 /** The StudyHawk logo, drawn inline so the black parts follow the theme (currentColor). */
 
-const CYAN = '#22d3ee';
+export const BRAND_CYAN = '#22d3ee';
+
+/** The S and the H of the mark (viewBox -20 -715 1125 1245). The S is drawn with scale(1,-1), the H with translate(386,516) scale(1,-1). */
+export const BRAND_S_PATH = 'M318.1 439.2 339.6 515.9H703.5L566.4 697.6H17.5L152.1 519.2L78.5 258H436.3L414.6 181.3H56.2L5 -0H551.5L676.6 439.2Z';
+export const BRAND_H_PATH = 'M563.1 703.2 463.9 353.3H294.6L392.2 697.6H18.5L152.9 519.5L104.9 349.9L6 0H194.4L243.3 172H412.7L364.1 0H552.5L700.3 521.5Z';
 
 interface Props {
   className?: string;
@@ -14,21 +18,21 @@ const a11y = (label?: string) => (label ? { role: 'img', 'aria-label': label } :
 export const BrandIcon = ({ className = '', label }: Props) => (
   <svg viewBox="-20 -715 1125 1245" className={`text-slate-950 dark:text-white ${className}`} {...a11y(label)}>
     <g fill="#000" stroke="#000" strokeWidth={12} strokeLinejoin="round">
-      <path transform="scale(1,-1)" d="M318.1 439.2 339.6 515.9H703.5L566.4 697.6H17.5L152.1 519.2L78.5 258H436.3L414.6 181.3H56.2L5 -0H551.5L676.6 439.2Z" />
+      <path transform="scale(1,-1)" d={BRAND_S_PATH} />
       <path
         transform="translate(386,516) scale(1,-1)"
-        d="M563.1 703.2 463.9 353.3H294.6L392.2 697.6H18.5L152.9 519.5L104.9 349.9L6 0H194.4L243.3 172H412.7L364.1 0H552.5L700.3 521.5Z"
+        d={BRAND_H_PATH}
       />
     </g>
     <path
       fill="currentColor"
       transform="scale(1,-1)"
-      d="M318.1 439.2 339.6 515.9H703.5L566.4 697.6H17.5L152.1 519.2L78.5 258H436.3L414.6 181.3H56.2L5 -0H551.5L676.6 439.2Z"
+      d={BRAND_S_PATH}
     />
     <path
-      fill={CYAN}
+      fill={BRAND_CYAN}
       transform="translate(386,516) scale(1,-1)"
-      d="M563.1 703.2 463.9 353.3H294.6L392.2 697.6H18.5L152.9 519.5L104.9 349.9L6 0H194.4L243.3 172H412.7L364.1 0H552.5L700.3 521.5Z"
+      d={BRAND_H_PATH}
     />
   </svg>
 );
@@ -37,24 +41,24 @@ export const BrandIcon = ({ className = '', label }: Props) => (
 export const BrandLogo = ({ className = '', label = 'StudyHawk', mono = false }: Props & { mono?: boolean }) => (
   <svg viewBox="-20 -715 6480 1245" className={`${mono ? '' : 'text-slate-950 dark:text-white'} ${className}`} {...a11y(label)}>
     <g fill={mono ? 'none' : '#000'} stroke={mono ? 'none' : '#000'} strokeWidth={12} strokeLinejoin="round">
-      <path transform="scale(1,-1)" d="M318.1 439.2 339.6 515.9H703.5L566.4 697.6H17.5L152.1 519.2L78.5 258H436.3L414.6 181.3H56.2L5 -0H551.5L676.6 439.2Z" />
+      <path transform="scale(1,-1)" d={BRAND_S_PATH} />
       <path
         transform="translate(386,516) scale(1,-1)"
-        d="M563.1 703.2 463.9 353.3H294.6L392.2 697.6H18.5L152.9 519.5L104.9 349.9L6 0H194.4L243.3 172H412.7L364.1 0H552.5L700.3 521.5Z"
+        d={BRAND_H_PATH}
       />
     </g>
     <path
       fill="currentColor"
       transform="scale(1,-1)"
-      d="M318.1 439.2 339.6 515.9H703.5L566.4 697.6H17.5L152.1 519.2L78.5 258H436.3L414.6 181.3H56.2L5 -0H551.5L676.6 439.2Z"
+      d={BRAND_S_PATH}
     />
     <path
-      fill={mono ? 'currentColor' : CYAN}
+      fill={mono ? 'currentColor' : BRAND_CYAN}
       transform="translate(386,516) scale(1,-1)"
-      d="M563.1 703.2 463.9 353.3H294.6L392.2 697.6H18.5L152.9 519.5L104.9 349.9L6 0H194.4L243.3 172H412.7L364.1 0H552.5L700.3 521.5Z"
+      d={BRAND_H_PATH}
     />
     <g transform="translate(210,206.2) scale(0.85)">
-      <g fill={mono ? 'currentColor' : CYAN}>
+      <g fill={mono ? 'currentColor' : BRAND_CYAN}>
         <path
           transform="translate(1400.0,0) scale(1,-1)"
           d="M318.0 439.2 339.5 515.8H703.5L566.3 697.5H17.4L152.0 519.2L78.4 257.9H436.3L414.5 181.3H56.2L4.9 -1.5e-05H551.4L676.6 439.2Z"

@@ -10,6 +10,7 @@ import { Notice } from '../../components/ui/kit';
 import { btn } from '../../components/ui/styles';
 import { SCOPE_LABEL } from '../settings/AppsSection';
 import { AuthShell } from './AuthShell';
+import BrandLoader from '../../components/ui/BrandLoader';
 
 const SCOPE_HINT: Record<McpScope, 'apps.scopeCanvasHint' | 'apps.scopeDegreeworksHint' | 'apps.scopeWorkspaceHint' | 'apps.scopeMemoryHint'> = {
   'canvas.read': 'apps.scopeCanvasHint',
@@ -71,7 +72,7 @@ const ConsentPage = () => {
         </Notice>
       ) : !consent ? (
         <p className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
-          <Loader2 size={18} className="animate-spin" aria-hidden="true" />
+          <BrandLoader size={24} />
           {t('auth.verifying')}
         </p>
       ) : (

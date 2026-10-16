@@ -1,15 +1,17 @@
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { Loader2, Megaphone, X } from 'lucide-react';
+import { Megaphone, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAppConfig } from '../../context/AppConfigContext';
 import { useI18n } from '../../i18n/I18nContext';
 import AppNavbar from './AppNavbar';
+import BrandLoader, { BrandLoaderBlock } from '../ui/BrandLoader';
 
 function FullPageSpinner() {
+  const { t } = useI18n();
   return (
     <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50 dark:bg-slate-950">
-      <Loader2 className="animate-spin text-[var(--accent-500)] motion-reduce:animate-none" size={32} aria-label="Loading" />
+      <BrandLoader size={72} label={t('common.loading')} delayMs={150} />
     </div>
   );
 }
@@ -86,7 +88,7 @@ function AppShell({ skipLabel }: { skipLabel: string }) {
       <BroadcastBanner />
       <div id="main" className="flex min-h-0 flex-1 flex-col">
         {/* Lazy pages load under the navbar instead of blanking the whole app. */}
-        <Suspense fallback={null}>
+        <Suspense fallback={<BrandLoaderBlock className="flex-1" />}>
           <Outlet />
         </Suspense>
       </div>

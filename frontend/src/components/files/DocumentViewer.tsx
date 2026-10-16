@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { renderAsync } from 'docx-preview';
-import { Loader2 } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
+import BrandLoader from '../ui/BrandLoader';
 
 const SAFE_LINK_PROTOCOLS = new Set(['http:', 'https:', 'mailto:']);
 
@@ -81,7 +81,7 @@ const DocumentViewer = ({ blob, compact = false }: Props) => {
     <div className={compact ? 'h-full overflow-hidden bg-slate-200 dark:bg-slate-950' : 'h-full overflow-auto bg-slate-200 dark:bg-slate-950'}>
       {!done && (
         <div className="flex h-full items-center justify-center">
-          <Loader2 size={22} className="animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden="true" />
+          <BrandLoader size={44} delayMs={150} />
         </div>
       )}
       {done?.error && <p className="p-4 text-sm text-rose-600 dark:text-rose-400">{done.error}</p>}

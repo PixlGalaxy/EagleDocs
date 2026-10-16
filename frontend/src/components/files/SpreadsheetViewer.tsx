@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { read, utils, type WorkBook } from 'xlsx';
-import { Loader2 } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
+import BrandLoader from '../ui/BrandLoader';
 
 /** Past this many rows or columns, the sheet is cut off: a preview, not a spreadsheet app. */
 const LIMITS = { full: { rows: 500, cols: 60 }, compact: { rows: 25, cols: 10 } };
@@ -36,7 +36,7 @@ const SpreadsheetViewer = ({ blob, compact = false }: Props) => {
   if (!done?.workbook)
     return (
       <div className="flex h-full items-center justify-center">
-        <Loader2 size={22} className="animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden="true" />
+        <BrandLoader size={44} delayMs={150} />
       </div>
     );
 

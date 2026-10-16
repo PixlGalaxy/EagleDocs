@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import { chatApi } from '../../api/chat';
 import { ApiError } from '../../api/client';
 import type { Chat, ChatInfo } from '../../api/types';
 import { useI18n } from '../../i18n/I18nContext';
 import Modal from '../../components/ui/Modal';
 import { formatSize } from '../../components/chat/attachments';
+import BrandLoader from '../../components/ui/BrandLoader';
 
 /** A chat's numbers: messages, tokens, models, dates and the files in its folder. */
 const ChatInfoDialog = ({ chat, onClose }: { chat: Chat; onClose: () => void }) => {
@@ -40,7 +40,7 @@ const ChatInfoDialog = ({ chat, onClose }: { chat: Chat; onClose: () => void }) 
       {error ? (
         <p className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
       ) : !info ? (
-        <Loader2 size={20} className="mx-auto animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden="true" />
+        <div className="flex justify-center py-2"><BrandLoader size={36} /></div>
       ) : (
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
           {rows.map(([label, value]) => (

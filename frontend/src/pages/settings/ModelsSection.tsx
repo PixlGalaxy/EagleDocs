@@ -13,6 +13,7 @@ import Toast from '../../components/ui/Toast';
 import { Badge, Field, Notice, Panel, Skeleton } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
 import { StatusBadge } from './ConnectionsSection';
+import BrandLoader from '../../components/ui/BrandLoader';
 
 const PROVIDERS: { id: string; label: string; needsBaseUrl?: boolean }[] = [
   { id: 'openai', label: 'OpenAI' },
@@ -87,7 +88,7 @@ function CodexConnectModal({ onClose, onConnected }: { onClose: () => void; onCo
         </Notice>
       ) : !start ? (
         <p className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          <Loader2 size={16} className="animate-spin" />
+          <BrandLoader size={22} />
           {t('models.codexStarting')}
         </p>
       ) : (
@@ -110,7 +111,7 @@ function CodexConnectModal({ onClose, onConnected }: { onClose: () => void; onCo
             </div>
           </li>
           <li className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
-            <Loader2 size={16} className="animate-spin" aria-hidden="true" />
+            <BrandLoader size={22} />
             {t('models.codexWaiting')}
           </li>
         </ol>

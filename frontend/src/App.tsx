@@ -5,6 +5,8 @@ import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { I18nProvider } from './i18n/I18nContext';
 import { ConfirmProvider } from './components/ui/confirm';
+import BootSplash from './components/ui/BootSplash';
+import { BrandLoaderBlock } from './components/ui/BrandLoader';
 import { AdminRoute, GuestRoute, ProtectedRoute } from './components/layout/routes';
 import ScrollToTop from './components/layout/ScrollToTop';
 import NotFound from './pages/landing/NotFound';
@@ -37,7 +39,8 @@ const App = () => (
         <I18nProvider>
           <ThemeProvider>
             <ConfirmProvider>
-            <Suspense fallback={null}>
+            <BootSplash />
+            <Suspense fallback={<BrandLoaderBlock className="min-h-[100dvh]" />}>
             <Routes>
               {/* Landing (public navbar with About, Developers, GitHub...) */}
               <Route path="/" element={<HomePage />} />

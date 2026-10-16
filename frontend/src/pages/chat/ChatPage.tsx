@@ -33,6 +33,7 @@ import { useConfirm } from '../../components/ui/confirm';
 import { useMediaQuery } from '../../components/useMediaQuery';
 import { Notice, Skeleton } from '../../components/ui/kit';
 import { btn, input } from '../../components/ui/styles';
+import BrandLoader from '../../components/ui/BrandLoader';
 
 interface LiveAnswer {
   jobId: string;
@@ -1102,7 +1103,7 @@ const ChatPage = () => {
       {forking && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40" role="alertdialog" aria-modal="true" aria-live="polite" aria-label={t('chat.forking')}>
           <div className="flex items-center gap-3 rounded-xl bg-white px-5 py-4 text-sm font-medium text-slate-700 shadow-2xl dark:bg-slate-900 dark:text-slate-200">
-            <Loader2 size={18} className="animate-spin text-[var(--accent-600)] motion-reduce:animate-none" aria-hidden="true" />
+            <BrandLoader size={28} />
             {t('chat.forking')}
           </div>
         </div>

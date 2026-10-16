@@ -9,6 +9,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { MarkdownBody } from '../chat/MessageView';
 import { fileUrl, formatSize } from '../chat/attachments';
 import { MEDIA_TYPES, canPreview, extOf, previewKindOf, useBlobSrc, useFileBlob, type PreviewKind } from './preview';
+import { BrandLoaderBlock } from '../ui/BrandLoader';
 
 const CodeEditor = lazy(() => import('./CodeEditor'));
 const DocumentViewer = lazy(() => import('./DocumentViewer'));
@@ -18,11 +19,7 @@ const isTextKind = (kind: PreviewKind) => kind === 'markdown' || kind === 'html'
 /** Notebooks are JSON the agent manages; everything else shown as text can be edited and saved. */
 const isEditable = (entry: WorkspaceEntry) => isTextKind(previewKindOf(entry.name)) && !/\.ipynb$/i.test(entry.name);
 
-const Spinner = () => (
-  <div className="flex h-full min-h-24 items-center justify-center">
-    <Loader2 size={22} className="animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden="true" />
-  </div>
-);
+const Spinner = () => <BrandLoaderBlock size={44} />;
 
 const Notice = ({ children }: { children: ReactNode }) => (
   <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-slate-500 dark:text-slate-400">
