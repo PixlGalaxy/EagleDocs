@@ -40,11 +40,12 @@ test('plan_update emits the plan for the UI', async () => {
     { title: 'Outline', status: 'in_progress' },
     { title: 'Draft' },
   ];
-  const provider = new ScriptedProvider([() => toolCall('plan_update', { steps }), () => text('ok')]);
+  const provider = new ScriptedProvider([() => toolCall('plan_update', { title: 'Essay', steps }), () => text('ok')]);
   await agent.run({ runId: 'r1', model: model(provider), history: [user('help me plan')], sink });
   const plan = events.find((e) => e.type === 'plan');
   assert.deepEqual(plan, {
     type: 'plan',
+    title: 'Essay',
     steps: [
       { title: 'Read the rubric', status: 'done' },
       { title: 'Outline', status: 'in_progress' },

@@ -125,7 +125,7 @@ Added by `createEngine` unless disabled. "Main agent only" tools are not offered
 | `memory_update` | Edit SOUL.md, USER.md or MEMORY.md with a batch of add / patch / remove / replace, within the size limit | none | yes | no |
 | `skills_load` | Load the full instructions of a skill | none | no | yes |
 | `skills_note` | Record a short lesson (max 300 characters) on a skill | none | yes | no |
-| `plan_update` | Show a checklist of 1 to 20 steps to the user (`plan` event); send the full list each time | none | no | no |
+| `plan_update` | Show a checklist of 1 to 20 steps to the user, with an optional short `title` for the plan (`plan` event); send the full list each time, marking the current step `in_progress` | none | no | no |
 | `ask_user` | Ask the user 1 to 4 questions with 2 to 4 options each (`multi_select` optional; the user can always write their own answer), or one free-text `question`, and end the run (`awaitingUser`, `questions`). Fails in scheduled runs. | none | yes | no |
 | `show_html` | Show a self-contained interactive HTML page in the conversation (`RunResult.displays`, max 3 per run, 200 KB each). Only with `EngineOptions.displays: ['html']`. | your renderer | yes | no |
 | `notify` | Send a short notification (`notify` event, max 60 characters title and 200 body, optional http(s) link) | none | yes | no |

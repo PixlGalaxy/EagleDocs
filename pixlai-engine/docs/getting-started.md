@@ -238,6 +238,7 @@ function onEvent(event: EngineEvent) {
       console.log('\n[answer cut short by a correction from the user]');
       break;
     case 'plan':
+      if (event.title) console.log(`Plan: ${event.title}`);
       console.log(event.steps.map((s) => `${s.status}: ${s.title}`).join('\n'));
       break;
   }

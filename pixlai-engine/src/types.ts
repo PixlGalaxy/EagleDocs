@@ -150,7 +150,7 @@ export type EngineEvent =
   | { type: 'context'; used: number; window: number }
   | { type: 'notice'; message: string }
   /** The agent's visible plan for this task (plan_update). Each event replaces the previous plan. */
-  | { type: 'plan'; steps: PlanStep[] }
+  | { type: 'plan'; title?: string; steps: PlanStep[] }
   /** Something the agent wants the user to see even if they are not watching (notify). Hosts may push it. */
   | { type: 'notify'; title: string; body: string; url?: string }
   /**

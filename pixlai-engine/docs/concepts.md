@@ -92,7 +92,7 @@ The sink receives these `EngineEvent` values in order. `sink.emit` is awaited by
 | `notice` | The model cannot use tools but tools exist | `message` |
 | `questions` | `ask_user` was called with options, just before the run ends | `questions: UserQuestion[]` (`question`, `header?`, `options: { label, description? }[]`, `multiSelect?`) |
 | `display` | `show_html` showed a page (the HTML itself is in `RunResult.displays`) | `kind: 'html'`, `title` |
-| `plan` | `plan_update` ran. Each event replaces the previous plan. | `steps: { title, status }[]` with status `pending`, `in_progress`, `done` or `skipped` |
+| `plan` | `plan_update` ran. Each event replaces the previous plan. | `title?` (a short name for the plan) and `steps: { title, status }[]` with status `pending`, `in_progress`, `done` or `skipped` |
 | `notify` | `notify` ran. Hosts may turn it into a push notification. | `title`, `body`, `url?` |
 | `mfa_required` | Emitted by host tools (`ctx.emit`) that wait for the user to approve a sign-in on their phone, followed by `status: waiting_mfa` and later `running` | `service`, `message` |
 

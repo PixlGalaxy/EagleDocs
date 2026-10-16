@@ -5,14 +5,16 @@ import { defineTool, type Tool } from './tool.js';
 const STATUSES: PlanStep['status'][] = ['pending', 'in_progress', 'done', 'skipped'];
 
 /** A visible checklist for multi-step work; hosts render it from the `plan` event. */
-export const planUpdate = defineTool<{ steps: { title: string; status?: string }[] }>({
+export const planUpdate = defineTool<{ title?: string; steps: { title: string; status?: string }[] }>({
   name: 'plan_update',
   description:
-    'Show the user your plan for a task with several steps, and keep it updated as you work (send the full list each time). ' +
-    'Use it for work that takes 3 or more steps; skip it for quick answers.',
+    'Show the user your plan for a task with several steps, and keep it updated as you work (send the full list each time, ' +
+    'with the step you are on as in_progress and finished ones as done). Use it for work that takes 3 or more steps; skip it ' +
+    'for quick answers.',
   parameters: {
     type: 'object',
     properties: {
+      title: { type: 'string', description: 'A short name for the plan, e.g. "Chapter 7 homework" (max 60 characters)' },
       steps: {
         type: 'array',
         items: {
@@ -35,7 +37,8 @@ export const planUpdate = defineTool<{ steps: { title: string; status?: string }
       title: String(s?.title ?? '').slice(0, 100) || 'Step',
       status: STATUSES.includes(s?.status as PlanStep['status']) ? (s.status as PlanStep['status']) : 'pending',
     }));
-    ctx.emit({ type: 'plan', steps });
+    const title = String(args.title ?? '').trim().slice(0, 60);
+    ctx.emit({ type: 'plan', ...(title && { title }), steps });
     return { shown: true, steps: steps.length };
   },
 });
