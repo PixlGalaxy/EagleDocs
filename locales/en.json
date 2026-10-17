@@ -1355,5 +1355,8 @@
   "usage.labAhead": "{count} tasks from other students are ahead of yours.",
   "plan.accelerator": "Accelerator Units",
   "plan.acceleratorLine": "{day} AU a day, {week} a week (GPU minutes)",
-  "plan.acceleratorValue": "{day} AU/day · {week} AU/week"
+  "plan.acceleratorValue": "{day} AU/day · {week} AU/week",
+  "admin.labEmbedModel": "Embedding model (RAG)",
+  "admin.labEmbedHint": "Indexes notes and transcripts for search through the queue (a search goes first, and still runs on used-up units). Empty: the model tagged \"embedding\" in Models is used. Changing it means rebuilding existing RAGs.",
+  "admin.labCached": "From the cache (24 h)"
 }

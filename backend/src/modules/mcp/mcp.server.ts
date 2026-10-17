@@ -1,4 +1,5 @@
 import type { Engine, JsonSchema, Tool } from 'pixlai-engine';
+import { runAsUser } from '../../engine/run-user.js';
 import type { Db } from '../../db/pool.js';
 import { maybe } from '../../db/pool.js';
 import { PgMemoryStore, PgSkillStore } from '../../engine/stores.js';
@@ -277,7 +278,9 @@ export class McpServer {
       if (!engineTools.some((t) => t.name === name)) {
         result = text(`Unknown tool "${name}", or this app was not given the permission it needs.`, true);
       } else {
-        const out = await agent.callTool(name, args, { runId: `mcp-${principal.grantId}-${started}`, signal, toolFilter: (t) => !hidden(t.name) });
+        const out = await runAsUser(principal.userId, () =>
+          agent.callTool(name, args, { runId: `mcp-${principal.grantId}-${started}`, signal, toolFilter: (t) => !hidden(t.name) }),
+        );
         result = text(out.content, out.status === 'error');
       }
     }

@@ -1,4 +1,6 @@
 import type { EmbeddingPort, TextExtractor } from 'pixlai-engine';
+import type { LabService } from '../modules/lab/lab.service.js';
+import { currentUser } from './run-user.js';
 import type { Db } from '../db/pool.js';
 import { maybe } from '../db/pool.js';
 import type { Secrets } from '../crypto/secrets.js';
@@ -102,14 +104,22 @@ interface EmbeddingModelRow {
 }
 
 /**
- * Embeddings through the model an admin tagged "embedding" (e.g. Ollama's
- * nomic-embed-text). Looked up on each use, so changing it in Admin -> Models
- * needs no restart; RAGs built with another model ask to be rebuilt.
+ * Embeddings for RAG. With an embedding model in Admin -> Accelerator Lab they go through the Lab's
+ * queue, as tasks of the student whose run asks (one query goes ahead of batch work and still runs
+ * when their units are used up); otherwise through the model an admin tagged "embedding" in
+ * Admin -> Models. Looked up on each use, so a change needs no restart; RAGs built with another
+ * model ask to be rebuilt.
  */
 export class AdminEmbeddings implements EmbeddingPort {
   private current: { row: EmbeddingModelRow; at: number } | null = null;
+  private lab: LabService | null = null;
 
   constructor(private db: Db, private secrets: Secrets) {}
+
+  /** The Accelerator Lab, when this server has one (set once at startup). */
+  useLab(lab: LabService): void {
+    this.lab = lab;
+  }
 
   private async row(): Promise<EmbeddingModelRow> {
     if (this.current && Date.now() - this.current.at < 30_000) return this.current.row;
@@ -127,6 +137,11 @@ export class AdminEmbeddings implements EmbeddingPort {
   model = 'not-configured';
 
   async refresh(): Promise<void> {
+    const labModel = this.lab?.embedModel();
+    if (labModel) {
+      this.model = labModel;
+      return;
+    }
     try {
       this.model = (await this.row()).model_name;
     } catch {
@@ -135,6 +150,15 @@ export class AdminEmbeddings implements EmbeddingPort {
   }
 
   async embed(texts: string[], signal?: AbortSignal): Promise<number[][]> {
+    const labModel = this.lab?.embedModel();
+    if (this.lab && labModel) {
+      this.model = labModel;
+      const userId = currentUser();
+      if (!userId) return this.lab.embedNow(texts, signal);
+      const query = texts.length === 1;
+      const { vectors } = await this.lab.run(userId, 'embed', { texts }, { priority: query ? 0 : 1, exempt: query, signal });
+      return vectors;
+    }
     const row = await this.row();
     this.model = row.model_name;
     const base = row.base_url.replace(/\/+$/, '');

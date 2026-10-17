@@ -37,7 +37,7 @@ function lab(roomAu: number | null) {
   const withdrawn: string[] = [];
   const service = {
     room: async () => roomAu,
-    ahead: async () => 2,
+    eta: async () => ({ ahead: 2, seconds: 150 }),
     submit: async (_u: string, _k: string, input: { path: string }) => (submitted.push(input), `t${submitted.length}`),
     wait: async (id: string) => ({ text: '', language: 'en', segments: [{ start: 2, end: 10, text: `piece ${id}` }, { start: 10, end: 50, text: 'continues.' }] }),
     withdraw: async (ids: string[]) => void withdrawn.push(...ids),
@@ -78,7 +78,7 @@ test('a lecture is cut in minute pieces, queued as batch work and saved as a tim
   assert.match(md, /\*\*\[01:02\]\*\* piece t2/);
   assert.match(md, /\*\*\[02:02\]\*\* piece t3/);
   assert.match(md, /language: en/);
-  assert.match(notices[0]!, /3 pieces, 2 tasks from others ahead/);
+  assert.match(notices[0]!, /3 pieces, 2 tasks from others ahead, about 3 min/);
   // The pieces are gone.
   const dir = /TEMP\/lab\/([0-9a-f]{8})/.exec(q.submitted[0]!.path)![1]!;
   assert.equal(existsSync(join(root, 'temp', USER, 'lab', dir)), false);

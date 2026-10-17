@@ -20,17 +20,19 @@ export function createLabAdminRoutes(deps: { db: Db; settings: SettingsService }
     ollama_url: settings.getString(K.labOllamaUrl, ''),
     vision_model: settings.getString(K.labVisionModel, ''),
     text_model: settings.getString(K.labTextModel, ''),
+    embed_model: settings.getString(K.labEmbedModel, ''),
     whisper_url: settings.getString(K.labWhisperUrl, ''),
     whisper_model: settings.getString(K.labWhisperModel, ''),
     max_queued_per_user: settings.getNumber(K.labMaxQueued, 200),
   });
 
   router.get('/lab', async (_req, res) => {
-    const queue = await maybe<{ queued: number; running: number; done_day: number; failed_day: number; gpu_ms_day: string; wait_ms: string | null; node: string | null }>(
+    const queue = await maybe<{ queued: number; running: number; done_day: number; cached_day: number; failed_day: number; gpu_ms_day: string; wait_ms: string | null; node: string | null }>(
       db,
       `SELECT COUNT(*) FILTER (WHERE status = 'queued')::int AS queued,
               COUNT(*) FILTER (WHERE status = 'running')::int AS running,
               COUNT(*) FILTER (WHERE status = 'done' AND finished_at > now() - interval '1 day')::int AS done_day,
+              COUNT(*) FILTER (WHERE status = 'done' AND gpu_ms = 0 AND cache_key IS NOT NULL AND finished_at > now() - interval '1 day')::int AS cached_day,
               COUNT(*) FILTER (WHERE status = 'failed' AND finished_at > now() - interval '1 day')::int AS failed_day,
               COALESCE(SUM(gpu_ms) FILTER (WHERE finished_at > now() - interval '1 day'), 0) AS gpu_ms_day,
               AVG(EXTRACT(EPOCH FROM (started_at - created_at)) * 1000) FILTER (WHERE finished_at > now() - interval '1 day') AS wait_ms,
@@ -43,6 +45,7 @@ export function createLabAdminRoutes(deps: { db: Db; settings: SettingsService }
         queued: queue?.queued ?? 0,
         running: queue?.running ?? 0,
         done_day: queue?.done_day ?? 0,
+        cached_day: queue?.cached_day ?? 0,
         failed_day: queue?.failed_day ?? 0,
         gpu_minutes_day: Math.round(Number(queue?.gpu_ms_day ?? 0) / 600) / 100,
         avg_wait_seconds: queue?.wait_ms ? Math.round(Number(queue.wait_ms) / 1000) : null,
@@ -67,6 +70,7 @@ export function createLabAdminRoutes(deps: { db: Db; settings: SettingsService }
     for (const [field, key] of [
       ['vision_model', K.labVisionModel],
       ['text_model', K.labTextModel],
+      ['embed_model', K.labEmbedModel],
       ['whisper_model', K.labWhisperModel],
     ] as const) {
       if (body[field] === undefined) continue;

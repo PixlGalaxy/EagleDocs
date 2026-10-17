@@ -1,4 +1,5 @@
 import { backgroundReportMessage, type DelegateReport, type DelegateTask, type Engine, type EngineEvent, type ReasoningLevel, type ToolCallView } from 'pixlai-engine';
+import { runAsUser } from '../../engine/run-user.js';
 import type { Bus } from '../../bus/bus.js';
 import type { EnvConfig } from '../../config/env.js';
 import type { Db } from '../../db/pool.js';
@@ -180,7 +181,8 @@ export class JobWorker {
         logger.warn(`Job claim failed: ${(err as Error).message}`);
       }
       if (job) {
-        await this.execute(job);
+        // Engine ports shared by every run (embeddings) bill and queue the work as this student's.
+        await runAsUser(job.user_id, () => this.execute(job!));
         continue;
       }
       await new Promise<void>((resolve) => {

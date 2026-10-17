@@ -19,6 +19,8 @@ import { DiskWorkspace } from '../../engine/workspace.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
 import type { TiersService } from '../billing/tiers.service.js';
 import { LabError, LabService } from './lab.service.js';
+import { AdminEmbeddings } from '../../engine/documents.js';
+import { runAsUser } from '../../engine/run-user.js';
 
 const dir = mkdtempSync(join(tmpdir(), 'studyhawk-lab-'));
 let embedded: EmbeddedPostgres;
@@ -103,7 +105,11 @@ before(async () => {
     req.on('data', (c) => (body += c));
     req.on('end', () => {
       setTimeout(() => {
-        if (req.url === '/api/chat') {
+        if (req.url === '/api/embed') {
+          const { input } = JSON.parse(body) as { input: string[] };
+          ran.push(`embed:${input.length}`);
+          res.end(JSON.stringify({ embeddings: input.map((t) => [t.length, 1, 0]) }));
+        } else if (req.url === '/api/chat') {
           const { model, messages } = JSON.parse(body) as { model: string; messages: { content: string; images?: string[] }[] };
           const prompt = messages.at(-1)!.content;
           ran.push(prompt);
@@ -210,6 +216,61 @@ test('giving up on a task that has not started withdraws it', async () => {
   await Promise.all(busy.map((t) => a.wait(t)));
 });
 
+test('RAG embeddings go through the queue as the run\'s student, and a search still works on used-up units', async () => {
+  const kim = await user('kim');
+  const a = labs[0]!;
+  settingsMap.set(K.labEmbedModel, 'embed-0.6b');
+  const embeddings = new AdminEmbeddings(db, {} as never);
+  embeddings.useLab(a);
+  try {
+    await embeddings.refresh();
+    assert.equal(embeddings.model, 'embed-0.6b');
+    const vectors = await runAsUser(kim, () => embeddings.embed(['alpha', 'be']));
+    assert.deepEqual(vectors, [[5, 1, 0], [2, 1, 0]]);
+    const { rows } = await db.query("SELECT user_id, priority, output FROM lab_tasks WHERE kind = 'embed' AND user_id = $1", [kim]);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].priority, 1);
+    assert.equal(rows[0].output, null, 'the vectors are not kept once read');
+
+    dailyAu = 0.0001;
+    await runAsUser(kim, () => embeddings.embed(['used units'])).catch(() => undefined);
+    // Over the limit now: a batch is refused, one query still runs (and goes ahead of batch work).
+    await assert.rejects(runAsUser(kim, () => embeddings.embed(['a', 'b'])), /used up/);
+    assert.equal((await runAsUser(kim, () => embeddings.embed(['where is the quiz?']))).length, 1);
+    const query = await db.query("SELECT priority FROM lab_tasks WHERE kind = 'embed' AND user_id = $1 ORDER BY created_at DESC LIMIT 1", [kim]);
+    assert.equal(query.rows[0].priority, 0);
+  } finally {
+    dailyAu = 0;
+    settingsMap.delete(K.labEmbedModel);
+  }
+});
+
+test('the same lecture piece from a classmate comes from the cache: no GPU, no units, no wait', async () => {
+  const leo = await user('leo');
+  const mia = await user('mia');
+  for (const u of [leo, mia]) {
+    mkdirSync(join(dir, 'data', 'workspaces', u, 'Class'), { recursive: true });
+    writeFileSync(join(dir, 'data', 'workspaces', u, 'Class', 'piece.wav'), Buffer.from('the same recording'));
+  }
+  const a = labs[0]!;
+  await a.run(leo, 'transcribe', { path: 'Class/piece.wav' });
+  const before = ran.length;
+  const out = await a.run(mia, 'transcribe', { path: 'Class/piece.wav' });
+  assert.equal(out.text, 'hello class');
+  assert.equal(ran.length, before, 'the GPU was not used');
+  const { rows } = await db.query("SELECT gpu_ms FROM lab_tasks WHERE user_id = $1 AND kind = 'transcribe'", [mia]);
+  assert.equal(rows[0].gpu_ms, 0);
+  assert.equal((await db.query('SELECT 1 FROM lab_windows WHERE user_id = $1', [mia])).rowCount, 0, 'no units counted');
+  // Different bytes, different answer.
+  writeFileSync(join(dir, 'data', 'workspaces', mia, 'Class', 'piece.wav'), Buffer.from('another recording'));
+  await a.run(mia, 'transcribe', { path: 'Class/piece.wav' });
+  assert.equal(ran.length, before + 1);
+  // The wait estimate uses the GPU time of the last hour.
+  const eta = await a.eta(mia);
+  assert.equal(eta.ahead, 0);
+  assert.equal(eta.seconds, 0);
+});
+
 test('speech comes back as timed segments', async () => {
   const hal = await user('hal');
   mkdirSync(join(dir, 'data', 'workspaces', hal, 'Lectures'), { recursive: true });
@@ -224,7 +285,7 @@ test('one worker in the cluster: a second replica waits, and takes over when the
   await b.start();
   const ivy = await user('ivy');
   await labs[0]!.run(ivy, 'text', { prompt: 'ivy-1' });
-  const { rows } = await db.query("SELECT DISTINCT node_id FROM lab_tasks WHERE status = 'done'");
+  const { rows } = await db.query("SELECT DISTINCT node_id FROM lab_tasks WHERE status = 'done' AND node_id IS NOT NULL");
   assert.deepEqual(rows.map((r) => r.node_id), ['node-a']);
 
   // node-a shuts down (an update): it lets the lock go, and node-b's next check takes the worker.

@@ -37,6 +37,7 @@ export interface LabSettings {
   ollama_url: string;
   vision_model: string;
   text_model: string;
+  embed_model: string;
   whisper_url: string;
   whisper_model: string;
   max_queued_per_user: number;
@@ -47,6 +48,7 @@ export interface LabInfo {
     queued: number;
     running: number;
     done_day: number;
+    cached_day: number;
     failed_day: number;
     gpu_minutes_day: number;
     avg_wait_seconds: number | null;

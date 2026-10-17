@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { basename } from 'path';
 import type pg from 'pg';
 import type { Bus } from '../../bus/bus.js';
@@ -9,7 +10,7 @@ import { logger } from '../../logger.js';
 import { SETTINGS_KEYS as K } from '../admin/settings-keys.js';
 import type { TiersService } from '../billing/tiers.service.js';
 import { WINDOWS, type WindowKind, type WindowStatus } from '../sandbox/compute-meter.js';
-import { ollamaChat, transcribe, type Segment } from './backends.js';
+import { ollamaChat, ollamaEmbed, transcribe, type Segment } from './backends.js';
 
 /** One Accelerator Unit: one minute of GPU time. */
 export const AU_MS = 60_000;
@@ -21,8 +22,10 @@ const POLL_MS = 5_000;
 /** Finished tasks are kept this long (results are copied into the workspace by the tools). */
 const KEEP_MS = 24 * 3_600_000;
 const DEFAULT_MAX_QUEUED = 200;
+/** Answers kept for work sent again (the same lecture piece, slide or prompt), unused this long. */
+const CACHE_DAYS = 30;
 
-export type LabKind = 'vision' | 'text' | 'transcribe';
+export type LabKind = 'vision' | 'text' | 'transcribe' | 'embed';
 /** 0 = interactive (one picture in a chat), 1 = batch (a lecture cut in pieces). */
 export type LabPriority = 0 | 1;
 
@@ -41,12 +44,18 @@ export interface TranscribeInput {
   path: string;
   language?: string;
 }
+export interface EmbedInput {
+  /** One batch of RAG chunks, or a single query. */
+  texts: string[];
+}
 export interface LabOutputs {
   vision: { text: string };
   text: { text: string };
   transcribe: { text: string; segments: Segment[]; language: string | null };
+  embed: { vectors: number[][] };
 }
-type Inputs = { vision: VisionInput; text: TextInput; transcribe: TranscribeInput };
+type Inputs = { vision: VisionInput; text: TextInput; transcribe: TranscribeInput; embed: EmbedInput };
+const KIND_NAMES: Record<LabKind, string> = { vision: 'pictures', text: 'text work', transcribe: 'transcription', embed: 'embeddings (RAG)' };
 
 interface TaskRow {
   id: string;
@@ -57,6 +66,7 @@ interface TaskRow {
   status: 'queued' | 'running' | 'done' | 'failed';
   output: unknown;
   error: string | null;
+  cache_key: string | null;
 }
 
 export interface LabStatus {
@@ -135,12 +145,18 @@ export class LabService {
       const url = this.settings.getString(K.labWhisperUrl, '').trim();
       return url ? { url, model: this.settings.getString(K.labWhisperModel, '').trim() || 'whisper-1' } : null;
     }
-    const model = this.settings.getString(kind === 'vision' ? K.labVisionModel : K.labTextModel, '').trim();
+    const key = { vision: K.labVisionModel, text: K.labTextModel, embed: K.labEmbedModel }[kind];
+    const model = this.settings.getString(key, '').trim();
     return ollama && model ? { url: ollama, model } : null;
   }
 
   available(kind: LabKind): boolean {
     return this.modelFor(kind) !== null;
+  }
+
+  /** The Lab's embedding model, for RAG manifests (null when the Lab does not do embeddings). */
+  embedModel(): string | null {
+    return this.modelFor('embed')?.model ?? null;
   }
 
   // ------------------------------------------------------------------ Accelerator Units
@@ -163,7 +179,7 @@ export class LabService {
       day,
       week,
       over: [day, week].some((w) => w.limitCu !== null && w.usedCu >= w.limitCu),
-      available: { vision: this.available('vision'), text: this.available('text'), transcribe: this.available('transcribe') },
+      available: { vision: this.available('vision'), text: this.available('text'), transcribe: this.available('transcribe'), embed: this.available('embed') },
     };
   }
 
@@ -187,12 +203,42 @@ export class LabService {
 
   // ------------------------------------------------------------------ queueing
 
-  /** Queues one task after checking the switch, the student's units and their queue. */
-  async submit<T extends LabKind>(userId: string, kind: T, input: Inputs[T], priority: LabPriority = 1): Promise<string> {
+  /**
+   * What the result depends on, hashed: kind, model, prompt and the file's bytes. Embeddings are not
+   * cached (big, and cheap to make again).
+   */
+  private async cacheKey(userId: string, kind: LabKind, model: string, input: Record<string, unknown>): Promise<string | null> {
+    if (kind === 'embed') return null;
+    const hash = createHash('sha256').update(JSON.stringify({ kind, model, prompt: input.prompt ?? null, system: input.system ?? null, language: input.language ?? null }));
+    if (kind === 'vision' && typeof input.data === 'string') hash.update(input.data);
+    else if (typeof input.path === 'string') hash.update(await this.workspace.read(userId, input.path));
+    return hash.digest('hex');
+  }
+
+  /**
+   * Queues one task after checking the switch, the student's units and their queue. Work done before
+   * (the same lecture piece from a classmate, a slide seen again) comes back from the cache at once,
+   * without the GPU, units or a place in line. `exempt`: a tiny task (one RAG query) still runs when
+   * the units are used up, so the student can keep asking their notes.
+   */
+  async submit<T extends LabKind>(userId: string, kind: T, input: Inputs[T], priority: LabPriority = 1, options: { exempt?: boolean } = {}): Promise<string> {
     const target = this.modelFor(kind);
-    if (!target) throw new LabError(`The Accelerator Lab cannot do ${kind === 'transcribe' ? 'transcription' : kind === 'vision' ? 'pictures' : 'text work'} on this server (an administrator has not set it up).`);
+    if (!target) throw new LabError(`The Accelerator Lab cannot do ${KIND_NAMES[kind]} on this server (an administrator has not set it up).`);
+    const key = await this.cacheKey(userId, kind, target.model, input as unknown as Record<string, unknown>);
+    if (key) {
+      const hit = await maybe<{ output: unknown }>(this.db, 'UPDATE lab_cache SET hits = hits + 1, used_at = now() WHERE key = $1 RETURNING output', [key]);
+      if (hit) {
+        const row = await maybe<{ id: string }>(
+          this.db,
+          `INSERT INTO lab_tasks (user_id, kind, priority, model, input, status, output, cache_key, started_at, finished_at)
+           VALUES ($1, $2, $3, $4, $5, 'done', $6, $7, now(), now()) RETURNING id`,
+          [userId, kind, priority, target.model, JSON.stringify({ ...input, data: undefined }), JSON.stringify(hit.output), key],
+        );
+        return row!.id;
+      }
+    }
     const status = await this.status(userId);
-    if (status.over) {
+    if (status.over && !options.exempt) {
       const window = [status.day, status.week].find((w) => w.limitCu !== null && w.usedCu >= w.limitCu)!;
       throw new LabError(`The student's Accelerator Units are used up (${window.usedCu} of ${window.limitCu} AU); they come back ${window.resetsAt ? `at ${window.resetsAt}` : 'soon'}.`);
     }
@@ -201,8 +247,8 @@ export class LabService {
     if ((queued?.n ?? 0) >= max) throw new LabError(`The student already has ${max} Accelerator Lab tasks waiting; wait for those to finish.`);
     const row = await maybe<{ id: string }>(
       this.db,
-      'INSERT INTO lab_tasks (user_id, kind, priority, model, input) VALUES ($1, $2, $3, $4, $5) RETURNING id',
-      [userId, kind, priority, target.model, JSON.stringify(input)],
+      'INSERT INTO lab_tasks (user_id, kind, priority, model, input, cache_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [userId, kind, priority, target.model, JSON.stringify(input), key],
     );
     await this.bus.publish('lab_queued', { taskId: row!.id });
     return row!.id;
@@ -211,9 +257,13 @@ export class LabService {
   /** Waits for a task's result. Giving up (abort) withdraws it if it has not started. */
   async wait<T extends LabKind>(taskId: string, signal?: AbortSignal): Promise<LabOutputs[T]> {
     for (;;) {
-      const task = await maybe<Pick<TaskRow, 'status' | 'output' | 'error'>>(this.db, 'SELECT status, output, error FROM lab_tasks WHERE id = $1', [taskId]);
+      const task = await maybe<Pick<TaskRow, 'kind' | 'status' | 'output' | 'error'>>(this.db, 'SELECT kind, status, output, error FROM lab_tasks WHERE id = $1', [taskId]);
       if (!task) throw new LabError('The Accelerator Lab task disappeared');
-      if (task.status === 'done') return task.output as LabOutputs[T];
+      if (task.status === 'done') {
+        // Vectors are big and already in the student's RAG: the row keeps only its bookkeeping.
+        if (task.kind === 'embed') await this.db.query('UPDATE lab_tasks SET output = NULL WHERE id = $1', [taskId]);
+        return task.output as LabOutputs[T];
+      }
       if (task.status === 'failed') throw new LabError(task.error ?? 'The Accelerator Lab task failed');
       if (signal?.aborted) {
         await this.db.query("DELETE FROM lab_tasks WHERE id = $1 AND status = 'queued'", [taskId]);
@@ -240,9 +290,16 @@ export class LabService {
     return left.length ? Math.min(...left) : null;
   }
 
+  /** Embeddings outside any student's run (nobody to queue or bill): straight to the server. */
+  async embedNow(texts: string[], signal?: AbortSignal): Promise<number[][]> {
+    const target = this.modelFor('embed');
+    if (!target) throw new LabError(`The Accelerator Lab cannot do ${KIND_NAMES.embed} on this server (an administrator has not set it up).`);
+    return ollamaEmbed(target.url, target.model, texts, signal);
+  }
+
   /** Queues a task and waits for its result. */
-  async run<T extends LabKind>(userId: string, kind: T, input: Inputs[T], options: { priority?: LabPriority; signal?: AbortSignal } = {}): Promise<LabOutputs[T]> {
-    const id = await this.submit(userId, kind, input, options.priority ?? 1);
+  async run<T extends LabKind>(userId: string, kind: T, input: Inputs[T], options: { priority?: LabPriority; signal?: AbortSignal; exempt?: boolean } = {}): Promise<LabOutputs[T]> {
+    const id = await this.submit(userId, kind, input, options.priority ?? 1, { exempt: options.exempt });
     return this.wait<T>(id, options.signal);
   }
 
@@ -255,6 +312,24 @@ export class LabService {
       [userId],
     );
     return row?.n ?? 0;
+  }
+
+  /**
+   * Where this student stands: tasks from others ahead of theirs, and about how long until all of
+   * the student's waiting work is done, from the GPU time tasks took in the last hour.
+   */
+  async eta(userId: string): Promise<{ ahead: number; seconds: number | null }> {
+    const [ahead, row] = await Promise.all([
+      this.ahead(userId),
+      maybe<{ avg_ms: string | null; mine: number }>(
+        this.db,
+        `SELECT (SELECT AVG(gpu_ms) FROM lab_tasks WHERE status = 'done' AND gpu_ms > 0 AND finished_at > now() - interval '1 hour') AS avg_ms,
+                (SELECT COUNT(*)::int FROM lab_tasks WHERE user_id = $1 AND status IN ('queued', 'running')) AS mine`,
+        [userId],
+      ),
+    ]);
+    const avg = row?.avg_ms ? Number(row.avg_ms) : null;
+    return { ahead, seconds: avg === null ? null : Math.round(((ahead + (row?.mine ?? 0)) * avg) / 1000) };
   }
 
   // ------------------------------------------------------------------ the worker (one per cluster)
@@ -339,7 +414,7 @@ export class LabService {
        )
        UPDATE lab_tasks SET status = 'running', started_at = now(), node_id = $1
        FROM next WHERE lab_tasks.id = next.id AND lab_tasks.status = 'queued'
-       RETURNING lab_tasks.id, lab_tasks.user_id, lab_tasks.kind, lab_tasks.model, lab_tasks.input, lab_tasks.status, lab_tasks.output, lab_tasks.error`,
+       RETURNING lab_tasks.id, lab_tasks.user_id, lab_tasks.kind, lab_tasks.model, lab_tasks.input, lab_tasks.status, lab_tasks.output, lab_tasks.error, lab_tasks.cache_key`,
       [this.nodeId, this.loadedModel],
     );
     return row ?? null;
@@ -362,6 +437,11 @@ export class LabService {
       [task.id, error ? 'failed' : 'done', output === null ? null : JSON.stringify(output), error, ms],
     );
     await this.record(task.user_id, ms).catch((err: Error) => logger.warn(`Accelerator Lab: could not count units: ${err.message}`));
+    if (!error && task.cache_key) {
+      await this.db
+        .query('INSERT INTO lab_cache (key, kind, output) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING', [task.cache_key, task.kind, JSON.stringify(output)])
+        .catch((err: Error) => logger.warn(`Accelerator Lab: could not cache a result: ${err.message}`));
+    }
     await this.bus.publish('lab_done', { taskId: task.id });
   }
 
@@ -378,6 +458,10 @@ export class LabService {
       const input = task.input as unknown as TextInput;
       return { text: await ollamaChat(target.url, target.model, input.prompt, { system: input.system, numCtx: 16_384 }) };
     }
+    if (task.kind === 'embed') {
+      const input = task.input as unknown as EmbedInput;
+      return { vectors: await ollamaEmbed(target.url, target.model, input.texts) };
+    }
     const input = task.input as unknown as TranscribeInput;
     const audio = await this.workspace.read(task.user_id, input.path);
     return transcribe(target.url, target.model, audio, basename(input.path), { language: input.language });
@@ -387,5 +471,6 @@ export class LabService {
     await this.db
       .query("DELETE FROM lab_tasks WHERE status IN ('done', 'failed') AND finished_at < now() - make_interval(secs => $1)", [KEEP_MS / 1000])
       .catch(() => undefined);
+    await this.db.query('DELETE FROM lab_cache WHERE used_at < now() - make_interval(days => $1)', [CACHE_DAYS]).catch(() => undefined);
   }
 }

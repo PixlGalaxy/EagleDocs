@@ -63,6 +63,8 @@ export const SETTINGS_KEYS = {
   labOllamaUrl: 'lab.ollama_url',
   labVisionModel: 'lab.vision_model',
   labTextModel: 'lab.text_model',
+  /** Embeddings for RAG through the Lab's queue; when empty, Admin > Models (tag "embedding") is used. */
+  labEmbedModel: 'lab.embed_model',
   /** An OpenAI-compatible speech-to-text server (/v1/audio/transcriptions), e.g. whisper.cpp. */
   labWhisperUrl: 'lab.whisper_url',
   labWhisperModel: 'lab.whisper_model',

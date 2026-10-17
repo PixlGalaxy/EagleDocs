@@ -122,6 +122,7 @@ async function main() {
   // The Accelerator Lab: GPU work in one fair queue, one worker in the cluster (plans/13).
   const lab = new LabService(db, bus, settings, tiers, workspace, config.NODE_ID);
   await lab.start();
+  embeddings.useLab(lab);
   // Before the engine: code and browser tools are offered only when sandboxes work.
   const sandboxes = new SandboxManager(db, bus, settings, config);
   sandboxes.setPerUserLimits(async (userId) => tiers.limitsFor(userId));

@@ -36,6 +36,13 @@ function labOf(ctx: ToolContext): LabHost {
 const quote = (path: string) => `'./${path.replace(/'/g, `'\\''`)}'`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+/** ", 3 tasks from others ahead, about 4 min": what the student is told while the work waits. */
+async function standing(lab: LabHost): Promise<string> {
+  const { ahead, seconds } = await lab.service.eta(lab.userId);
+  const parts = [ahead ? `${ahead} tasks from others ahead` : '', seconds ? `about ${seconds < 90 ? `${seconds} s` : `${Math.round(seconds / 60)} min`}` : ''].filter(Boolean);
+  return parts.length ? `, ${parts.join(', ')}` : '';
+}
+
 /** 75 -> "01:15", 3725 -> "1:02:05". */
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds));
@@ -234,8 +241,7 @@ export const mediaTranscribe = defineTool<{ path: string; language?: string }>({
       const parts = await cutAudio(ctx, media, dir);
       if (!parts.length) throw new Error(`${path} has no audio track`);
       const ids = await queueAll(lab, parts.map((p) => ({ kind: 'transcribe', input: { path: p, ...(media.language && { language: media.language }) } })));
-      const ahead = await lab.service.ahead(lab.userId);
-      ctx.emit({ type: 'notice', message: `Transcribing ${clock(seconds)} on the Accelerator Lab (${parts.length} pieces${ahead ? `, ${ahead} tasks from others ahead` : ''}).` });
+      ctx.emit({ type: 'notice', message: `Transcribing ${clock(seconds)} on the Accelerator Lab (${parts.length} pieces${await standing(lab)}).` });
       const pieces = await waitAll<Piece>(ctx, lab, ids, (done) => `Transcribed ${clock(done * CHUNK_SECONDS)} of ${clock(seconds)}.`);
 
       const out = besideSource(path, '.transcript.md');
@@ -337,10 +343,9 @@ export const videoDigest = defineTool<{ path: string; language?: string; max_fra
         ...frames.map((f) => ({ kind: 'vision' as const, input: { path: f.path, prompt: framePrompt(f.time) } })),
         ...parts.map((p) => ({ kind: 'transcribe' as const, input: { path: p, ...(media.language && { language: media.language }) } })),
       ]);
-      const ahead = await lab.service.ahead(lab.userId);
       ctx.emit({
         type: 'notice',
-        message: `Reading ${clock(seconds)} of video on the Accelerator Lab: ${frames.length} frames${parts.length ? ` and ${parts.length} minutes of speech` : ''}${ahead ? `, ${ahead} tasks from others ahead` : ''}.`,
+        message: `Reading ${clock(seconds)} of video on the Accelerator Lab: ${frames.length} frames${parts.length ? ` and ${parts.length} minutes of speech` : ''}${await standing(lab)}.`,
       });
       const results = await waitAll<{ text: string } | Piece>(ctx, lab, ids, (done) => `Video: ${done} of ${ids.length} pieces read.`);
 

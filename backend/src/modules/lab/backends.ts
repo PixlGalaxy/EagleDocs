@@ -42,6 +42,20 @@ export async function ollamaChat(
   return (data.message?.content ?? '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
+/** Ollama embeddings for a batch of texts, in order. */
+export async function ollamaEmbed(url: string, model: string, texts: string[], signal?: AbortSignal): Promise<number[][]> {
+  const res = await fetch(`${base(url)}/api/embed`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ model, input: texts, truncate: true }),
+    signal: AbortSignal.any([AbortSignal.timeout(CALL_TIMEOUT_MS), ...(signal ? [signal] : [])]),
+  });
+  if (!res.ok) throw await failure(res, 'The Lab embedding server');
+  const vectors = ((await res.json()) as { embeddings?: number[][] }).embeddings ?? [];
+  if (vectors.length !== texts.length) throw new Error(`The embedding model returned ${vectors.length} vectors for ${texts.length} texts`);
+  return vectors;
+}
+
 /**
  * Speech to text on an OpenAI-compatible server (whisper.cpp started with
  * `--inference-path /v1/audio/transcriptions`, speaches, LocalAI...). Returns timed segments

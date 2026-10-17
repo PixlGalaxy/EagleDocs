@@ -100,6 +100,10 @@ const LabSection = () => {
           <Field label={t('admin.labTextModel')} hint={t('admin.labTextHint')}>
             {text('text_model', 'qwen3:4b-instruct', 'lab-models')}
           </Field>
+          <Field label={t('admin.labEmbedModel')} hint={t('admin.labEmbedHint')}>
+            {text('embed_model', 'qwen3-embedding:0.6b', 'lab-models')}
+          </Field>
+          <div className="hidden sm:block" />
           <Field label={t('admin.labWhisperUrl')} hint={t('admin.labWhisperHint')}>
             {text('whisper_url', 'http://whisper:8080')}
           </Field>
@@ -139,6 +143,7 @@ const LabSection = () => {
             [t('admin.labQueued'), q.queued],
             [t('admin.labRunning'), q.running],
             [t('admin.labDone'), q.done_day],
+            [t('admin.labCached'), q.cached_day],
             [t('admin.labFailed'), q.failed_day],
             [t('admin.labGpuMinutes'), q.gpu_minutes_day],
             [t('admin.labAvgWait'), q.avg_wait_seconds === null ? '—' : `${q.avg_wait_seconds} s`],
