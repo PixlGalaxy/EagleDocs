@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { Bell, Building2, Box, CreditCard, Cpu, Globe, LayoutDashboard, Mail, ScrollText, Settings, Users } from 'lucide-react';
+import { Bell, Building2, Box, CreditCard, Cpu, Globe, Gpu, LayoutDashboard, Mail, ScrollText, Settings, Users } from 'lucide-react';
 import { useI18n } from '../../i18n/I18nContext';
 import { Page, SectionLayout } from '../../components/layout/routes';
 import DashboardSection from './DashboardSection';
@@ -12,8 +12,9 @@ import BillingSection from './BillingSection';
 import { GeneralSection } from './GeneralSections';
 import LogsSection from './LogsSection';
 import WebSearchSection from './WebSearchSection';
+import LabSection from './LabSection';
 
-const SECTIONS = ['dashboard', 'users', 'institutions', 'models', 'sandbox', 'web-search', 'email', 'push', 'billing', 'settings', 'logs'] as const;
+const SECTIONS = ['dashboard', 'users', 'institutions', 'models', 'sandbox', 'lab', 'web-search', 'email', 'push', 'billing', 'settings', 'logs'] as const;
 type Section = (typeof SECTIONS)[number];
 const isSection = (value: string | null): value is Section => SECTIONS.includes(value as Section);
 
@@ -30,6 +31,7 @@ const AdminPage = () => {
     { key: 'institutions' as const, label: t('admin.institutions'), icon: Building2 },
     { key: 'models' as const, label: t('settings.models'), icon: Cpu },
     { key: 'sandbox' as const, label: t('admin.sandbox'), icon: Box },
+    { key: 'lab' as const, label: t('admin.lab'), icon: Gpu },
     { key: 'web-search' as const, label: t('admin.webSearch'), icon: Globe },
     { key: 'email' as const, label: t('admin.email'), icon: Mail },
     { key: 'push' as const, label: t('admin.push'), icon: Bell },
@@ -46,6 +48,7 @@ const AdminPage = () => {
         {active === 'institutions' && <InstitutionsSection />}
         {active === 'models' && <ModelsAdminSection />}
         {active === 'sandbox' && <SandboxSection />}
+        {active === 'lab' && <LabSection />}
         {active === 'web-search' && <WebSearchSection />}
         {active === 'email' && <EmailSection />}
         {active === 'push' && <PushAdminSection />}

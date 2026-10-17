@@ -18,6 +18,9 @@ export interface BusChannels {
   sandbox_control: { userId: string; action: 'stop' };
   /** An admin saved something: open tabs re-read what they show (modules/live). */
   admin_changed: Record<string, never>;
+  /** Accelerator Lab (modules/lab): a task was queued (wakes the worker) or finished (wakes its waiter). */
+  lab_queued: { taskId: string };
+  lab_done: { taskId: string };
 }
 export type BusChannel = keyof BusChannels;
 type Handler<C extends BusChannel> = (payload: BusChannels[C]) => void;

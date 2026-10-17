@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test src/**/*.test.ts",
+    "test:lab": "tsx --test --test-concurrency=1 src/modules/lab/lab.service.it.ts",
     "predev": "npm --prefix ../pixlai-engine run build",
     "prebuild": "npm --prefix ../pixlai-engine run build"
   },

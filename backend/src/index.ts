@@ -31,6 +31,7 @@ import { PushService } from './modules/push/push.service.js';
 import { DailySummaryService } from './modules/push/daily-summary.js';
 import { BuiltinSkills, loadBuiltinSkills } from './modules/skills/builtin.js';
 import { TiersService } from './modules/billing/tiers.service.js';
+import { LabService } from './modules/lab/lab.service.js';
 import { BillingService } from './modules/billing/billing.service.js';
 import { AccountDeletion } from './modules/users/account-deletion.js';
 import { OAuthService } from './modules/mcp/oauth.service.js';
@@ -118,6 +119,9 @@ async function main() {
   // Each current course's workspace folder (Canvas/, Work/, Assignments/, Notes/): laid out here, filled by the agent.
   const courseSpaces = new CourseSpaces(canvas, workspace);
   const embeddings = new AdminEmbeddings(db, secrets);
+  // The Accelerator Lab: GPU work in one fair queue, one worker in the cluster (plans/13).
+  const lab = new LabService(db, bus, settings, tiers, workspace, config.NODE_ID);
+  await lab.start();
   // Before the engine: code and browser tools are offered only when sandboxes work.
   const sandboxes = new SandboxManager(db, bus, settings, config);
   sandboxes.setPerUserLimits(async (userId) => tiers.limitsFor(userId));
@@ -146,7 +150,7 @@ async function main() {
       school: { service: school, userId, workspace },
     }),
   });
-  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, courseSpaces, workspace, embeddings, school, push, builtinSkills, tiers, t, concurrency: config.JOB_WORKERS });
+  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, courseSpaces, workspace, embeddings, school, push, builtinSkills, tiers, lab, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
   // Leader tasks: whichever replica gets the advisory lock runs each cycle.
@@ -202,6 +206,7 @@ async function main() {
     builtinSkills,
     courseSpaces,
     tiers,
+    lab,
     billing,
     deletion,
     oauth,
@@ -222,8 +227,10 @@ async function main() {
     logger.info(`${signal} received, shutting down`);
     server.close();
     worker.stop();
-    void sandboxes
-      .stopAll()
+    void lab
+      .stop()
+      .catch(() => undefined)
+      .then(() => sandboxes.stopAll())
       .catch(() => undefined)
       .then(() => bus.stop())
       .then(flushLogs)

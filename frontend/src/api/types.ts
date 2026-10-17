@@ -498,6 +498,9 @@ export interface Tier {
   /** Sandbox Compute Units per 24 h / 7 day window (each starts with the first use); 0 = unlimited. */
   compute_units_daily: number;
   compute_units_weekly: number;
+  /** Accelerator Lab units (GPU minutes) per window; 0 = unlimited. */
+  accelerator_units_daily: number;
+  accelerator_units_weekly: number;
   sort: number;
   is_default: boolean;
   enabled: boolean;
@@ -524,6 +527,8 @@ export interface UsageInfo {
   };
   models: { studyhawk_messages: number; daily_limit: number | null; messages: number; tokens_in: number; tokens_out: number };
   storage: { used_mb: number; limit_mb: number; temp_used_mb: number; temp_limit_mb: number };
+  /** GPU minutes in the Accelerator Lab; null while the Lab is off on this server. */
+  accelerator: { day: ComputeWindow; week: ComputeWindow; over: boolean; ahead: number } | null;
   history: { day: string; compute: number; messages: number }[];
 }
 

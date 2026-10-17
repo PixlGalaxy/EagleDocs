@@ -14,7 +14,8 @@ import type { CanvasService } from '../canvas/canvas.service.js';
 import { courseSpacesNote, type CourseSpaces } from '../canvas/course-spaces.js';
 import { ChatSearch } from '../chat/chat-search.js';
 import { ImageNotes } from '../files/image-notes.js';
-import { describeImage } from '../models/vision.js';
+import { describeImage, splitSeen, VISION_SYSTEM, visionPrompt } from '../models/vision.js';
+import type { LabService } from '../lab/lab.service.js';
 import type { VisionHost } from '../../engine/tools/vision.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import type { AdminEmbeddings } from '../../engine/documents.js';
@@ -96,6 +97,8 @@ export interface WorkerDeps {
   push: PushService;
   builtinSkills: BuiltinSkills;
   tiers: TiersService;
+  /** The Accelerator Lab: looks at pictures for students whose own models cannot. */
+  lab: LabService;
   t: Translate;
   concurrency: number;
 }
@@ -205,6 +208,16 @@ export class JobWorker {
   private async planLimits(userId: string) {
     const plan = await this.deps.tiers.limitsFor(userId);
     return { maxParallelSubagents: plan.maxParallelSubagents, maxSubagentDepth: plan.maxSubagentDepth, maxSchedules: plan.maxSchedules };
+  }
+
+  /**
+   * The Accelerator Lab's vision model, for a student with no model that sees: counted in their
+   * Accelerator Units and queued ahead of batch work, since the chat is waiting on it.
+   */
+  private async labSee(userId: string, image: { data: string }, question: string | undefined, signal: AbortSignal) {
+    if (!this.deps.lab.available('vision')) return null;
+    const { text } = await this.deps.lab.run(userId, 'vision', { prompt: `${VISION_SYSTEM}\n\n${visionPrompt(question)}`, data: image.data }, { priority: 0, signal });
+    return { ...splitSeen(text, 'The Accelerator Lab'), tokensIn: 0, tokensOut: 0, by: 'Accelerator Lab' };
   }
 
   /** A browser follows this job's stream right now (its SSE heartbeat keeps watched_at fresh). */
@@ -328,7 +341,7 @@ export class JobWorker {
             // Picked only when a picture is looked at: this chat's model if it sees, else another the student has.
             see: async (image, question, signal) => {
               const seer = await catalog.visionModel(user.id, resolution.model.ref);
-              if (!seer) return null;
+              if (!seer) return this.labSee(user.id, image, question, signal);
               if (seer.isStudyHawk) await catalog.assertQuota(user.id);
               const seen = await describeImage(seer.model, image, question, signal);
               await catalog.recordUsage(user.id, seer.isStudyHawk, seen.tokensIn, seen.tokensOut);

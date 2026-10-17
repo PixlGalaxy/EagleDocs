@@ -31,6 +31,29 @@ export interface AdminUserRow extends User {
   sandbox_status?: SandboxStatus;
 }
 
+/** Admin → Accelerator Lab (backend/src/modules/lab/lab.routes.ts). */
+export interface LabSettings {
+  enabled: boolean;
+  ollama_url: string;
+  vision_model: string;
+  text_model: string;
+  whisper_url: string;
+  whisper_model: string;
+  max_queued_per_user: number;
+}
+export interface LabInfo {
+  settings: LabSettings;
+  queue: {
+    queued: number;
+    running: number;
+    done_day: number;
+    failed_day: number;
+    gpu_minutes_day: number;
+    avg_wait_seconds: number | null;
+    worker_node: string | null;
+  };
+}
+
 export interface WebSearchSettings {
   /** 'none', 'brave' or 'tavily'. */
   paid_provider: string;
@@ -214,6 +237,9 @@ export const adminApi = {
   deleteInstitution: (id: string) => api.del<void>(`/admin/institutions/${id}`),
   builtinSkills: () => api.get<{ slug: string; name: string; description: string; requires?: 'degreeworks' | 'outlook' }[]>('/admin/skills'),
 
+  lab: () => api.get<LabInfo>('/admin/lab'),
+  saveLab: (body: Partial<LabSettings>) => api.put<{ settings: LabSettings }>('/admin/lab', body),
+  labModels: () => api.get<{ models: { name: string; size_mb: number }[]; error: string | null }>('/admin/lab/models'),
   webSearch: () => api.get<WebSearchSettings>('/admin/web-search'),
   saveWebSearch: (body: { paid_provider: string; api_key?: string }) => api.put<WebSearchSettings>('/admin/web-search', body),
   testWebSearch: () => api.post<{ ok: boolean; results?: number; error?: string }>('/admin/web-search/test'),

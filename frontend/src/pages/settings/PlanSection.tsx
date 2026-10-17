@@ -44,6 +44,7 @@ const PlanSection = () => {
     { label: t('plan.memory'), value: `${tier.mem_mb} MB` },
     { label: t('plan.disk'), value: `${(tier.disk_mb / 1024).toFixed(1)} GB` },
     { label: t('plan.compute'), value: t('plan.computeValue', { day: tier.compute_units_daily || '∞', week: tier.compute_units_weekly || '∞' }) },
+    { label: t('plan.accelerator'), value: t('plan.acceleratorValue', { day: tier.accelerator_units_daily || '∞', week: tier.accelerator_units_weekly || '∞' }) },
     // The daily messages are a quota on the StudyHawk model: none on, nothing to count.
     ...(!hostedModels ? [] : [{ label: t('plan.messages'), value: tier.daily_messages ? `${usage_today.messages} / ${tier.daily_messages}` : `${usage_today.messages} / ${t('plan.unlimited')}` }]),
     { label: t('plan.jobs'), value: String(tier.max_background_jobs) },
@@ -120,6 +121,7 @@ const PlanSection = () => {
                       ...(!hostedModels ? [] : [option.daily_messages ? t('plan.perDay', { count: option.daily_messages }) : t('plan.unlimitedMessages')]),
                       t('plan.helpersLine', { count: option.max_parallel_subagents }),
                       t('plan.computeLine', { day: option.compute_units_daily || '∞', week: option.compute_units_weekly || '∞' }),
+                      t('plan.acceleratorLine', { day: option.accelerator_units_daily || '∞', week: option.accelerator_units_weekly || '∞' }),
                     ].map((line) => (
                       <li key={line} className="flex items-center gap-2">
                         <Check size={14} className="text-[var(--accent-600)]" aria-hidden="true" />

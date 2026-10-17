@@ -18,6 +18,8 @@ import type { RegisterService } from './modules/auth/register.service.js';
 import { createSessionMiddleware } from './modules/auth/session.middleware.js';
 import { createAvatarsRoutes } from './modules/avatars/avatars.routes.js';
 import { createLiveRoutes } from './modules/live/live.routes.js';
+import { createLabAdminRoutes } from './modules/lab/lab.routes.js';
+import type { LabService } from './modules/lab/lab.service.js';
 import { createLogsRoutes } from './modules/logs/logs.routes.js';
 import { createContactRoutes } from './modules/contact/contact.routes.js';
 import { ContactService } from './modules/contact/contact.service.js';
@@ -60,6 +62,8 @@ import type { OAuthService } from './modules/mcp/oauth.service.js';
 
 export interface AppDeps {
   db: Db;
+  /** The Accelerator Lab (GPU queue). */
+  lab: LabService;
   config: EnvConfig;
   t: Translate;
   settings: SettingsService;
@@ -90,7 +94,7 @@ export interface AppDeps {
 }
 
 export function createApp(deps: AppDeps): express.Application {
-  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseSpaces, tiers, billing, oauth, mcp, deletion } = deps;
+  const { db, config, t, settings, auth, register, mail, institutions, sessionTtlHours, bus, secrets, chats, catalog, connections, canvas, workspace, sandboxes, sandbox, school, push, builtinSkills, courseSpaces, tiers, billing, oauth, mcp, deletion, lab } = deps;
   const app = express();
 
   // The bundled nginx (loopback) plus any outer proxies from TRUST_PROXY, so
@@ -196,12 +200,13 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/oauth', mcpRoutes.consent);
   app.use('/api/mcp-apps', mcpRoutes.apps);
   app.use('/api/billing', billingRoutes.user);
-  app.use('/api/usage', createUsageRoutes({ db, tiers, sandboxes, workspace }));
+  app.use('/api/usage', createUsageRoutes({ db, tiers, sandboxes, workspace, lab }));
   app.use('/api/account/export', createExportRoutes({ db, workspace }));
   // Open tabs follow admin changes; `announce` comes before every /api/admin router.
   const live = createLiveRoutes(bus);
   app.use('/api/live', live.router);
   app.use('/api/admin', live.announce);
+  app.use('/api/admin', createLabAdminRoutes({ db, settings }));
   app.use('/api/admin', billingRoutes.admin);
   // The public Contact page: email plus Discord.
   const contactRoutes = createContactRoutes({

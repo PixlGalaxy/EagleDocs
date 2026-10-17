@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Gauge, RefreshCw, Snail } from 'lucide-react';
+import { Gauge, Gpu, RefreshCw, Snail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { billingApi } from '../../api/account';
 import type { ComputeWindow, UsageInfo } from '../../api/types';
@@ -69,7 +69,7 @@ const UsageSection = () => {
 
   if (!usage) return failed ? <Notice tone="danger">{t('usage.loadFailed')}</Notice> : <Skeleton className="h-64 rounded-xl" />;
 
-  const { compute, models, storage, plan, history } = usage;
+  const { compute, models, storage, plan, history, accelerator } = usage;
 
   const resets = (iso: string) => {
     const minutes = Math.max(1, Math.round((new Date(iso).getTime() - readAt) / 60_000));
@@ -79,12 +79,12 @@ const UsageSection = () => {
     return rtf.format(Math.round(minutes / 1440), 'day');
   };
 
-  const windowRow = (title: string, w: ComputeWindow) => (
+  const windowRow = (title: string, w: ComputeWindow, unit = 'CU') => (
     <div>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{title}</span>
         <span className="font-mono text-sm text-slate-700 dark:text-slate-200">
-          {cu(w.used)} / {w.limit === null ? '∞' : cu(w.limit)} CU
+          {cu(w.used)} / {w.limit === null ? '∞' : cu(w.limit)} {unit}
         </span>
       </div>
       <Meter used={w.used} limit={w.limit} label={title} />
@@ -144,6 +144,26 @@ const UsageSection = () => {
           </div>
         </dl>
       </Panel>
+
+      {accelerator && (
+        <Panel title={t('usage.labTitle')} description={t('usage.labBody')}>
+          {accelerator.over && (
+            <div className="mb-4">
+              <Notice tone="warning" icon={Gpu}>
+                {t('usage.labOver')}{' '}
+                <Link to="/settings?section=plan" className="font-medium underline">
+                  {t('usage.upgrade')}
+                </Link>
+              </Notice>
+            </div>
+          )}
+          <div className="grid gap-5 sm:grid-cols-2">
+            {windowRow(t('usage.day'), accelerator.day, 'AU')}
+            {windowRow(t('usage.week'), accelerator.week, 'AU')}
+          </div>
+          {accelerator.ahead > 0 && <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">{t('usage.labAhead', { count: accelerator.ahead })}</p>}
+        </Panel>
+      )}
 
       <Panel
         title={hostedModels ? t('usage.modelTitle') : t('usage.messagesTitle')}

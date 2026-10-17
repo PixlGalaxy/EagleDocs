@@ -7,19 +7,20 @@ import type { AppRequest } from '../../types/index.js';
 import type { TiersService } from '../billing/tiers.service.js';
 import { CU_MS } from '../sandbox/compute-meter.js';
 import type { SandboxManager } from '../sandbox/manager.js';
+import type { LabService } from '../lab/lab.service.js';
 
 const MB = 1024 * 1024;
 const HISTORY_DAYS = 7;
 
 /** Settings → Usage: the student's plan, compute units, StudyHawk-model use and storage, in one call. */
-export function createUsageRoutes(deps: { db: Db; tiers: TiersService; sandboxes: SandboxManager; workspace: DiskWorkspace }) {
-  const { db, tiers, sandboxes, workspace } = deps;
+export function createUsageRoutes(deps: { db: Db; tiers: TiersService; sandboxes: SandboxManager; workspace: DiskWorkspace; lab: LabService }) {
+  const { db, tiers, sandboxes, workspace, lab } = deps;
   const router = Router();
   router.use(requireAuth);
 
   router.get('/', async (req: AppRequest, res) => {
     const userId = req.user!.id;
-    const [limits, compute, today, history, storage, live] = await Promise.all([
+    const [limits, compute, today, history, storage, live, accelerator] = await Promise.all([
       tiers.limitsFor(userId),
       sandboxes.computeStatus(userId),
       maybe<{ studyhawk_messages: number; messages: number; tokens_in: string; tokens_out: string }>(
@@ -37,7 +38,9 @@ export function createUsageRoutes(deps: { db: Db; tiers: TiersService; sandboxes
       ),
       workspace.usage(userId),
       sandboxes.isRunning(userId) ? sandboxes.stats(userId) : Promise.resolve(null),
+      lab.status(userId),
     ]);
+    const labOn = Object.values(accelerator.available).some(Boolean);
     const [ws, temp] = storage;
     res.json({
       plan: { name: limits.name, cpu: limits.cpu, mem_mb: limits.memMb },
@@ -56,6 +59,15 @@ export function createUsageRoutes(deps: { db: Db; tiers: TiersService; sandboxes
         tokens_in: Number(today?.tokens_in ?? 0),
         tokens_out: Number(today?.tokens_out ?? 0),
       },
+      // Accelerator Lab units (GPU minutes); null while the Lab is off on this server.
+      accelerator: labOn
+        ? {
+            day: { used: accelerator.day.usedCu, limit: accelerator.day.limitCu, resets_at: accelerator.day.resetsAt },
+            week: { used: accelerator.week.usedCu, limit: accelerator.week.limitCu, resets_at: accelerator.week.resetsAt },
+            over: accelerator.over,
+            ahead: await lab.ahead(userId),
+          }
+        : null,
       storage: {
         used_mb: Math.round((ws?.usedBytes ?? 0) / MB),
         limit_mb: Math.round((ws?.limitBytes ?? 0) / MB),

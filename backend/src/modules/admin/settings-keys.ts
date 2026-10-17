@@ -56,4 +56,16 @@ export const SETTINGS_KEYS = {
   webSearchPaidProvider: 'web_search.paid_provider',
   /** Secret (secret_enc). */
   webSearchApiKey: 'web_search.api_key',
+
+  /** Accelerator Lab: GPU work in one queue (plans/13). Off until the admin turns it on. */
+  labEnabled: 'lab.enabled',
+  /** Ollama for pictures and text, e.g. http://ollama:11434. */
+  labOllamaUrl: 'lab.ollama_url',
+  labVisionModel: 'lab.vision_model',
+  labTextModel: 'lab.text_model',
+  /** An OpenAI-compatible speech-to-text server (/v1/audio/transcriptions), e.g. whisper.cpp. */
+  labWhisperUrl: 'lab.whisper_url',
+  labWhisperModel: 'lab.whisper_model',
+  /** Tasks one student may have waiting at once. */
+  labMaxQueued: 'lab.max_queued_per_user',
 } as const;

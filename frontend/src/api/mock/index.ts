@@ -284,6 +284,7 @@ const routes: [string, RegExp, Handler][] = [
     },
     models: { studyhawk_messages: 23, daily_limit: 100, messages: 31, tokens_in: 48211, tokens_out: 12007 },
     storage: { used_mb: 1830, limit_mb: 5120, temp_used_mb: 96, temp_limit_mb: 1024 },
+    accelerator: { day: { used: 4.2, limit: 15, resets_at: new Date(Date.now() + 9 * 3_600_000).toISOString() }, week: { used: 11, limit: 60, resets_at: new Date(Date.now() + 4 * 86_400_000).toISOString() }, over: false, ahead: 3 },
     history: [0.4, 1.9, 0, 0.8, 1.1, 0.5, 1.42].map((compute, i) => ({ day: new Date(Date.now() - (6 - i) * 86_400_000).toISOString().slice(0, 10), compute, messages: [12, 40, 0, 18, 25, 9, 23][i] })),
   })],
   ['GET', /^\/billing\/tiers$/, () => db.tiers.filter((t) => t.enabled)],

@@ -23,6 +23,8 @@ export interface TierRow {
   mcp_daily_code_runs: number;
   compute_units_daily: number;
   compute_units_weekly: number;
+  accelerator_units_daily: number;
+  accelerator_units_weekly: number;
   is_default: boolean;
   enabled: boolean;
 }
@@ -46,6 +48,9 @@ export interface TierLimits {
   /** Sandbox Compute Units per 24 h / 7 day window (each starts with the first use); 0 = unlimited. */
   computeUnitsDaily: number;
   computeUnitsWeekly: number;
+  /** Accelerator Lab units (1 AU = a GPU minute) per 24 h / 7 day window; 0 = unlimited. */
+  acceleratorUnitsDaily: number;
+  acceleratorUnitsWeekly: number;
 }
 
 /** Used only if the tiers table is empty (it never is after the migration's seed). */
@@ -64,11 +69,14 @@ const FALLBACK: TierLimits = {
   mcpDailyCodeRuns: 40,
   computeUnitsDaily: 2,
   computeUnitsWeekly: 10,
+  acceleratorUnitsDaily: 15,
+  acceleratorUnitsWeekly: 60,
 };
 
 const COLUMNS = `id, name, sort, price_cents, currency, stripe_price_id, cpu::float8 AS cpu, mem_mb, disk_mb, daily_messages,
   max_background_jobs, max_schedules, max_parallel_subagents, max_subagent_depth, mcp_daily_calls, mcp_daily_code_runs,
-  compute_units_daily::float8 AS compute_units_daily, compute_units_weekly::float8 AS compute_units_weekly, is_default, enabled`;
+  compute_units_daily::float8 AS compute_units_daily, compute_units_weekly::float8 AS compute_units_weekly,
+  accelerator_units_daily::float8 AS accelerator_units_daily, accelerator_units_weekly::float8 AS accelerator_units_weekly, is_default, enabled`;
 
 /** Plans live a few seconds in each replica: limits are read on every message, sandbox start and file write. */
 const CACHE_MS = 15_000;
@@ -89,6 +97,8 @@ function toLimits(row: TierRow): TierLimits {
     mcpDailyCodeRuns: row.mcp_daily_code_runs,
     computeUnitsDaily: Number(row.compute_units_daily),
     computeUnitsWeekly: Number(row.compute_units_weekly),
+    acceleratorUnitsDaily: Number(row.accelerator_units_daily),
+    acceleratorUnitsWeekly: Number(row.accelerator_units_weekly),
   };
 }
 
@@ -107,6 +117,8 @@ const NUMBER_FIELDS: [keyof TierRow, number, number][] = [
   ['mcp_daily_code_runs', 0, 1_000_000],
   ['compute_units_daily', 0, 10_000],
   ['compute_units_weekly', 0, 70_000],
+  ['accelerator_units_daily', 0, 10_000],
+  ['accelerator_units_weekly', 0, 70_000],
 ];
 
 export class TiersService {
