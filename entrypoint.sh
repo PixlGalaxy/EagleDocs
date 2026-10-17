@@ -24,9 +24,64 @@ start_frontend() {
 }
 
 start_backend() {
-    node /app/backend/dist/index.js &
+    $RUN_AS node /app/backend/dist/index.js &
     BACKEND_PID=$!
 }
+
+# The backend runs as APP_USER (uid/gid 1000), the same uid as the sandboxes, so
+# each can use what the other writes and nothing the backend does on /data runs
+# as root. Only this setup runs as root; nginx keeps its own master/worker split.
+APP_USER=node
+DATA_ROOT=${DATA_ROOT:-/data}
+
+# Owns /data for APP_USER without ever walking, as root, a folder a sandbox can
+# write to: a link swapped in mid-walk would let it chown anything in this
+# container. The users' folders are fixed one level deep only (their parents
+# are ours); older files inside them are reported for the admin to fix.
+prepare_data() {
+    mkdir -p "$DATA_ROOT/workspaces" "$DATA_ROOT/temp"
+    chown -h "$APP_USER:$APP_USER" "$DATA_ROOT" "$DATA_ROOT/workspaces" "$DATA_ROOT/temp"
+    for entry in "$DATA_ROOT"/* "$DATA_ROOT"/.[!.]*; do
+        [ -e "$entry" ] || [ -L "$entry" ] || continue
+        case "$entry" in
+            "$DATA_ROOT/workspaces" | "$DATA_ROOT/temp") ;;
+            # Only the backend writes here (assets, avatars, keys): safe to walk.
+            *) find "$entry" -xdev \( ! -user "$APP_USER" -o ! -group "$APP_USER" \) -exec chown -h "$APP_USER:$APP_USER" {} + ;;
+        esac
+    done
+    for dir in "$DATA_ROOT"/workspaces/* "$DATA_ROOT"/temp/*; do
+        [ -d "$dir" ] && [ ! -L "$dir" ] && chown -h "$APP_USER:$APP_USER" "$dir"
+    done
+    if find "$DATA_ROOT/workspaces" "$DATA_ROOT/temp" -xdev -mindepth 2 ! -user "$APP_USER" -print 2>/dev/null | head -n 1 | grep -q .; then
+        log "WARNING: files in $DATA_ROOT/workspaces or $DATA_ROOT/temp are not owned by uid 1000 (left by an older image that ran as root); the sandbox cannot change them. With every StudyHawk container and sandbox stopped, run on the host: chown -R 1000:1000 <your /data folder>"
+    fi
+}
+
+# Lets APP_USER use the Docker socket through its group, whatever gid the host gave it.
+docker_access() {
+    sock=${DOCKER_HOST:-unix:///var/run/docker.sock}
+    sock=${sock#unix://}
+    [ -S "$sock" ] || return 0
+    gid=$(stat -c %g "$sock")
+    group=$(awk -F: -v gid="$gid" '$3 == gid { print $1; exit }' /etc/group)
+    if [ -z "$group" ]; then
+        group=dockersock
+        addgroup -g "$gid" "$group" 2>/dev/null || { log "WARNING: could not create a group for the Docker socket (gid $gid)"; return 0; }
+    fi
+    addgroup "$APP_USER" "$group" 2>/dev/null || true
+    if [ "$(stat -c %a "$sock" | cut -c2)" -lt 6 ]; then
+        log "WARNING: $sock is not group read-write; sandboxes will be off"
+    fi
+}
+
+if [ "$(id -u)" = 0 ]; then
+    prepare_data
+    docker_access
+    RUN_AS="su-exec $APP_USER"
+else
+    # Started with --user: the caller set the uid (and --group-add for the Docker socket).
+    RUN_AS=""
+fi
 
 log "Container starting (image ${APP_IMAGE_REF:-dev}${APP_IMAGE_REVISION:+, commit $APP_IMAGE_REVISION})"
 start_frontend

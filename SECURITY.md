@@ -280,10 +280,12 @@ These are known and not fixed in code yet, most severe first.
    `/proc/<pid>/environ`.
    - Fix: mount the profiles outside the workspace, owned by the runner only (mode 0700); run user code as a second uid;
      pass the token through a file that is read once and deleted. Better: a browser container that never runs user code.
-3. **The web container holds the Docker socket and runs as root.** A remote code execution flaw in the backend would mean
+3. **The web container holds the Docker socket.** The backend runs as uid 1000 (the entrypoint drops to it after
+   setting up `/data` and the socket's group; only nginx's master stays root), so nothing it does on `/data` runs as
+   root. But access to the socket is still root on the host: a remote code execution flaw in the backend would mean
    root on the host and every user's data.
-   - Fix: a separate sandbox service, or a socket proxy that only allows container create/start/stop, plus `USER` in the
-     Dockerfile and `--cap-drop ALL --read-only`.
+   - Fix: a separate sandbox service, or a socket proxy that only allows container create/start/stop, plus
+     `--cap-drop ALL --read-only`.
 4. **Content is plaintext at rest.** Chats and tool results (emails, Degree Works, Canvas), memories, approvals and files
    are readable by anyone with a database dump or a copy of `/data`. Until there is application-level encryption (a
    per-user key wrapped by `MASTER_KEY`), encrypted volumes and backups are a hard requirement.

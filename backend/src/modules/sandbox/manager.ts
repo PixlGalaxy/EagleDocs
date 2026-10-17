@@ -16,6 +16,8 @@ import { DockerClient } from './docker.js';
 
 const MB = 1024 * 1024;
 const RUNNER_PORT = 7070;
+/** The sandbox image's user (`USER 1000:1000`), which the backend image's `node` user matches. */
+const SANDBOX_UID = 1000;
 const HEALTH_TIMEOUT_MS = 30_000;
 const SLOT_WAIT_MS = 120_000;
 /** With someone waiting for a slot, a sandbox unused this long (and whose owner has no agent working) makes room. */
@@ -285,7 +287,13 @@ export class SandboxManager {
 
   /** Mount sources for the user's two areas, as the Docker daemon sees them. */
   private async mounts(userId: string): Promise<Record<string, unknown>[]> {
-    for (const area of ['workspaces', 'temp']) await fs.mkdir(join(this.config.DATA_ROOT, area, userId), { recursive: true });
+    for (const area of ['workspaces', 'temp']) {
+      const dir = join(this.config.DATA_ROOT, area, userId);
+      await fs.mkdir(dir, { recursive: true });
+      // A backend running as root (the image drops to uid 1000, so only a custom setup) would leave the
+      // folder root-owned and the sandbox could not write to it. Its parent is ours, so this cannot be raced.
+      if (process.getuid?.() === 0) await fs.lchown(dir, SANDBOX_UID, SANDBOX_UID);
+    }
     const volume = this.config.SANDBOX_DATA_VOLUME;
     if (volume) {
       return [
@@ -303,9 +311,9 @@ export class SandboxManager {
 
   /** The sandbox runs as the same user that owns the files the backend writes (never root). */
   private containerUser(): string {
-    if (process.platform === 'win32' || typeof process.getuid !== 'function') return '1000:1000';
+    if (process.platform === 'win32' || typeof process.getuid !== 'function') return `${SANDBOX_UID}:${SANDBOX_UID}`;
     const uid = process.getuid();
-    return uid === 0 ? '1000:1000' : `${uid}:${process.getgid?.() ?? uid}`;
+    return uid === 0 ? `${SANDBOX_UID}:${SANDBOX_UID}` : `${uid}:${process.getgid?.() ?? uid}`;
   }
 
   private async create(userId: string): Promise<SandboxHandle> {

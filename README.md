@@ -92,6 +92,9 @@ docker run -d --name studyhawk --network edge --env-file .env -e NODE_ID=node-1 
 - A `https` `PUBLIC_URL` makes the session cookies `Secure`. Set `TRUST_PROXY` to the address of the proxy in front only,
   and `CLIENT_IP_HEADER=cf-connecting-ip` behind Cloudflare.
 - The Docker socket gives the container control of the host's Docker; see the open items in SECURITY.md.
+- The backend runs as uid 1000, like the sandboxes, and the entrypoint gives it `/data` on start. Data written by an
+  older image (which ran the backend as root) can hold root-owned files inside the users' folders; the container log says so.
+  Fix them once, with every StudyHawk container and sandbox stopped: `chown -R 1000:1000 /mnt/studyhawk/data`.
 - SMTP, models, institutions, plans, Stripe and web push are set in the admin panel after the first login.
 - Read "Deploying safely" (with the Nginx Proxy Manager and Cloudflare settings) and "Open items" in
   [SECURITY.md](SECURITY.md) before opening it to students.

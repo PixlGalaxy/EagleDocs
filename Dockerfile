@@ -39,7 +39,8 @@ LABEL org.opencontainers.image.source="https://github.com/PixlGalaxy/StudyHawk" 
       org.opencontainers.image.version="1.0.0" \
       org.opencontainers.image.description="Hosted academic AI agent for university students: Canvas, Degree Works and a private workspace."
 
-RUN apk add --no-cache nginx tini
+# su-exec: the entrypoint drops to the node user (uid 1000) before starting the backend.
+RUN apk add --no-cache nginx tini su-exec
 
 COPY --from=build-frontend /app/frontend/dist /usr/share/nginx/html
 COPY --from=build-backend /app/pixlai-engine/dist /app/pixlai-engine/dist
