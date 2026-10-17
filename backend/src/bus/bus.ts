@@ -16,6 +16,8 @@ export interface BusChannels {
   job_queued: { jobId: string };
   broadcast: { id: string };
   sandbox_control: { userId: string; action: 'stop' };
+  /** An admin saved something: open tabs re-read what they show (modules/live). */
+  admin_changed: Record<string, never>;
 }
 export type BusChannel = keyof BusChannels;
 type Handler<C extends BusChannel> = (payload: BusChannels[C]) => void;

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppConfigProvider } from './context/AppConfigContext';
 import { AuthProvider } from './context/AuthContext';
+import { LiveUpdates } from './context/LiveUpdates';
 import { ThemeProvider } from './context/ThemeContext';
 import { I18nProvider } from './i18n/I18nContext';
 import { ConfirmProvider } from './components/ui/confirm';
@@ -41,6 +42,8 @@ const App = () => (
           <ThemeProvider>
             <ConfirmProvider>
             <BootSplash />
+            {/* Admin changes reach every open tab without a reload. */}
+            <LiveUpdates />
             {/* Over everything while the server does not answer, gone when it is back. */}
             <ReconnectOverlay />
             <Suspense fallback={<BrandLoaderBlock className="min-h-[100dvh]" />}>

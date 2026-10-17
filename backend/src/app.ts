@@ -17,6 +17,7 @@ import type { AuthService } from './modules/auth/auth.service.js';
 import type { RegisterService } from './modules/auth/register.service.js';
 import { createSessionMiddleware } from './modules/auth/session.middleware.js';
 import { createAvatarsRoutes } from './modules/avatars/avatars.routes.js';
+import { createLiveRoutes } from './modules/live/live.routes.js';
 import { createLogsRoutes } from './modules/logs/logs.routes.js';
 import { createContactRoutes } from './modules/contact/contact.routes.js';
 import { ContactService } from './modules/contact/contact.service.js';
@@ -196,6 +197,10 @@ export function createApp(deps: AppDeps): express.Application {
   app.use('/api/billing', billingRoutes.user);
   app.use('/api/usage', createUsageRoutes({ db, tiers, sandboxes, workspace }));
   app.use('/api/account/export', createExportRoutes({ db, workspace }));
+  // Open tabs follow admin changes; `announce` comes before every /api/admin router.
+  const live = createLiveRoutes(bus);
+  app.use('/api/live', live.router);
+  app.use('/api/admin', live.announce);
   app.use('/api/admin', billingRoutes.admin);
   // The public Contact page: email plus Discord.
   const contactRoutes = createContactRoutes({

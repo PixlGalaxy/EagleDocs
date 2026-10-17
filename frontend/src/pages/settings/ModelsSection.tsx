@@ -7,6 +7,7 @@ import type { CodexDeviceStart, Connection, ModelOption, ModelTier, UserModelPre
 import { useConfirm } from '../../components/ui/confirm';
 import { useI18n } from '../../i18n/I18nContext';
 import { useAppConfig } from '../../context/AppConfigContext';
+import { useAdminChanges } from '../../context/LiveUpdates';
 import type { TranslationKey } from '../../i18n/translations';
 import Modal from '../../components/ui/Modal';
 import Toast from '../../components/ui/Toast';
@@ -214,6 +215,8 @@ const ModelsSection = () => {
   }, []);
 
   useEffect(load, [load]);
+  // Models or ChatGPT turned on or off in the admin panel.
+  useAdminChanges(load);
 
   const codex = connections?.find((c) => c.kind === 'codex');
   const keys = connections?.filter((c) => c.kind === 'api_key') ?? [];

@@ -5,6 +5,7 @@ import { chatApi, modelsApi } from '../../api/chat';
 import { ApiError, apiUrl } from '../../api/client';
 import type { Approval, BackgroundJob, BusyInput, Chat, ContextUsage, Message, ModelOption, PlanStep, ReasoningLevel, StreamEvent, ToolCall, UserModelPrefs, WorkspaceEntry } from '../../api/types';
 import { useAuth } from '../../context/AuthContext';
+import { useAdminChanges } from '../../context/LiveUpdates';
 import { authApi } from '../../api/auth';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
@@ -216,6 +217,14 @@ const ChatPage = () => {
     // Only on mount: refreshChats is stable for the page's lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // A model the admin enabled or removed shows in the picker; the chat keeps its current choice.
+  useAdminChanges(() => {
+    modelsApi
+      .options()
+      .then(setOptions)
+      .catch(() => undefined);
+  });
 
   /**
    * Reloads the saved conversation and the background helpers, and follows a
