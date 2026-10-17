@@ -124,6 +124,14 @@ const IMAGES_NOTE = [
   'answer as ![short description](workspace:<path>). Write SVG only when they ask for SVG or for an exact chart or diagram.',
 ].join('\n');
 
+/** Only on runs where the Accelerator Lab can transcribe: the tool exists there and nowhere else. */
+const RECORDINGS_NOTE = [
+  '## Recordings',
+  'For a lecture, voice note, meeting or video in the files, media_transcribe (group "lab") makes a timed transcript on the',
+  "server's GPU. It can take minutes for a long recording: tell the student, then rag_add the transcript to answer from it",
+  'and cite the [mm:ss] times. Download online videos into the files first.',
+].join('\n');
+
 /**
  * Runs queued jobs on this replica. Any replica may claim any job (SKIP
  * LOCKED); the browser's stream can be on a different one, since events go
@@ -319,7 +327,9 @@ export class JobWorker {
       // Pictures with the student's own ChatGPT or OpenAI key, whatever model this chat runs on.
       const imageGenerator = await catalog.imageGenerator(user.id, resolution.model.ref).catch(() => null);
       const imageNotes = new ImageNotes(db);
-      const notes = [chatFolder ? chatFolderNote(chatFolder) : '', courseNote, imageGenerator ? IMAGES_NOTE : ''].filter(Boolean).join('\n\n') || undefined;
+      // The Lab's tools only where the GPU can do that work and a sandbox cuts the recordings.
+      const labOn = this.deps.lab.available('transcribe') && this.deps.sandboxReady();
+      const notes = [chatFolder ? chatFolderNote(chatFolder) : '', courseNote, imageGenerator ? IMAGES_NOTE : '', labOn ? RECORDINGS_NOTE : ''].filter(Boolean).join('\n\n') || undefined;
       const agent = engine.forUser({
         id: user.id,
         name: user.display_name || user.username,
@@ -360,8 +370,6 @@ export class JobWorker {
       const helperModels = await catalog.helperModels(user.id, resolution.model.ref);
       // Email or Degree Works tools only where the institution offers them and has not switched them off.
       const hidden = await this.deps.builtinSkills.hiddenTools(user.id);
-      // The Lab's tools only where the GPU can do that work and a sandbox cuts the recordings.
-      const labOn = this.deps.lab.available('transcribe') && this.deps.sandboxReady();
       const toolFilter = (tool: { name: string }) =>
         !hidden(tool.name) && (tool.name !== 'image_generate' || imageGenerator !== null) && (tool.name !== 'media_transcribe' || labOn);
 
