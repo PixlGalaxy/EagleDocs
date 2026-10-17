@@ -191,7 +191,12 @@ export class DockerClient {
       await this.request('GET', `/networks/${encodeURIComponent(name)}`);
     } catch (err) {
       if (!(err instanceof DockerError && err.status === 404)) throw err;
-      await this.request('POST', '/networks/create', { Name: name, Driver: 'bridge', Labels: { 'studyhawk.sandbox': '1' } });
+      // Replicas starting together race to create it: losing that race is fine, the network is there.
+      await this.request('POST', '/networks/create', { Name: name, Driver: 'bridge', CheckDuplicate: true, Labels: { 'studyhawk.sandbox': '1' } }).catch(
+        (createErr: unknown) => {
+          if (!(createErr instanceof DockerError && (createErr.status === 409 || /already exists/i.test(createErr.message)))) throw createErr;
+        },
+      );
     }
   }
 }
