@@ -160,6 +160,7 @@ export function createApp(deps: AppDeps): express.Application {
       institutions: await institutions.listPublic(),
       billingEnabled: billing.enabled(),
       codexEnabled: catalog.codexAvailable(),
+      hostedModels: await catalog.hostedAvailable(),
       mcpEnabled: settings.getBoolean(K.mcpEnabled, false),
       vapidPublicKey: push.publicKey(),
       broadcast: await latestBroadcast(db, req.user?.institution_id ?? null),

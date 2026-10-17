@@ -59,6 +59,7 @@ const routes: [string, RegExp, Handler][] = [
     institutions: db.institutions.map((i) => ({ name: i.name, domains: i.domains.map((d) => d.domain) })),
     billingEnabled: mockSettings.billing.enabled,
     codexEnabled: mockSettings.general.codex_enabled && !mockSettings.general.codex_disabled_until,
+    hostedModels: true,
     mcpEnabled: mockSettings.general.mcp_enabled,
     vapidPublicKey: mockSettings.push.vapid_public_key,
     broadcast: null,

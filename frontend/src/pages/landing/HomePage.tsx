@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useReducedMotion, type TargetAndTransition, type Transition } from 'motion/react';
-import { ArrowRight, BookOpen, Box, GraduationCap, KeyRound, Server, Sparkles, Wand2 } from 'lucide-react';
+import { ArrowRight, BookOpen, Box, GraduationCap, KeyRound, Sparkles, Wand2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useI18n } from '../../i18n/I18nContext';
 import type { TranslationKey } from '../../i18n/translations';
@@ -193,7 +193,6 @@ const HomePage = () => {
 
   const models = [
     { icon: Sparkles, title: t('home.modelChatgpt'), body: t('home.modelChatgptBody') },
-    { icon: Server, title: t('home.modelHawk'), body: t('home.modelHawkBody') },
     { icon: KeyRound, title: t('home.modelKeys'), body: t('home.modelKeysBody') },
     { icon: Wand2, title: t('home.modelAuto'), body: t('home.modelAutoBody') },
   ];

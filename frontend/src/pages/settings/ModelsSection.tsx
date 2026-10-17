@@ -276,10 +276,8 @@ const ModelsSection = () => {
       </Panel>
       )}
 
-      <Panel title={t('models.hawkTitle')} description={t('models.hawkBody')}>
-        {hawkModels.length === 0 ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('models.hawkNone')}</p>
-        ) : (
+      {hawkModels.length > 0 && (
+        <Panel title={t('models.hawkTitle')} description={t('models.hawkBody')}>
           <ul className="flex flex-wrap gap-2">
             {hawkModels.map((m) => (
               <li key={m.ref} className="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm dark:border-slate-700">
@@ -293,8 +291,8 @@ const ModelsSection = () => {
               </li>
             ))}
           </ul>
-        )}
-      </Panel>
+        </Panel>
+      )}
 
       <Panel
         title={t('models.keysTitle')}

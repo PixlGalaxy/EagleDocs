@@ -12,6 +12,7 @@ const FALLBACK: RuntimeConfig = {
   institutions: [],
   billingEnabled: false,
   codexEnabled: false,
+  hostedModels: false,
   mcpEnabled: false,
   vapidPublicKey: null,
   broadcast: null,

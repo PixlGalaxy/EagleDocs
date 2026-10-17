@@ -3,6 +3,7 @@ import { Gauge, RefreshCw, Snail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { billingApi } from '../../api/account';
 import type { ComputeWindow, UsageInfo } from '../../api/types';
+import { useAppConfig } from '../../context/AppConfigContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { Notice, Panel, Skeleton } from '../../components/ui/kit';
 import { btn } from '../../components/ui/styles';
@@ -33,6 +34,8 @@ function Meter({ used, limit, label }: { used: number; limit: number | null; lab
 
 const UsageSection = () => {
   const { t, language } = useI18n();
+  // Without a StudyHawk model there is no quota to show, only the totals.
+  const { hostedModels } = useAppConfig();
   const [usage, setUsage] = useState<UsageInfo | null>(null);
   const [failed, setFailed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -142,15 +145,22 @@ const UsageSection = () => {
         </dl>
       </Panel>
 
-      <Panel title={t('usage.modelTitle')} description={t('usage.modelBody')}>
-        <div className="mb-1.5 flex items-baseline justify-between gap-3">
-          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('usage.messagesToday')}</span>
-          <span className="font-mono text-sm text-slate-700 dark:text-slate-200">
-            {models.studyhawk_messages} / {models.daily_limit ?? '∞'}
-          </span>
-        </div>
-        <Meter used={models.studyhawk_messages} limit={models.daily_limit} label={t('usage.messagesToday')} />
-        <dl className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-3">
+      <Panel
+        title={hostedModels ? t('usage.modelTitle') : t('usage.messagesTitle')}
+        description={hostedModels ? t('usage.modelBody') : t('usage.messagesBody')}
+      >
+        {hostedModels && (
+          <>
+            <div className="mb-1.5 flex items-baseline justify-between gap-3">
+              <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('usage.messagesToday')}</span>
+              <span className="font-mono text-sm text-slate-700 dark:text-slate-200">
+                {models.studyhawk_messages} / {models.daily_limit ?? '∞'}
+              </span>
+            </div>
+            <Meter used={models.studyhawk_messages} limit={models.daily_limit} label={t('usage.messagesToday')} />
+          </>
+        )}
+        <dl className={`grid grid-cols-2 gap-4 sm:grid-cols-3 ${hostedModels ? 'mt-5' : ''}`}>
           {[
             { label: t('usage.allMessages'), value: models.messages.toLocaleString(language) },
             { label: t('usage.tokensIn'), value: models.tokens_in.toLocaleString(language) },

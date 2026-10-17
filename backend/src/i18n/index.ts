@@ -100,7 +100,6 @@ const BACKEND_KEYS = [
   'schedules.limit',
   'admin.alertSmtp',
   'admin.alertNoInstitution',
-  'admin.alertNoModel',
   'admin.alertCodexPaused',
   'canvas.notConnected',
   'canvas.tokenRejected',

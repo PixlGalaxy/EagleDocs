@@ -3,6 +3,7 @@ import { CalendarClock, Check, CircleAlert, CreditCard, Loader2, PartyPopper } f
 import { useSearchParams } from 'react-router-dom';
 import { billingApi } from '../../api/account';
 import type { PlanInfo, Tier } from '../../api/types';
+import { useAppConfig } from '../../context/AppConfigContext';
 import { useI18n } from '../../i18n/I18nContext';
 import { Badge, Notice, Panel, Skeleton } from '../../components/ui/kit';
 import { btn, card } from '../../components/ui/styles';
@@ -10,6 +11,7 @@ import { formatPrice } from './format';
 
 const PlanSection = () => {
   const { t, language } = useI18n();
+  const { hostedModels } = useAppConfig();
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [tiers, setTiers] = useState<Tier[]>([]);
   const [redirecting, setRedirecting] = useState<string | null>(null);
@@ -42,7 +44,8 @@ const PlanSection = () => {
     { label: t('plan.memory'), value: `${tier.mem_mb} MB` },
     { label: t('plan.disk'), value: `${(tier.disk_mb / 1024).toFixed(1)} GB` },
     { label: t('plan.compute'), value: t('plan.computeValue', { day: tier.compute_units_daily || '∞', week: tier.compute_units_weekly || '∞' }) },
-    { label: t('plan.messages'), value: tier.daily_messages ? `${usage_today.messages} / ${tier.daily_messages}` : `${usage_today.messages} / ${t('plan.unlimited')}` },
+    // The daily messages are a quota on the StudyHawk model: none on, nothing to count.
+    ...(!hostedModels ? [] : [{ label: t('plan.messages'), value: tier.daily_messages ? `${usage_today.messages} / ${tier.daily_messages}` : `${usage_today.messages} / ${t('plan.unlimited')}` }]),
     { label: t('plan.jobs'), value: String(tier.max_background_jobs) },
     { label: t('plan.schedules'), value: String(tier.max_schedules) },
     { label: t('plan.helpers'), value: String(tier.max_parallel_subagents) },
@@ -114,7 +117,7 @@ const PlanSection = () => {
                     {[
                       `${option.cpu} vCPU · ${option.mem_mb} MB`,
                       `${(option.disk_mb / 1024).toFixed(1)} GB`,
-                      option.daily_messages ? t('plan.perDay', { count: option.daily_messages }) : t('plan.unlimitedMessages'),
+                      ...(!hostedModels ? [] : [option.daily_messages ? t('plan.perDay', { count: option.daily_messages }) : t('plan.unlimitedMessages')]),
                       t('plan.helpersLine', { count: option.max_parallel_subagents }),
                       t('plan.computeLine', { day: option.compute_units_daily || '∞', week: option.compute_units_weekly || '∞' }),
                     ].map((line) => (

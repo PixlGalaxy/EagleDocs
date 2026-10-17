@@ -85,9 +85,9 @@ r = await admin.req(B, 'GET', '/auth/me');
 check('session works on B', r.status === 200 && r.json.user.username === ADMIN);
 
 r = await admin.req(B, 'GET', '/admin/overview');
-// A fresh install: no email, no university, no model yet.
+// A fresh install: no email, no university (no StudyHawk model is fine: students bring their own).
 const alertSections = (r.json.alerts ?? []).map((a) => a.section).sort().join(',');
-check('overview', r.status === 200 && r.json.nodes_online === 2 && alertSections === 'email,institutions,models', JSON.stringify(r.json));
+check('overview', r.status === 200 && r.json.nodes_online === 2 && alertSections === 'email,institutions', JSON.stringify(r.json));
 
 // --- institution + smtp
 r = await admin.req(B, 'POST', '/admin/institutions', {

@@ -106,6 +106,11 @@ export class ModelCatalog {
     return !until || new Date(until).getTime() <= Date.now();
   }
 
+  /** Whether any StudyHawk (hosted) chat model is on: without one, the app hides it everywhere. */
+  async hostedAvailable(): Promise<boolean> {
+    return (await this.hawkModels()).length > 0;
+  }
+
   private hawkModels(): Promise<HawkModelRow[]> {
     return many<HawkModelRow>(
       this.db,

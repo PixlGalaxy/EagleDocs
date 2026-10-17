@@ -76,10 +76,6 @@ export function createAdminRoutes(deps: {
     );
     const institutionCount = await one<{ n: number }>(db, 'SELECT COUNT(*) AS n FROM institutions WHERE enabled');
 
-    const models = await one<{ n: number }>(
-      db,
-      'SELECT COUNT(*) AS n FROM models m JOIN model_endpoints e ON e.id = m.endpoint_id WHERE m.enabled AND e.enabled',
-    );
     const jobs = await one<{ running: number; today: number }>(
       db,
       `SELECT COUNT(*) FILTER (WHERE status IN ('running', 'waiting_approval', 'waiting_mfa')) AS running,
@@ -89,7 +85,6 @@ export function createAdminRoutes(deps: {
     const alerts: { level: 'warning' | 'error'; message: string; section?: string }[] = [];
     if (!mail.isConfigured()) alerts.push({ level: 'error', message: t('admin.alertSmtp', lang), section: 'email' });
     if (institutionCount.n === 0) alerts.push({ level: 'warning', message: t('admin.alertNoInstitution', lang), section: 'institutions' });
-    if (models.n === 0) alerts.push({ level: 'error', message: t('admin.alertNoModel', lang), section: 'models' });
     const paused = activePause(settings.getJson<string | null>(K.codexDisabledUntil, null));
     if (paused) {
       alerts.push({
