@@ -52,9 +52,56 @@ prepare_data() {
     for dir in "$DATA_ROOT"/workspaces/* "$DATA_ROOT"/temp/*; do
         [ -d "$dir" ] && [ ! -L "$dir" ] && chown -h "$APP_USER:$APP_USER" "$dir"
     done
-    if find "$DATA_ROOT/workspaces" "$DATA_ROOT/temp" -xdev -mindepth 2 ! -user "$APP_USER" -print 2>/dev/null | head -n 1 | grep -q .; then
-        log "WARNING: files in $DATA_ROOT/workspaces or $DATA_ROOT/temp are not owned by uid 1000 (left by an older image that ran as root); the sandbox cannot change them. With every StudyHawk container and sandbox stopped, run on the host: chown -R 1000:1000 <your /data folder>"
+}
+
+# Prints how many StudyHawk sandboxes still run after killing them all (any replica's), or fails
+# when Docker cannot be asked. Uses the Docker socket like the backend does.
+kill_sandboxes() {
+    node -e '
+const http = require("http");
+const call = (method, path) => new Promise((resolve, reject) => {
+  const r = http.request({ socketPath: process.argv[1], path, method }, (res) => {
+    let body = "";
+    res.on("data", (c) => (body += c));
+    res.on("end", () => resolve({ status: res.statusCode, body }));
+  });
+  r.on("error", reject);
+  r.end();
+});
+const running = async () => {
+  const filters = encodeURIComponent(JSON.stringify({ label: ["studyhawk.sandbox=1"] }));
+  const res = await call("GET", "/containers/json?filters=" + filters);
+  if (res.status !== 200) throw new Error("Docker answered " + res.status);
+  return JSON.parse(res.body);
+};
+(async () => {
+  for (let i = 0; i < 20; i++) {
+    const list = await running();
+    if (!list.length) return console.log(0);
+    for (const c of list) await call("POST", "/containers/" + c.Id + "/kill");
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  console.log((await running()).length);
+})().catch(() => process.exit(1));
+' "$1"
+}
+
+# Files an older image (which ran the backend as root) left inside the users' folders: the backend
+# cannot write next to them ("EACCES ... Chats/<id>") and the sandbox cannot change them. They are
+# fixed by walking those folders as root, which is only safe while no sandbox runs (a sandbox could
+# swap a link in mid-walk), so every sandbox is killed first; without that guarantee it only warns.
+# Runs once: after the fix nothing is left to find.
+fix_old_files() {
+    find "$DATA_ROOT/workspaces" "$DATA_ROOT/temp" -xdev -mindepth 2 \( ! -user "$APP_USER" -o ! -group "$APP_USER" \) -print 2>/dev/null | head -n 1 | grep -q . || return 0
+    sock=${DOCKER_HOST:-unix:///var/run/docker.sock}
+    sock=${sock#unix://}
+    left=$([ -S "$sock" ] && kill_sandboxes "$sock")
+    if [ "$left" != "0" ]; then
+        log "WARNING: files in $DATA_ROOT/workspaces or $DATA_ROOT/temp are not owned by uid 1000 (left by an older image that ran as root) and the sandboxes could not be stopped to fix them safely. With every StudyHawk container and sandbox stopped, run on the host: chown -R 1000:1000 <your /data folder>"
+        return 0
     fi
+    log "Giving the users' folders to uid 1000 (files left by an older image that ran as root); sandboxes were stopped for it and start again on demand"
+    find "$DATA_ROOT/workspaces" "$DATA_ROOT/temp" -xdev \( ! -user "$APP_USER" -o ! -group "$APP_USER" \) -exec chown -h "$APP_USER:$APP_USER" {} +
 }
 
 # Lets APP_USER use the Docker socket through its group, whatever gid the host gave it.
@@ -77,6 +124,7 @@ docker_access() {
 if [ "$(id -u)" = 0 ]; then
     prepare_data
     docker_access
+    fix_old_files
     RUN_AS="su-exec $APP_USER"
 else
     # Started with --user: the caller set the uid (and --group-add for the Docker socket).
