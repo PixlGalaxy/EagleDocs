@@ -43,7 +43,7 @@ const GROUP_NOTES: Record<string, string> = {
   canvas: "Course content in Canvas: modules, pages, files and downloads into TEMP, past submissions and grades, full course details.",
   images: "Create pictures, and look at or search the pictures in the user's files.",
   chats: "Search and read the user's earlier conversations.",
-  lab: "Transcribe recordings and videos in the user's files (lectures, voice notes) on the server's GPU.",
+  lab: "Turn recordings and videos in the user's files (lectures, voice notes, tutorials) into transcripts and notes, on the server's GPU.",
   school: "The user's school account: read, draft and send email (Outlook) and get the Degree Works audit.",
 };
 
