@@ -1,5 +1,6 @@
 # StudyHawk sandbox: one container per user, started on demand by the backend.
-# Chromium (Playwright's headless shell only) + Python with document/data libraries + Node + the runner.
+# Chromium (Playwright's headless shell only) + Python with document/data libraries + Node + the runner,
+# and ffmpeg: the Accelerator Lab cuts recordings here (CPU) before the GPU transcribes them.
 # Debian slim rather than Alpine: Playwright's Chromium and the Python wheels need glibc.
 FROM node:24-bookworm-slim
 
@@ -9,7 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-pip tini ca-certificates fonts-dejavu-core fonts-liberation \
+ && apt-get install -y --no-install-recommends python3 python3-pip tini ca-certificates fonts-dejavu-core fonts-liberation ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 # What the agent's documents and data work needs (PDF, Word, PowerPoint, Excel, charts).

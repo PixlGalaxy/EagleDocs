@@ -16,6 +16,7 @@ import { ChatSearch } from '../chat/chat-search.js';
 import { ImageNotes } from '../files/image-notes.js';
 import { describeImage, splitSeen, VISION_SYSTEM, visionPrompt } from '../models/vision.js';
 import type { LabService } from '../lab/lab.service.js';
+import type { LabHost } from '../../engine/tools/lab.js';
 import type { VisionHost } from '../../engine/tools/vision.js';
 import type { DiskWorkspace } from '../../engine/workspace.js';
 import type { AdminEmbeddings } from '../../engine/documents.js';
@@ -97,8 +98,10 @@ export interface WorkerDeps {
   push: PushService;
   builtinSkills: BuiltinSkills;
   tiers: TiersService;
-  /** The Accelerator Lab: looks at pictures for students whose own models cannot. */
+  /** The Accelerator Lab: looks at pictures for students whose own models cannot, and transcribes. */
   lab: LabService;
+  /** Sandboxes run on this server (the Lab cuts recordings there). */
+  sandboxReady: () => boolean;
   t: Translate;
   concurrency: number;
 }
@@ -348,6 +351,7 @@ export class JobWorker {
               return { ...seen, by: seer.model.label };
             },
           } satisfies VisionHost,
+          lab: { userId: user.id, service: this.deps.lab, workspace: this.deps.workspace } satisfies LabHost,
         },
       });
       // RAG tools compare this with each collection's model.
@@ -356,7 +360,10 @@ export class JobWorker {
       const helperModels = await catalog.helperModels(user.id, resolution.model.ref);
       // Email or Degree Works tools only where the institution offers them and has not switched them off.
       const hidden = await this.deps.builtinSkills.hiddenTools(user.id);
-      const toolFilter = (tool: { name: string }) => !hidden(tool.name) && (tool.name !== 'image_generate' || imageGenerator !== null);
+      // The Lab's tools only where the GPU can do that work and a sandbox cuts the recordings.
+      const labOn = this.deps.lab.available('transcribe') && this.deps.sandboxReady();
+      const toolFilter = (tool: { name: string }) =>
+        !hidden(tool.name) && (tool.name !== 'image_generate' || imageGenerator !== null) && (tool.name !== 'media_transcribe' || labOn);
 
       if (job.kind === 'delegate') {
         const { reports, usage } = await agent.runSubagents({

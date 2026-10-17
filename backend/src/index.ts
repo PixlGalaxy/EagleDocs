@@ -150,7 +150,7 @@ async function main() {
       school: { service: school, userId, workspace },
     }),
   });
-  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, courseSpaces, workspace, embeddings, school, push, builtinSkills, tiers, lab, t, concurrency: config.JOB_WORKERS });
+  const worker = new JobWorker({ db, bus, config, engine, chats, catalog, canvas, courseSpaces, workspace, embeddings, school, push, builtinSkills, tiers, lab, sandboxReady: () => sandboxes.enabled, t, concurrency: config.JOB_WORKERS });
   await worker.start();
 
   // Leader tasks: whichever replica gets the advisory lock runs each cycle.

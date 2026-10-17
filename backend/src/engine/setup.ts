@@ -7,6 +7,7 @@ import { CANVAS_TOOLS } from './tools/canvas.js';
 import { IMAGE_TOOLS } from './tools/images.js';
 import { CHAT_TOOLS } from './tools/chats.js';
 import { VISION_TOOLS } from './tools/vision.js';
+import { LAB_TOOLS } from './tools/lab.js';
 import { AdminEmbeddings, documentExtractor } from './documents.js';
 import type { DiskWorkspace } from './workspace.js';
 import type { SandboxTools } from './sandbox.js';
@@ -31,6 +32,8 @@ function hostTools(withSchool: boolean): Tool[] {
     ...inGroup('canvas', CANVAS_TOOLS.filter((t) => !CANVAS_EVERYDAY.has(t.name))),
     ...inGroup('images', [...IMAGE_TOOLS, ...VISION_TOOLS]),
     ...inGroup('chats', CHAT_TOOLS),
+    // The worker hides them on runs where the Lab or the sandbox is off.
+    ...inGroup('lab', LAB_TOOLS),
     ...(withSchool ? inGroup('school', SCHOOL_TOOLS) : []),
   ];
 }
@@ -40,6 +43,7 @@ const GROUP_NOTES: Record<string, string> = {
   canvas: "Course content in Canvas: modules, pages, files and downloads into TEMP, past submissions and grades, full course details.",
   images: "Create pictures, and look at or search the pictures in the user's files.",
   chats: "Search and read the user's earlier conversations.",
+  lab: "Transcribe recordings and videos in the user's files (lectures, voice notes) on the server's GPU.",
   school: "The user's school account: read, draft and send email (Outlook) and get the Degree Works audit.",
 };
 
@@ -54,6 +58,7 @@ Canvas is the source of truth: read assignments, instructions, files, announceme
 Find it yourself: when the student or an assignment mentions material you do not have (a homework packet, slides, "it's in Modules", "a document called something like..."), look for it in Canvas before asking the student to paste or upload it: canvas_assignment shows what the instructions link to and where they sit, canvas_find searches every course by a half-remembered name (try a few wordings), then open it with canvas_download + files_read or canvas_page and keep going. Ask the student only when it really is not in Canvas. Past work, grades and teacher feedback: canvas_submissions.
 Past chats: you only see this conversation, but the student may mean something from another one ("like I told you", "the essay from last week", "what you said about..."). Look it up with chats_search (try a few key words) and open the right one with chats_read before asking them to repeat it; chats_search without a query lists recent chats.
 Pictures: you cannot see images in the workspace (ones you generated, Canvas downloads, screenshots, photos from earlier chats). Before saying what one shows, look with image_view (ask your exact question); find one by its content with images_search. Never guess an image's content from its file name or a prompt.
+Recordings: for a lecture, voice note or video in the files, media_transcribe makes a timed transcript (it can take minutes; tell the student), then rag_add it to answer from it.
 Course material: to study or answer from a whole course's content, download it (canvas_download with course_id keeps it in the course's Canvas/ folder; canvas_save_pages when the material lives in pages), index it with rag_add into one RAG per course, then answer with rag_ask or rag_search and cite the sources.
 Numbers matter (grades, accounting, finance): compute them with calc or code_run instead of in your head, check that totals add up, and in spreadsheets use real numbers or formulas so the student can follow and change them.
 Math and diagrams: the chat renders LaTeX. Write formulas as \\( ... \\) inside a sentence and $$ ... $$ on their own lines; never use a single $ for math, because it is read as money. For a flowchart, timeline or concept map, a \`\`\`mermaid block is drawn as a diagram.`;

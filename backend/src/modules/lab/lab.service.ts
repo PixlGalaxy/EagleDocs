@@ -228,6 +228,18 @@ export class LabService {
     }
   }
 
+  /** Withdraws tasks that have not started (a job stopped, or failed half-way through queueing). */
+  async withdraw(taskIds: string[]): Promise<void> {
+    if (taskIds.length) await this.db.query("DELETE FROM lab_tasks WHERE id = ANY($1::uuid[]) AND status = 'queued'", [taskIds]);
+  }
+
+  /** AU the student can still use now: the smaller room left in the day and week windows (null = unlimited). */
+  async room(userId: string): Promise<number | null> {
+    const s = await this.status(userId);
+    const left = [s.day, s.week].filter((w) => w.limitCu !== null).map((w) => Math.max(0, w.limitCu! - w.usedCu));
+    return left.length ? Math.min(...left) : null;
+  }
+
   /** Queues a task and waits for its result. */
   async run<T extends LabKind>(userId: string, kind: T, input: Inputs[T], options: { priority?: LabPriority; signal?: AbortSignal } = {}): Promise<LabOutputs[T]> {
     const id = await this.submit(userId, kind, input, options.priority ?? 1);
