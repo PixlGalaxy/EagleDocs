@@ -128,11 +128,14 @@ const IMAGES_NOTE = [
 function recordingsNote(transcribe: boolean, digest: boolean): string {
   if (!transcribe && !digest) return '';
   return [
-    '## Recordings and videos (Accelerator Lab, group "lab")',
-    ...(digest ? ['For a video where the screen matters (slides, board, code), video_digest writes minute-by-minute notes of what was shown and said.'] : []),
-    ...(transcribe ? ['For audio, or when only the words matter, media_transcribe writes a timed transcript.'] : []),
-    "They run on the server's GPU and can take minutes for a long recording: tell the student, then rag_add the result to",
-    'answer from it and cite the [mm:ss] times. Download online videos into the files first.',
+    '## Accelerator Lab (the server\'s GPU, tools in group "lab")',
+    "You have StudyHawk's Accelerator Lab: a GPU on the server that your tools use through a queue shared by every student,",
+    'counted in the student\'s Accelerator Units (1 AU = one minute of GPU; they see them in Settings → Usage). With it you can:',
+    ...(digest ? ['- video_digest: read a video where the screen matters (slides, board, code) into minute-by-minute notes of what was shown and said.'] : []),
+    ...(transcribe ? ['- media_transcribe: turn audio, or a video where only the words matter, into a timed transcript.'] : []),
+    ...(digest ? ['- image_view also uses it to look at pictures when the student\'s own model cannot see.'] : []),
+    "It cannot run the student's code or train models: code_run is CPU only. Long recordings take minutes: tell the student,",
+    'then rag_add the result to answer from it and cite the [mm:ss] times. Download online videos into the files first.',
   ].join('\n');
 }
 
